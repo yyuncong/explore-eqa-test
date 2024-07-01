@@ -31,6 +31,7 @@ from src.habitat import (
     pose_habitat_to_normal,
     pose_normal_to_tsdf,
     get_quaternion,
+    get_frontier_observation
 )
 from src.geom import get_cam_intr, get_scene_bnds, get_collision_distance
 from src.tsdf_rollout import TSDFPlanner, Frontier, Object
@@ -93,6 +94,7 @@ def main(cfg):
     # for each scene, answer each question
     question_ind = 0
     success_count = 0
+    same_class_count = 0
 
     success_list = []
     path_length_list = []
@@ -227,11 +229,15 @@ def main(cfg):
 
             logging.info(f'\n\nQuestion id {scene_id} initialization successful!')
 
+            # init an empty observation for future use
+            zero_image = np.zeros((img_height, img_width, 3), dtype=np.uint8)
+
             # run steps
             path_length = 0
             prev_pts = pts.copy()
             target_found = False
             cnt_step = -1
+            memory_feature = None
             dist_from_chosen_to_target = None
             while cnt_step < num_step - 1:
                 cnt_step += 1
@@ -244,14 +250,19 @@ def main(cfg):
                 main_angle = all_angles.pop(total_views // 2)
                 all_angles.append(main_angle)
 
-                unoccupied_map, _ = tsdf_planner.get_island_around_pts(
-                    pts_normal, height=1.2
-                )
-                occupied_map = np.logical_not(unoccupied_map)
+                # get the occupied map
+                if tsdf_planner.occupied_map_camera is None:
+                    unoccupied_map, _ = tsdf_planner.get_island_around_pts(
+                        pts_normal, height=1.2
+                    )
+                    occupied_map = np.logical_not(unoccupied_map)
+                else:
+                    occupied_map = tsdf_planner.occupied_map_camera
 
                 # observe and update the TSDF
                 keep_forward_observation = False
                 observation_kept_count = 0
+                rgb_egocentric_views = []
                 for view_idx, ang in enumerate(all_angles):
                     if cnt_step == 0:
                         keep_forward_observation = True  # at the first exploration step, always keep the forward observation
@@ -269,6 +280,7 @@ def main(cfg):
                     )
                     if collision_dist < cfg.collision_dist:
                         if not (view_idx == total_views - 1 and keep_forward_observation):
+                            rgb_egocentric_views.append(zero_image)
                             # logging.info(f"Collision detected at step {cnt_step} view {view_idx}")
                             continue
 
@@ -292,6 +304,8 @@ def main(cfg):
                     rgb = obs["color_sensor"]
                     depth = obs["depth_sensor"]
                     semantic_obs = obs["semantic_sensor"]
+                    rgb = rgba2rgb(rgb)
+                    rgb_egocentric_views.append(rgb)
 
                     # check whether the observation is valid
                     keep_observation = True
@@ -369,35 +383,31 @@ def main(cfg):
                     # Turn to face the frontier point
                     if frontier.image is None:
                         view_frontier_direction = np.asarray([pos_world[0] - pts[0], 0., pos_world[2] - pts[2]])
-                        default_view_direction = np.asarray([0., 0., -1.])
-                        if np.linalg.norm(view_frontier_direction) < 1e-3:
-                            view_frontier_direction = default_view_direction
-                        if np.dot(view_frontier_direction, default_view_direction) / np.linalg.norm(view_frontier_direction) < -1 + 1e-3:
-                            # if the rotation is to rotate 180 degree, then the quaternion is not unique
-                            # we need to specify rotating along y-axis
-                            agent_state.rotation = quat_to_coeffs(
-                                quaternion.quaternion(0, 0, 1, 0)
-                                * quat_from_angle_axis(camera_tilt, np.array([1, 0, 0]))
-                            ).tolist()
-                        else:
-                            agent_state.rotation = quat_to_coeffs(
-                                quat_from_two_vectors(default_view_direction, view_frontier_direction)
-                                * quat_from_angle_axis(camera_tilt, np.array([1, 0, 0]))
-                            ).tolist()
-                        agent.set_state(agent_state)
-                        # Get observation at current pose - skip black image, meaning robot is outside the floor
-                        obs = simulator.get_sensor_observations()
-                        rgb = obs["color_sensor"]
+
+                        frontier_obs = get_frontier_observation(
+                            agent, simulator, cfg, tsdf_planner,
+                            view_frontier_direction=view_frontier_direction,
+                            init_pts=pts,
+                            camera_tilt=camera_tilt,
+                            max_try_count=10
+                        )
+
                         plt.imsave(
                             os.path.join(episode_frontier_dir, f"{cnt_step}_{i}.png"),
-                            rgb,
+                            frontier_obs,
                         )
-                        processed_rgb = rgba2rgb(rgb)
+                        processed_rgb = rgba2rgb(frontier_obs)
                         with torch.no_grad():
                             img_feature = encode(model, image_processor, processed_rgb).mean(1)
                         assert img_feature is not None
                         frontier.image = f"{cnt_step}_{i}.png"
                         frontier.feature = img_feature
+
+                if cfg.choose_every_step:
+                    if tsdf_planner.max_point is not None and type(tsdf_planner.max_point) == Frontier:
+                        # reset target point to allow the model to choose again
+                        tsdf_planner.max_point = None
+                        tsdf_planner.target_point = None
 
                 if tsdf_planner.max_point is None and tsdf_planner.target_point is None:
                     # choose a frontier, and set it as the explore target
@@ -424,6 +434,22 @@ def main(cfg):
                         vlm_id_count += 1
                     vlm_id_to_ft_id = {v: k for k, v in ft_id_to_vlm_id.items()}
 
+                    if cfg.egocentric_views:
+                        assert len(rgb_egocentric_views) == total_views
+                        egocentric_views_features = []
+                        for rgb_view in rgb_egocentric_views:
+                            processed_rgb = rgba2rgb(rgb_view)
+                            with torch.no_grad():
+                                img_feature = encode(model, image_processor, processed_rgb).mean(1)
+                            egocentric_views_features.append(img_feature)
+                        egocentric_views_features = torch.cat(egocentric_views_features, dim=0)
+                        step_dict["egocentric_view_features"] = egocentric_views_features.to("cpu")
+                        step_dict["use_egocentric_views"] = True
+
+                    if cfg.action_memory:
+                        step_dict["memory_feature"] = memory_feature
+                        step_dict["use_action_memory"] = True
+
                     # add model prediction here
                     if len(step_dict["frontiers"]) > 0:
                         step_dict["frontier_features"] = torch.cat(
@@ -438,13 +464,13 @@ def main(cfg):
                     step_dict["scene"] = scene_id
                     step_dict["scene_feature_map"] = scene_feature_map
 
-                    try:
-                        sample = get_item(
-                            tokenizer, step_dict
-                        )
-                    except:
-                        logging.info(f"Get item failed! (most likely no frontiers and no objects)")
-                        break
+                    # try:
+                    sample = get_item(
+                        tokenizer, step_dict
+                    )
+                    # except:
+                    #     logging.info(f"Get item failed! (most likely no frontiers and no objects)")
+                    #     break
                     feature_dict = EasyDict(
                         scene_feature = sample.scene_feature.to("cuda"),
                         scene_insert_loc = sample.scene_insert_loc,
@@ -495,6 +521,9 @@ def main(cfg):
                         logging.info(f"Next choice: Frontier at {target_point}")
                         tsdf_planner.frontiers_weight = np.zeros((len(tsdf_planner.frontiers)))
                         max_point_choice = tsdf_planner.frontiers[target_index]
+
+                        # TODO: modify this: update memory feature only in frontiers (for now)
+                        memory_feature = tsdf_planner.frontiers[target_index].feature.to("cpu")
 
                     if max_point_choice is None:
                         logging.info(f"Question id {question_id} invalid: no valid choice!")
@@ -610,6 +639,10 @@ def main(cfg):
                     chosen_obj_bbox_center = tsdf_planner.simple_scene_graph[max_point_choice.object_id]
                     dist_from_chosen_to_target = np.linalg.norm(chosen_obj_bbox_center - obj_bbox_center)
 
+                    logging.info(f"Chosen object class: {object_id_to_name[max_point_choice.object_id]}; target object class: {object_id_to_name[target_obj_id]}")
+                    if object_id_to_name[max_point_choice.object_id] == object_id_to_name[target_obj_id]:
+                        same_class_count += 1
+
                     break
 
             if target_found:
@@ -624,6 +657,7 @@ def main(cfg):
                 dist_from_chosen_to_target_list.append(dist_from_chosen_to_target)
 
             logging.info(f"{question_ind}/{total_questions}: Success rate: {success_count}/{question_ind}")
+            logging.info(f"Same class ratio: {same_class_count}/{question_ind}")
             logging.info(f"Mean path length for success exploration: {np.mean([x for i, x in enumerate(path_length_list) if success_list[i] == 1])}")
             logging.info(f"Mean path length for all exploration: {np.mean(path_length_list)}")
             logging.info(f"Mean distance from chosen object to target object: {np.mean(dist_from_chosen_to_target_list)}")
@@ -636,6 +670,7 @@ def main(cfg):
     #     pickle.dump(path_length_list, f)
     result_dict = {}
     result_dict["success_rate"] = success_count / question_ind
+    result_dict["same_class_ratio"] = same_class_count / question_ind
     result_dict["mean_path_length"] = np.mean(path_length_list)
     result_dict["mean_success_path_length"] = np.mean([x for i, x in enumerate(path_length_list) if success_list[i] == 1])
     result_dict["mean_distance_from_chosen_to_target"] = np.mean(dist_from_chosen_to_target_list)

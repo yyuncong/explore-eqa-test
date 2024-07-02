@@ -12,6 +12,7 @@ scene_features_path_val: /work/pi_chuangg_umass_edu/yuncong/data/scene_feature_d
 model_path: /work/pi_chuangg_umass_edu/yuncong/checkpoint_flex_filter_rand_ego_mem_4.pt
 path_data_dir: exploration_data
 
+choose_every_step: true
 egocentric_views: true
 action_memory: true
 prefiltering: true

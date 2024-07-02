@@ -542,6 +542,11 @@ class TSDFPlanner:
             logging.error(f'Error in find_next_pose_with_path: frontier area size is 0')
             self.frontiers = []
             return False
+        if len(frontier_edge_areas) == 0:
+            # this happens rather rarely
+            logging.error(f'Error in find_next_pose_with_path: frontier edge area size is 0')
+            self.frontiers = []
+            return False
 
         # cluster frontier regions
         db = DBSCAN(eps=cfg.eps, min_samples=2).fit(frontier_areas)

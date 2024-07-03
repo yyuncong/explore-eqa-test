@@ -111,7 +111,7 @@ def inference(model, tokenizer, step_dict, cfg):
         if filter_outputs is None:
             return None
         selection_dict = sample.selection_dict[0]
-        selection_input = construct_selection_prompt(
+        selection_input, object_id_mapping = construct_selection_prompt(
             tokenizer, 
             selection_dict.text_before_object,
             selection_dict.feature_before_object,
@@ -125,7 +125,7 @@ def inference(model, tokenizer, step_dict, cfg):
         )
         sample = collate_wrapper([selection_input])
     outputs = infer_selection(model,tokenizer,sample)
-    return outputs
+    return outputs, object_id_mapping
 
 def main(cfg):
     camera_tilt = cfg.camera_tilt_deg * np.pi / 180
@@ -566,7 +566,7 @@ def main(cfg):
                     #             max_new_tokens=10,
                     #         )
                     #     outputs = tokenizer.decode(output_ids[0, input_ids.shape[1]:]).replace("</s>", "").strip()
-                    outputs = inference(model, tokenizer, step_dict, cfg)
+                    outputs, object_id_mapping = inference(model, tokenizer, step_dict, cfg)
                     if outputs is None:
                         # encounter generation error
                         logging.info(f"Question id {question_id} invalid: model generation error!")
@@ -583,6 +583,9 @@ def main(cfg):
                         break
 
                     if target_type == "object":
+                        # TODO: the problem needed to be fixed here
+                        if object_id_mapping is not None:
+                            target_index = object_id_mapping[int(target_index)]
                         if int(target_index) < 0 or int(target_index) >= len(tsdf_planner.simple_scene_graph):
                             logging.info(f"Prediction out of range: {target_index}, {len(tsdf_planner.simple_scene_graph)}, failed!")
                             break

@@ -144,6 +144,8 @@ def prepare_object_input(
     topk,
 ):
     object_index = len(object_classes)
+    # the mapping from transformed object index to original object index(used by tsdf)
+    id_mapping = None
     if prefiltering:
         ranking = [cls for cls in ranking if cls in class2object.keys()]
         ranking = ranking[:topk]
@@ -151,6 +153,7 @@ def prepare_object_input(
         object_features = [
             object_features[obj_idx] for cls in ranking for obj_idx in class2object[cls]
         ]
+        object_id_mapping = [obj_idx for cls in ranking for obj_idx in class2object[cls]]
         # Note that if apply prefiltering, we may have #(objects) < object_index
         # 4. reassign object_index = #(object)
         object_index = len(object_classes)
@@ -167,7 +170,7 @@ def prepare_object_input(
         object_features = torch.stack(object_features, dim=0)
     text += "/\n"
     #print("object prompt \n", text)
-    return text, object_features, object_index
+    return text, object_features, object_index, object_id_mapping
 
 def prepare_prefiltering_prompt(question, tokenizer, classes, max_length, topk):
     filter_text = f"Question: {question}\n"
@@ -208,7 +211,7 @@ def construct_selection_prompt(
     ranking,
     topk
 ):
-    object_text, object_features, object_index = prepare_object_input(
+    object_text, object_features, object_index, object_id_mapping = prepare_object_input(
         object_info_dict.class2object,
         object_info_dict.classes,
         object_info_dict.features,
@@ -250,7 +253,7 @@ def construct_selection_prompt(
         scene_feature=scene_feature,
         scene_insert_loc=scene_insert_loc,
     )
-    return input_dict
+    return input_dict, object_id_mapping
 
 def collate_prefilter_wrapper(batch):
     # wrap up the prefiltering batch
@@ -378,7 +381,8 @@ def get_item(tokenizer, step_dict):
         return collate_prefilter_wrapper([input_dict])
     else:
         # format selection input
-        input_dict = construct_selection_prompt(
+        # no need use id mapping when not use prefiltering
+        input_dict,_ = construct_selection_prompt(
             tokenizer,
             text_before_object,
             feature_before_object,

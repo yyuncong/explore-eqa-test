@@ -75,6 +75,8 @@ def main(cfg):
         ##########################################################
         # if '00324' not in scene_id:
         #     continue
+        if int(scene_id.split("-")[0]) >= 800:
+            continue
         # rand_q = np.random.randint(0, len(all_questions_in_scene) - 1)
         # all_questions_in_scene = all_questions_in_scene[rand_q:rand_q+1]
         # all_questions_in_scene = [q for q in all_questions_in_scene if '00569-YJDUB7hWg9h_44_microwave_757000' in q['question_id']]

@@ -145,7 +145,7 @@ def prepare_object_input(
 ):
     object_index = len(object_classes)
     # the mapping from transformed object index to original object index(used by tsdf)
-    id_mapping = None
+    object_id_mapping = None
     if prefiltering:
         ranking = [cls for cls in ranking if cls in class2object.keys()]
         ranking = ranking[:topk]

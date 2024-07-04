@@ -585,6 +585,9 @@ def main(cfg):
                     if target_type == "object":
                         # TODO: the problem needed to be fixed here
                         if object_id_mapping is not None:
+                            if int(target_index) < 0 or int(target_index) >= len(object_id_mapping):
+                                logging.info(f"target index can not match real objects: {target_index}, failed!")
+                                break
                             target_index = object_id_mapping[int(target_index)]
                         if int(target_index) < 0 or int(target_index) >= len(tsdf_planner.simple_scene_graph):
                             logging.info(f"Prediction out of range: {target_index}, {len(tsdf_planner.simple_scene_graph)}, failed!")

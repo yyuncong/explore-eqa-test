@@ -69,6 +69,14 @@ class Object:
     object_id: int
 
 
+@dataclass
+class SceneGraphItem:
+    object_id: int
+    bbox_center: np.ndarray
+    confidence: float
+    image: str
+
+
 class TSDFPlanner:
     """Volumetric TSDF Fusion of RGB-D Images. No GPU mode.
 
@@ -154,7 +162,7 @@ class TSDFPlanner:
             self._vol_dim[:2],
         )
 
-        self.simple_scene_graph = {}
+        self.simple_scene_graph: Dict[int, SceneGraphItem] = {}
         self.frontiers: List[Frontier] = []
 
         # about frontiers
@@ -170,7 +178,7 @@ class TSDFPlanner:
 
         self.frontiers_weight = None
 
-    def update_scene_graph(self, detection_model, rgb, semantic_obs, obj_id_to_name, obj_id_to_bbox, cfg, target_obj_id, return_annotated=False):
+    def update_scene_graph(self, detection_model, rgb, semantic_obs, obj_id_to_name, obj_id_to_bbox, cfg, target_obj_id, file_name, return_annotated=False):
         target_found = False
 
         unique_obj_ids = np.unique(semantic_obs)
@@ -201,6 +209,7 @@ class TSDFPlanner:
             x_start, y_start, x_end, y_end = detections.xyxy[i].astype(int)
             bbox_mask = np.zeros(semantic_obs.shape, dtype=bool)
             bbox_mask[y_start:y_end, x_start:x_end] = True
+            confidence = float(detections.confidence[i])
             for obj_id in class_to_obj_id[class_name]:
 
                 if obj_id not in obj_id_to_bbox.keys():
@@ -212,7 +221,7 @@ class TSDFPlanner:
                 obj_mask[obj_x_start:obj_x_end, obj_y_start:obj_y_end] = True
                 if IoU(bbox_mask, obj_mask) > cfg.iou_threshold:
                     # this object is counted as detected
-                    # add to the scene graph
+                    # add to the scene graph if it is not in the scene graph
                     if obj_id not in self.simple_scene_graph.keys():
                         bbox = obj_id_to_bbox[obj_id]["bbox"]
                         bbox = np.asarray(bbox)
@@ -220,11 +229,20 @@ class TSDFPlanner:
                         # change to x, z, y for habitat
                         bbox_center = bbox_center[[0, 2, 1]]
                         # add to simple scene graph
-                        self.simple_scene_graph[obj_id] = bbox_center
+                        self.simple_scene_graph[obj_id] = SceneGraphItem(
+                            object_id=obj_id,
+                            bbox_center=bbox_center,
+                            confidence=confidence,
+                            image=file_name
+                        )
+                    else:
+                        if confidence > self.simple_scene_graph[obj_id].confidence:
+                            self.simple_scene_graph[obj_id].confidence = confidence
+                            self.simple_scene_graph[obj_id].image = file_name
 
+                    adopted_indices.append(i)
                     if obj_id == target_obj_id:
                         target_found = True
-                        adopted_indices.append(i)
 
                     break
 
@@ -696,7 +714,7 @@ class TSDFPlanner:
         
         # determine whether the target object is in scene graph
         if target_obj_id in self.simple_scene_graph.keys():
-            target_point = self.habitat2voxel(self.simple_scene_graph[target_obj_id])[:2]
+            target_point = self.habitat2voxel(self.simple_scene_graph[target_obj_id].bbox_center)[:2]
             logging.info(f"Next choice: Object at {target_point}")
             self.frontiers_weight = np.zeros((len(self.frontiers)))
             return Object(target_point.astype(int), target_obj_id)
@@ -923,8 +941,8 @@ class TSDFPlanner:
             ax1.scatter(next_point[1], next_point[0], c="g", s=30, label="actual")
             ax1.scatter(next_point_old[1], next_point_old[0], c="y", s=30, label="old")
             # plot all the detected objects
-            for obj_center in self.simple_scene_graph.values():
-                obj_vox = self.habitat2voxel(obj_center)
+            for objs in self.simple_scene_graph.values():
+                obj_vox = self.habitat2voxel(objs.bbox_center)
                 ax1.scatter(obj_vox[1], obj_vox[0], c="w", s=30)
             # plot the target point if found
             if type(max_point) == Object:
@@ -999,6 +1017,13 @@ class TSDFPlanner:
 
         # update the path points
         updated_path_points = self.update_path_points(path_points, next_point_normal)
+
+        # set the surrounding points of the next point as explored
+        unoccupied_coords = np.argwhere(self.unoccupied)
+        dists_unoccupied = np.linalg.norm(unoccupied_coords - next_point, axis=1)
+        near_coords = unoccupied_coords[dists_unoccupied < cfg.surrounding_explored_radius / self._voxel_size]
+        self._explore_vol_cpu[near_coords[:, 0], near_coords[:, 1], :] = 1
+
 
         return next_point_normal, next_yaw, next_point, fig, updated_path_points
 

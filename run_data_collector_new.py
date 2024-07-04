@@ -43,7 +43,6 @@ This code generate object features online
 
 
 def main(cfg):
-    camera_tilt = cfg.camera_tilt_deg * np.pi / 180
     img_height = cfg.img_height
     img_width = cfg.img_width
     cam_intr = get_cam_intr(cfg.hfov, img_height, img_width)
@@ -69,9 +68,11 @@ def main(cfg):
         all_questions_in_scene = [q for q in questions_data if q["episode_history"] == scene_id]
 
         ##########################################################
+        # if '00843' not in scene_id:
+        #     continue
         # rand_q = np.random.randint(0, len(all_questions_in_scene) - 1)
         # all_questions_in_scene = all_questions_in_scene[rand_q:rand_q+1]
-        # all_questions_in_scene = [q for q in all_questions_in_scene if '421227' in q['question_id']]
+        # all_questions_in_scene = [q for q in all_questions_in_scene if '00843' in q['question_id']]
         # if len(all_questions_in_scene) == 0:
         #     continue
         # random.shuffle(all_questions_in_scene)
@@ -105,6 +106,7 @@ def main(cfg):
             "height": img_height,
             "hfov": cfg.hfov,
             "scene_dataset_config_file": cfg.scene_dataset_config_path,
+            "camera_tilt": cfg.camera_tilt_deg * np.pi / 180,
         }
         sim_cfg = make_semantic_cfg(sim_settings)
         simulator = habitat_sim.Simulator(sim_cfg)
@@ -131,6 +133,7 @@ def main(cfg):
                 episode_data_dir = os.path.join(str(cfg.dataset_output_dir), f"{question_data['question_id']}_path_{path_idx}")
                 episode_frontier_dir = os.path.join(episode_data_dir, "frontier_rgb")
                 egocentric_save_dir = os.path.join(episode_data_dir, 'egocentric')
+                object_feature_save_dir = os.path.join(episode_data_dir, 'object_features')
 
                 # if the data has already generated, skip
                 if os.path.exists(episode_data_dir) and os.path.exists(os.path.join(episode_data_dir, "metadata.json")):
@@ -144,6 +147,7 @@ def main(cfg):
                 os.makedirs(episode_data_dir, exist_ok=True)
                 os.makedirs(episode_frontier_dir, exist_ok=True)
                 os.makedirs(egocentric_save_dir, exist_ok=True)
+                os.makedirs(object_feature_save_dir, exist_ok=True)
 
                 # get the starting points of other generated paths for this object, if there exists any
                 # get all the folder in the form os.path.join(str(cfg.dataset_output_dir), f"{question_data['question_id']}_path_*")
@@ -182,7 +186,7 @@ def main(cfg):
                 )
                 angle = angle * axis[1] / np.abs(axis[1])
                 pts = start_position.copy()
-                rotation = get_quaternion(angle, camera_tilt)
+                rotation = get_quaternion(angle, 0)
 
                 # initialize the TSDF
                 pts_normal = pos_habitat_to_normal(pts)
@@ -281,7 +285,7 @@ def main(cfg):
                                 continue
 
                         agent_state.position = pts
-                        agent_state.rotation = get_quaternion(ang, camera_tilt)
+                        agent_state.rotation = get_quaternion(ang, 0)
                         agent.set_state(agent_state)
                         pts_normal = pos_habitat_to_normal(pts)
 
@@ -317,6 +321,7 @@ def main(cfg):
                                 continue
 
                         # construct an frequency count map of each semantic id to a unique id
+                        obs_file_name = f"{cnt_step}-view_{view_idx}.png"
                         target_in_view, annotated_rgb = tsdf_planner.update_scene_graph(
                             detection_model=detection_model,
                             rgb=rgb[..., :3],
@@ -325,8 +330,10 @@ def main(cfg):
                             obj_id_to_bbox=object_id_to_bbox,
                             cfg=cfg.scene_graph,
                             target_obj_id=target_obj_id,
+                            file_name=obs_file_name,
                             return_annotated=True
                         )
+                        plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), annotated_rgb)
 
                         # check stop condition
                         if target_in_view:
@@ -371,12 +378,6 @@ def main(cfg):
                     if target_found:
                         break
 
-                    # record current scene graph
-                    step_dict["scene_graph"] = list(tsdf_planner.simple_scene_graph.keys())
-                    step_dict["scene_graph"] = [int(x) for x in step_dict["scene_graph"]]
-
-                    step_dict["frontiers"] = []
-
                     update_success = tsdf_planner.update_frontier_map(pts=pts_normal, cfg=cfg.planner)
                     if not update_success:
                         logging.info(f"Question id {question_data['question_id']}-path {path_idx} invalid: update frontier map failed!")
@@ -408,7 +409,8 @@ def main(cfg):
                         break
                     pts_normal, angle, pts_pix, fig, path_points = return_values
 
-                    # Turn to face each frontier point and get rgb image
+                    # Get observations for each frontier and store them
+                    step_dict["frontiers"] = []
                     for i, frontier in enumerate(tsdf_planner.frontiers):
                         frontier_dict = {}
                         pos_voxel = frontier.position
@@ -425,7 +427,6 @@ def main(cfg):
                                 agent, simulator, cfg, tsdf_planner,
                                 view_frontier_direction=view_frontier_direction,
                                 init_pts=pts,
-                                camera_tilt=camera_tilt,
                                 max_try_count=10
                             )
 
@@ -437,17 +438,31 @@ def main(cfg):
                             frontier_dict["rgb_id"] = f"{cnt_step}_{i}.png"
                         step_dict["frontiers"].append(frontier_dict)
 
+                    # Add object items in the scene graph to the step data
+                    # step_dict["scene_graph"] = list(tsdf_planner.simple_scene_graph.keys())
+                    # step_dict["scene_graph"] = [int(x) for x in step_dict["scene_graph"]]
+                    step_dict["scene_graph_obj2file"] = {}
+                    for obj_id, obj in tsdf_planner.simple_scene_graph.items():
+                        step_dict["scene_graph_obj2file"][int(obj_id)] = obj.image
+                    step_dict["scene_graph_file2objs"] = {}
+                    for obj_id, obj in tsdf_planner.simple_scene_graph.items():
+                        if obj.image not in step_dict["scene_graph_file2objs"]:
+                            step_dict["scene_graph_file2objs"][obj.image] = []
+                        step_dict["scene_graph_file2objs"][obj.image].append(
+                            f"{obj_id}: {object_id_to_name[obj_id]}"
+                        )
+
                     # save the ground truth choice
                     if type(max_point_choice) == Object:
                         choice_obj_id = max_point_choice.object_id
-                        prediction = [float(scene_graph_obj_id == choice_obj_id) for scene_graph_obj_id in step_dict["scene_graph"]]
+                        prediction = [float(scene_graph_obj_id == choice_obj_id) for scene_graph_obj_id in step_dict["scene_graph_obj2file"].keys()]
                         prediction += [0.0 for _ in range(len(step_dict["frontiers"]))]
                     elif type(max_point_choice) == Frontier:
-                        prediction = [0.0 for _ in range(len(step_dict["scene_graph"]))]
+                        prediction = [0.0 for _ in range(len(step_dict["scene_graph_obj2file"]))]
                         prediction += [float(ft == max_point_choice) for ft in tsdf_planner.frontiers]
                     else:
                         raise ValueError("Invalid max_point_choice type")
-                    assert len(prediction) == len(step_dict["scene_graph"]) + len(step_dict["frontiers"]), f"{len(prediction)} != {len(step_dict['scene_graph'])} + {len(step_dict['frontiers'])}"
+                    assert len(prediction) == len(step_dict["scene_graph_obj2file"]) + len(step_dict["frontiers"]), f"{len(prediction)} != {len(step_dict['scene_graph_obj2file'])} + {len(step_dict['frontiers'])}"
                     if sum(prediction) != 1.0:
                         logging.info(f"Error! Prediction sum is not 1.0: {sum(prediction)}")
                         logging.info(max_point_choice)
@@ -514,7 +529,7 @@ def main(cfg):
                     # update position and rotation
                     pts_normal = np.append(pts_normal, floor_height)
                     pts = pos_normal_to_habitat(pts_normal)
-                    rotation = get_quaternion(angle, camera_tilt)
+                    rotation = get_quaternion(angle, 0)
                     explore_dist += np.linalg.norm(pts_pixs[-1] - pts_pixs[-2]) * tsdf_planner._voxel_size
 
                     logging.info(f"Current position: {pts}, {explore_dist:.3f}/{max_explore_dist:.3f}")

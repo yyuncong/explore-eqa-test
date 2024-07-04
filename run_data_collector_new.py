@@ -60,6 +60,11 @@ def main(cfg):
     # all_scene_list.sort(key=lambda x: int(x.split("-")[0]), reverse=True)
     logging.info(f"Loaded {len(questions_data)} questions.")
 
+    total_images_record = []
+    top_k_images_record = {5: [], 10: [], 15: [], 20: []}
+    top_k_correct_count = {5: 0, 10: 0, 15: 0, 20: 0}
+
+
     # for each scene, answer each question
     question_ind = 0
     success_count = 0
@@ -68,11 +73,11 @@ def main(cfg):
         all_questions_in_scene = [q for q in questions_data if q["episode_history"] == scene_id]
 
         ##########################################################
-        # if '00843' not in scene_id:
+        # if '00324' not in scene_id:
         #     continue
         # rand_q = np.random.randint(0, len(all_questions_in_scene) - 1)
         # all_questions_in_scene = all_questions_in_scene[rand_q:rand_q+1]
-        # all_questions_in_scene = [q for q in all_questions_in_scene if '00843' in q['question_id']]
+        # all_questions_in_scene = [q for q in all_questions_in_scene if '00569-YJDUB7hWg9h_44_microwave_757000' in q['question_id']]
         # if len(all_questions_in_scene) == 0:
         #     continue
         # random.shuffle(all_questions_in_scene)
@@ -226,7 +231,6 @@ def main(cfg):
                 previous_choice_path = None
                 max_explore_dist = travel_dist * cfg.max_step_dist_ratio
                 max_step = int(travel_dist * cfg.max_step_ratio)
-                zero_image = np.zeros((img_height, img_width, 3), dtype=np.uint8)
                 explore_dist = 0.0
                 cnt_step = -1
                 while explore_dist < max_explore_dist and cnt_step < max_step:
@@ -251,39 +255,8 @@ def main(cfg):
                     main_angle = all_angles.pop(total_views // 2)
                     all_angles.append(main_angle)
 
-                    # get the occupied map
-                    if tsdf_planner.occupied_map_camera is None:
-                        occupied_map = np.logical_not(
-                            tsdf_planner.get_island_around_pts(pts_normal, height=1.2)[0]
-                        )
-                    else:
-                        occupied_map = tsdf_planner.occupied_map_camera
-
                     # observe and update the TSDF
-                    keep_forward_observation = False
-                    observation_kept_count = 0
                     for view_idx, ang in enumerate(all_angles):
-                        if cnt_step == 0:
-                            keep_forward_observation = True  # at the first exploration step, always keep the forward observation
-                        if view_idx == total_views - 1 and observation_kept_count == 0:
-                            keep_forward_observation = True  # if all previous observation is invalid, then we have to keep the forward one
-                        if pts_pixs.shape[0] >= 3:
-                            if np.linalg.norm(pts_pixs[-1] - pts_pixs[-2]) < 1e-3 and np.linalg.norm(pts_pixs[-2] - pts_pixs[-3]) < 1e-3:
-                                keep_forward_observation = True  # the agent is stuck somehow
-
-                        # check whether current view is valid
-                        collision_dist = tsdf_planner._voxel_size * get_collision_distance(
-                            occupied_map,
-                            pos=tsdf_planner.habitat2voxel(pts),
-                            direction=tsdf_planner.rad2vector(ang)
-                        )
-                        if collision_dist < cfg.collision_dist:
-                            if not (view_idx == total_views - 1 and keep_forward_observation):
-                                # logging.info(f"Collision detected at step {cnt_step} view {view_idx}")
-                                if cfg.save_egocentric_view:
-                                    plt.imsave(os.path.join(egocentric_save_dir, f"{cnt_step}_view_{view_idx}.png"), zero_image)
-                                continue
-
                         agent_state.position = pts
                         agent_state.rotation = get_quaternion(ang, 0)
                         agent.set_state(agent_state)
@@ -304,21 +277,6 @@ def main(cfg):
                         rgb = obs["color_sensor"]
                         depth = obs["depth_sensor"]
                         semantic_obs = obs["semantic_sensor"]
-
-                        # check whether the observation is valid
-                        keep_observation = True
-                        black_pix_ratio = np.sum(semantic_obs == 0) / (img_height * img_width)
-                        if black_pix_ratio > cfg.black_pixel_ratio:
-                            keep_observation = False
-                        positive_depth = depth[depth > 0]
-                        if positive_depth.size == 0 or np.percentile(positive_depth, 30) < cfg.min_30_percentile_depth:
-                            keep_observation = False
-                        if not keep_observation:
-                            if not (view_idx == total_views - 1 and keep_forward_observation):
-                                # logging.info(f"Invalid observation: black pixel ratio {black_pix_ratio}, 30 percentile depth {np.percentile(depth[depth > 0], 30)}")
-                                if cfg.save_egocentric_view:
-                                    plt.imsave(os.path.join(egocentric_save_dir, f"{cnt_step}_view_{view_idx}.png"), zero_image)
-                                continue
 
                         # construct an frequency count map of each semantic id to a unique id
                         obs_file_name = f"{cnt_step}-view_{view_idx}.png"
@@ -357,6 +315,7 @@ def main(cfg):
                             obs_weight=1.0,
                             margin_h=int(cfg.margin_h_ratio * img_height),
                             margin_w=int(cfg.margin_w_ratio * img_width),
+                            explored_depth=cfg.explored_depth,
                         )
 
                         if cfg.save_obs:
@@ -369,8 +328,6 @@ def main(cfg):
 
                         if cfg.save_egocentric_view:
                             plt.imsave(os.path.join(egocentric_save_dir, f"{cnt_step}_view_{view_idx}.png"), rgb)
-
-                        observation_kept_count += 1
 
                         if target_found:
                             break
@@ -427,7 +384,7 @@ def main(cfg):
                                 agent, simulator, cfg, tsdf_planner,
                                 view_frontier_direction=view_frontier_direction,
                                 init_pts=pts,
-                                max_try_count=10
+                                max_try_count=0
                             )
 
                             plt.imsave(
@@ -439,8 +396,6 @@ def main(cfg):
                         step_dict["frontiers"].append(frontier_dict)
 
                     # Add object items in the scene graph to the step data
-                    # step_dict["scene_graph"] = list(tsdf_planner.simple_scene_graph.keys())
-                    # step_dict["scene_graph"] = [int(x) for x in step_dict["scene_graph"]]
                     step_dict["scene_graph_obj2file"] = {}
                     for obj_id, obj in tsdf_planner.simple_scene_graph.items():
                         step_dict["scene_graph_obj2file"][int(obj_id)] = obj.image
@@ -496,14 +451,6 @@ def main(cfg):
                     if cfg.save_frontier_video:
                         frontier_video_path = os.path.join(episode_data_dir, "frontier_video")
                         os.makedirs(frontier_video_path, exist_ok=True)
-                        # if type(max_point_choice) == Frontier:
-                        #     img_path = os.path.join(episode_frontier_dir, max_point_choice.image)
-                        #     os.system(f"cp {img_path} {os.path.join(frontier_video_path, f'{cnt_step:04d}-frontier.png')}")
-                        # else:  # navigating to the objects
-                        #     if cfg.save_obs:
-                        #         img_path = os.path.join(observation_save_dir, f"{cnt_step}-view_{total_views - 1}.png")
-                        #         if os.path.exists(img_path):
-                        #             os.system(f"cp {img_path} {os.path.join(frontier_video_path, f'{cnt_step:04d}-object.png')}")
                         num_images = len(tsdf_planner.frontiers)
                         side_length = int(np.sqrt(num_images)) + 1
                         side_length = max(2, side_length)
@@ -546,6 +493,53 @@ def main(cfg):
                         os.system(f"rm -r {episode_data_dir}")
 
                 logging.info(f"{question_ind}/{total_questions}: Success rate: {success_count}/{question_ind}")
+
+
+
+
+
+
+
+                # print the stats of total number of images
+                img_dict = {}
+                for obj_id, obj in tsdf_planner.simple_scene_graph.items():
+                    if obj.image not in img_dict:
+                        img_dict[obj.image] = []
+                    img_dict[obj.image].append(obj.object_id)
+                total_images = len(img_dict.keys())
+                total_images_record.append(total_images)
+                logging.info('\n')
+                logging.info(total_images_record)
+                logging.info(f"{question_data['question_id']}-path {path_idx} total images: {total_images}")
+                logging.info(f"Average total images: {np.mean(total_images_record):.2f} +- {np.std(total_images_record):.2f}")
+                logging.info(f"Max total images: {np.max(total_images_record)}, Min total images: {np.min(total_images_record)}")
+
+                filter_rank_all = json.load(open('data/selected_candidates.json', 'r'))
+                filter_rank = filter_rank_all[question_data['question'] + '_' + scene_id]
+                for top_k in [5, 10, 15, 20]:
+                    top_k_classes = filter_rank[:top_k]
+                    if object_id_to_name[target_obj_id] in top_k_classes:
+                        top_k_correct_count[top_k] += 1
+
+                    total_images = 0
+                    for obj_list in img_dict.values():
+                        for obj_id in obj_list:
+                            if object_id_to_name[obj_id] in top_k_classes:
+                                total_images += 1
+                                break
+                    top_k_images_record[top_k].append(total_images)
+                    logging.info('\n')
+                    logging.info(top_k_images_record[top_k])
+                    logging.info(f"{question_data['question_id']}-path {path_idx} top {top_k} images: {total_images}")
+                    logging.info(f"Average top {top_k} images: {np.mean(top_k_images_record[top_k]):.2f} +- {np.std(top_k_images_record[top_k]):.2f}")
+                    logging.info(f"Max top {top_k} images: {np.max(top_k_images_record[top_k])}, Min top {top_k} images: {np.min(top_k_images_record[top_k])}")
+                    logging.info(f"Top {top_k} correct count: {top_k_correct_count[top_k]}/{question_ind}")
+
+
+
+
+
+
 
             logging.info(f"Question id {question_data['question_id']} finished all paths")
 

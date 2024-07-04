@@ -9,7 +9,7 @@ semantic_bbox_data_path: "/home/hanyang/code/3d_project/explore-eqa/data/hm3d_ob
 dataset_output_dir: "exploration_data"
 detection_model_name: "yolo_world/s"
 
-# Sample navigation point
+# Sampling navigation point
 min_travel_dist: 5.0
 min_travel_dist_ratio: 0.8
 
@@ -39,37 +39,17 @@ stop_max_bias_from_center: 0.4  # the target object should be within 60% of the 
 init_clearance: 0.3
 max_step_dist_ratio: 1.5
 max_step_ratio: 2.5
-min_random_init_steps: 2
 extra_view_phase_1: 4
 extra_view_angle_deg_phase_1: 60
 extra_view_phase_2: 4  # in phase 2, have more observations
 extra_view_angle_deg_phase_2: 60
 
-# Observation filtering
-black_pixel_ratio: 0.2
-black_pixel_ratio_frontier: 0.1
-min_30_percentile_depth: 0.1
-collision_dist: 1
-
-# Scene graph
-min_pix_ratio: 0.005
-
 # Semantic map
-use_active: true
-use_lsv: true
-use_gsv: true
-gsv_T: 0.5
-gsv_F: 3
+explored_depth: 1.5
 planner:
-  dist_T: 9999
   unexplored_T: 2.0
   unoccupied_T: 2.0
-  val_T: 0.5
-  val_dir_T: 0.5
-  max_val_check_frontier: 3
-  smooth_sigma: 5
   eps: 1
-  min_dist_from_cur: 0.5
   max_dist_from_cur_phase_1: 1  # when the target object is not found, explore the frontiers with this step length
   max_dist_from_cur_phase_2: 0.5  # when the target object is found, go to the target object with this step length
   max_unexplored_check_frontier: 3
@@ -88,17 +68,6 @@ planner:
   max_frontier_angle_range_deg: 150  # the angle spanned by the pixels in a frontier should not be larger than this
   min_frontier_angle_diff_deg: 45  # the angle between two frontiers should be larger than this. otherwise, merge them
   region_equal_threshold: 0.95
-
-visual_prompt:
-  cluster_threshold: 1.0
-  num_prompt_points: 3
-  num_max_unoccupied: 300
-  min_points_for_clustering: 3
-  point_min_dist: 2
-  point_max_dist: 10
-  cam_offset: 0.6
-  min_num_prompt_points: 2
-  circle_radius: 18
 
 scene_graph:
   confidence: 0.003

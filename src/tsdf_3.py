@@ -344,6 +344,7 @@ class TSDFPlanner:
         obs_weight=1.0,
         margin_h=240,  # from top
         margin_w=120,  # each side
+        explored_depth=1.5,
     ):
         """Integrate an RGB-D frame into the TSDF volume.
         Args:
@@ -399,6 +400,7 @@ class TSDFPlanner:
         depth_val_narrow[valid_pix_narrow] = depth_im[
             pix_y[valid_pix_narrow], pix_x[valid_pix_narrow]
         ]
+        depth_val_narrow[depth_val_narrow >= explored_depth] = 0.0
 
         # Integrate TSDF
         depth_diff = depth_val - pix_z
@@ -611,7 +613,6 @@ class TSDFPlanner:
                 continue
             IoU_values = np.asarray([IoU(frontier.region, new_ft['region']) for new_ft in valid_ft_angles])
             pix_diff_values = np.asarray([pix_diff(frontier.region, new_ft['region']) for new_ft in valid_ft_angles])
-            print(f'IoU values: {IoU_values}')
             frontier_appended = False
             if np.any((IoU_values > cfg.region_equal_threshold) | (pix_diff_values <= 3)):
                 # the frontier is not changed (almost)
@@ -637,7 +638,6 @@ class TSDFPlanner:
                 # if some old frontiers are merged into one new frontier
                 ft_idx = np.argmax(IoU_values)
                 IoU_with_old_ft = np.asarray([IoU(valid_ft_angles[ft_idx]['region'], ft.region) for ft in self.frontiers])
-                print(f'IoU with old frontiers: {IoU_with_old_ft}')
                 if np.sum(IoU_with_old_ft > 0.02) >= 2 and cfg.region_equal_threshold < np.sum(IoU_with_old_ft[IoU_with_old_ft > 0.02]) <= 1:
                     # if the new frontier is merged from two or more old frontiers, and their sizes are equal
                     # then add all the old frontiers
@@ -757,16 +757,6 @@ class TSDFPlanner:
                 # add weight for path points
                 weight *= np.exp(- closest_dist) * 3
                 weight *= np.exp(cosine_dist)
-
-                # Check distance to current point - make weight very small if too close and aligned
-                dist = np.sqrt((cur_point[0] - frontier.position[0]) ** 2 + (cur_point[1] - frontier.position[1]) ** 2)
-                pts_angle = np.arctan2(normal[1], normal[0]) - np.pi / 2
-                weight *= np.exp(-dist / cfg.dist_T)
-                if (
-                    dist < cfg.min_dist_from_cur / self._voxel_size
-                    and np.abs(angle - pts_angle) < np.pi / 6
-                ):
-                    weight *= 1e-3
 
                 # if the frontier is stuck, then reduce the weight
                 if frontier.is_stuck:

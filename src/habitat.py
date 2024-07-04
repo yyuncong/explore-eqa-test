@@ -75,21 +75,24 @@ def make_semantic_cfg(settings):
     rgb_sensor_spec.uuid = "color_sensor"
     rgb_sensor_spec.sensor_type = habitat_sim.SensorType.COLOR
     rgb_sensor_spec.resolution = [settings["height"], settings["width"]]
-    rgb_sensor_spec.position = [0.0, settings["sensor_height"], 0.0]
+    rgb_sensor_spec.position = habitat_sim.geo.UP * settings["sensor_height"]
+    rgb_sensor_spec.orientation = [settings["camera_tilt"], 0.0, 0.0]
     rgb_sensor_spec.hfov = settings["hfov"]
 
     depth_sensor_spec = habitat_sim.CameraSensorSpec()
     depth_sensor_spec.uuid = "depth_sensor"
     depth_sensor_spec.sensor_type = habitat_sim.SensorType.DEPTH
     depth_sensor_spec.resolution = [settings["height"], settings["width"]]
-    depth_sensor_spec.position = [0.0, settings["sensor_height"], 0.0]
+    depth_sensor_spec.position = habitat_sim.geo.UP * settings["sensor_height"]
+    depth_sensor_spec.orientation = [settings["camera_tilt"], 0.0, 0.0]
     depth_sensor_spec.hfov = settings["hfov"]
 
     semantic_sensor_spec = habitat_sim.CameraSensorSpec()
     semantic_sensor_spec.uuid = "semantic_sensor"
     semantic_sensor_spec.sensor_type = habitat_sim.SensorType.SEMANTIC
     semantic_sensor_spec.resolution = [settings["height"], settings["width"]]
-    semantic_sensor_spec.position = [0.0, settings["sensor_height"], 0.0]
+    semantic_sensor_spec.position = habitat_sim.geo.UP * settings["sensor_height"]
+    semantic_sensor_spec.orientation = [settings["camera_tilt"], 0.0, 0.0]
     semantic_sensor_spec.hfov = settings["hfov"]
 
     agent_cfg.sensor_specifications = [rgb_sensor_spec, depth_sensor_spec, semantic_sensor_spec]
@@ -384,7 +387,7 @@ def get_navigable_point_to_new(pos_end, pathfinder, max_search=1000, min_dist=6,
 
 def get_frontier_observation(
         agent, simulator, cfg, tsdf_planner,
-        view_frontier_direction, init_pts, camera_tilt, max_try_count=10
+        view_frontier_direction, init_pts, camera_tilt=0, max_try_count=10
 ):
     agent_state = habitat_sim.AgentState()
 

@@ -4,7 +4,7 @@ exp_name: snapshot_test
 output_parent_dir: /work/pi_chuangg_umass_edu/yuncong/results
 question_data_path: "generated_questions"
 scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
-scene_data_path: "/project/pi_chuangg_umass_edu/yuncong/data_v2/scene_datasets/hm3d/train"
+scene_data_path: "/project/pi_chuangg_umass_edu/yuncong/data_v2/scene_datasets/hm3d"
 semantic_bbox_data_path: '/home/yuncongyang_umass_edu/scene_understanding/hm3d_obj_bbox_merged'
 dataset_output_dir: "exploration_data_snapshot_test"
 detection_model_name: "yolo_world/x"

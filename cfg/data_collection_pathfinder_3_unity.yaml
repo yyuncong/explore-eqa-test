@@ -44,6 +44,9 @@ extra_view_angle_deg_phase_1: 60
 extra_view_phase_2: 4  # in phase 2, have more observations
 extra_view_angle_deg_phase_2: 60
 
+# Snapshot
+min_num_obj_threshold: 1
+
 # Semantic map
 explored_depth: 1.5
 planner:

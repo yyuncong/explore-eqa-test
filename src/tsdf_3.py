@@ -40,7 +40,7 @@ from .geom import *
 from .habitat import pos_normal_to_habitat, pos_habitat_to_normal
 import habitat_sim
 from typing import List, Tuple, Optional, Dict, Union
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import supervision as sv
 
 
@@ -75,6 +75,14 @@ class SceneGraphItem:
     bbox_center: np.ndarray
     confidence: float
     image: str
+
+
+@dataclass
+class SnapShot:
+    image: str
+    color: Tuple[float, float, float]
+    full_obj_list: Dict[int, float] = field(default_factory=dict)  # object id to confidence
+    selected_obj_list: List[int] = field(default_factory=list)
 
 
 class TSDFPlanner:
@@ -162,7 +170,8 @@ class TSDFPlanner:
             self._vol_dim[:2],
         )
 
-        self.simple_scene_graph: Dict[int, SceneGraphItem] = {}
+        self.simple_scene_graph: Dict[int, SceneGraphItem] = {}  # obj_id to object
+        self.snapshots: Dict[str, SnapShot] = {}  # filename to snapshot
         self.frontiers: List[Frontier] = []
 
         # about frontiers
@@ -203,6 +212,8 @@ class TSDFPlanner:
         results = detection_model.infer(rgb, confidence=cfg.confidence)
         detections = sv.Detections.from_inference(results).with_nms(threshold=cfg.nms_threshold)
 
+        snapshot = SnapShot(image=file_name, color=(random.random(), random.random(), random.random()))
+
         adopted_indices = []
         for i in range(len(detections)):
             class_name = all_classes[detections.class_id[i]]
@@ -221,6 +232,7 @@ class TSDFPlanner:
                 obj_mask[obj_x_start:obj_x_end, obj_y_start:obj_y_end] = True
                 if IoU(bbox_mask, obj_mask) > cfg.iou_threshold:
                     # this object is counted as detected
+                    snapshot.full_obj_list[obj_id] = confidence
                     # add to the scene graph if it is not in the scene graph
                     if obj_id not in self.simple_scene_graph.keys():
                         bbox = obj_id_to_bbox[obj_id]["bbox"]
@@ -235,16 +247,23 @@ class TSDFPlanner:
                             confidence=confidence,
                             image=file_name
                         )
+                        snapshot.selected_obj_list.append(obj_id)
                     else:
                         if confidence > self.simple_scene_graph[obj_id].confidence:
+                            old_snapshot_filename = self.simple_scene_graph[obj_id].image
                             self.simple_scene_graph[obj_id].confidence = confidence
                             self.simple_scene_graph[obj_id].image = file_name
+                            # remove the obj id in the old snapshot and add to new snapshot
+                            self.snapshots[old_snapshot_filename].selected_obj_list.remove(obj_id)
+                            snapshot.selected_obj_list.append(obj_id)
 
                     adopted_indices.append(i)
                     if obj_id == target_obj_id:
                         target_found = True
 
                     break
+
+        self.snapshots[file_name] = snapshot
 
         if return_annotated:
             if len(adopted_indices) == 0:
@@ -253,9 +272,15 @@ class TSDFPlanner:
             # filter out the detections that are not adopted
             detections = detections[adopted_indices]
 
+            # add confidence to the label
+            new_class_names = []
+            for i in range(len(detections)):
+                new_class_names.append(f"{all_classes[detections.class_id[i]]}_{detections.confidence[i]:.3f}")
+            detections.data['class_name'] = np.asarray(new_class_names)
+
             annotated_image = rgb.copy()
             BOUNDING_BOX_ANNOTATOR = sv.BoundingBoxAnnotator(thickness=2)
-            LABEL_ANNOTATOR = sv.LabelAnnotator(text_thickness=2, text_scale=1, text_color=sv.Color.BLACK)
+            LABEL_ANNOTATOR = sv.LabelAnnotator(text_thickness=1, text_scale=0.5, text_color=sv.Color.BLACK)
             annotated_image = BOUNDING_BOX_ANNOTATOR.annotate(annotated_image, detections)
             annotated_image = LABEL_ANNOTATOR.annotate(annotated_image, detections)
             return target_found, annotated_image
@@ -313,25 +338,6 @@ class TSDFPlanner:
             w_new[i] = w_old[i] + obs_weight
             tsdf_vol_int[i] = (w_old[i] * tsdf_vol[i] + obs_weight * dist[i]) / w_new[i]
         return tsdf_vol_int, w_new
-
-    def integrate_sem(
-        self,
-        sem_pix,
-        radius=1.0,  # meter
-        obs_weight=1.0,
-    ):
-        """Add semantic value to the 2D map by marking a circle of specified radius"""
-        assert len(self.candidates) == len(sem_pix)
-        for p_ind, p in enumerate(self.candidates):
-            radius_vox = int(radius / self._voxel_size)
-            pts = points_in_circle(p[0], p[1], radius_vox, self._vol_dim[:2])
-            for pt in pts:
-                w_old = self._weight_val_vol_cpu[pt[0], pt[1]].copy()
-                self._weight_val_vol_cpu[pt[0], pt[1]] += obs_weight
-                self._val_vol_cpu[pt[0], pt[1]] = (
-                    w_old * self._val_vol_cpu[pt[0], pt[1]]
-                    + obs_weight * sem_pix[p_ind]
-                ) / self._weight_val_vol_cpu[pt[0], pt[1]]
 
     def integrate(
         self,
@@ -465,53 +471,57 @@ class TSDFPlanner:
     def get_volume(self):
         return self._tsdf_vol_cpu, self._color_vol_cpu
 
-    def get_point_cloud(self):
-        """Extract a point cloud from the voxel volume."""
-        tsdf_vol, color_vol = self.get_volume()
 
-        # Marching cubes
-        # verts = measure.marching_cubes(tsdf_vol, level=0, method='lewiner')[0]
-        # See: https://github.com/andyzeng/tsdf-fusion-python/issues/24
-        verts = measure.marching_cubes(
-            tsdf_vol, mask=np.logical_and(tsdf_vol > -0.5, tsdf_vol < 0.5), level=0
-        )[0]
-        verts_ind = np.round(verts).astype(int)
-        verts = verts * self._voxel_size + self._vol_origin
+    def cleanup_empty_snapshots(self):
+        # remove the snapshots that have no selected objects
+        filtered_snapshots = {}
+        for file_name, snapshot in self.snapshots.items():
+            if len(snapshot.selected_obj_list) > 0:
+                filtered_snapshots[file_name] = snapshot
+        self.snapshots = filtered_snapshots
 
-        # Get vertex colors
-        rgb_vals = color_vol[verts_ind[:, 0], verts_ind[:, 1], verts_ind[:, 2]]
-        colors_b = np.floor(rgb_vals / self._color_const)
-        colors_g = np.floor((rgb_vals - colors_b * self._color_const) / 256)
-        colors_r = rgb_vals - colors_b * self._color_const - colors_g * 256
-        colors = np.floor(np.asarray([colors_r, colors_g, colors_b])).T
-        colors = colors.astype(np.uint8)
+        # for debug
+        for file_name, snapshot in self.snapshots.items():
+            for obj_id in snapshot.selected_obj_list:
+                assert self.simple_scene_graph[obj_id].image == file_name, f"Error in update_snapshots: {obj_id}: {self.simple_scene_graph[obj_id].image} != {file_name}"
 
-        pc = np.hstack([verts, colors])
-        return pc
 
-    def get_mesh(self):
-        """Compute a mesh from the voxel volume using marching cubes."""
-        tsdf_vol, color_vol = self.get_volume()
+    def update_snapshots(
+        self,
+        min_num_obj_threshold=1
+    ):
+        self.cleanup_empty_snapshots()
 
-        # Marching cubes
-        # verts, faces, norms, vals = measure.marching_cubes(tsdf_vol, level=0, method='lewiner')
-        # See: https://github.com/andyzeng/tsdf-fusion-python/issues/24
-        verts, faces, norms, vals = measure.marching_cubes(
-            tsdf_vol, mask=np.logical_and(tsdf_vol > -0.5, tsdf_vol < 0.5), level=0
-        )
-        verts_ind = np.round(verts).astype(int)
-        verts = verts * self._voxel_size + self._vol_origin
+        for min_num_objs in range(1, min_num_obj_threshold + 1):
+            for file_name, snapshot in self.snapshots.items():
+                if len(snapshot.selected_obj_list) == min_num_objs:
+                    # clean up this snapshot by moving its selected objects to other snapshots with have also observed them
+                    # find the other snapshot that has the highest confidence for the object
+                    remaining_ojb_ids = []
+                    for obj_id in snapshot.selected_obj_list:
+                        max_confidence = 0
+                        max_confidence_file_name = None
+                        for other_file_name, other_snapshot in self.snapshots.items():
+                            if other_file_name == file_name:
+                                continue
+                            if obj_id in other_snapshot.full_obj_list.keys() and other_snapshot.full_obj_list[obj_id] > max_confidence:
+                                max_confidence = other_snapshot.full_obj_list[obj_id]
+                                max_confidence_file_name = other_file_name
 
-        # Get vertex colors
-        rgb_vals = color_vol[verts_ind[:, 0], verts_ind[:, 1], verts_ind[:, 2]]
-        colors_b = np.floor(rgb_vals / self._color_const)
-        colors_g = np.floor((rgb_vals - colors_b * self._color_const) / 256)
-        colors_r = rgb_vals - colors_b * self._color_const - colors_g * 256
-        colors = np.floor(np.asarray([colors_r, colors_g, colors_b])).T
-        colors = colors.astype(np.uint8)
-        return verts, faces, norms, colors
+                        # if there exists a snapshot that the object can be added to
+                        if max_confidence_file_name is not None:
+                            # move the object to that snapshot
+                            self.simple_scene_graph[obj_id].image = max_confidence_file_name
+                            self.simple_scene_graph[obj_id].confidence = max_confidence
+                            self.snapshots[max_confidence_file_name].selected_obj_list.append(obj_id)
+                        else:
+                            # otherwise, keep the object in this snapshot
+                            remaining_ojb_ids.append(obj_id)
+                    snapshot.selected_obj_list = remaining_ojb_ids
+            self.cleanup_empty_snapshots()
 
-    ############# For building semantic map and exploration #############
+
+
 
     def update_frontier_map(
             self,
@@ -931,9 +941,13 @@ class TSDFPlanner:
             ax1.scatter(next_point[1], next_point[0], c="g", s=30, label="actual")
             ax1.scatter(next_point_old[1], next_point_old[0], c="y", s=30, label="old")
             # plot all the detected objects
-            for objs in self.simple_scene_graph.values():
-                obj_vox = self.habitat2voxel(objs.bbox_center)
-                ax1.scatter(obj_vox[1], obj_vox[0], c="w", s=30)
+            # for objs in self.simple_scene_graph.values():
+            #     obj_vox = self.habitat2voxel(objs.bbox_center)
+            #     ax1.scatter(obj_vox[1], obj_vox[0], c="w", s=30)
+            for snapshot in self.snapshots.values():
+                for obj_id in snapshot.selected_obj_list:
+                    obj_vox = self.habitat2voxel(self.simple_scene_graph[obj_id].bbox_center)
+                    ax1.scatter(obj_vox[1], obj_vox[0], color=snapshot.color, s=30)
             # plot the target point if found
             if type(max_point) == Object:
                 ax1.scatter(max_point.position[1], max_point.position[0], c="r", s=80, label="target")
@@ -1052,45 +1066,6 @@ class TSDFPlanner:
         island = islands == islands_ind
         return island, unoccupied
 
-    def get_current_view_mask(
-        self,
-        cam_intr,
-        cam_pose,
-        im_w,
-        im_h,
-        slack=0,
-        margin_h=0,
-        margin_w=0,
-    ):
-        cam_pts = rigid_transform(self.cam_pts_pre, np.linalg.inv(cam_pose))
-        pix_z = cam_pts[:, 2]
-        pix = TSDFPlanner.cam2pix(cam_pts, cam_intr)
-        pix_x, pix_y = pix[:, 0], pix[:, 1]
-        valid_pix = np.logical_and(
-            pix_x >= -slack + margin_w,
-            np.logical_and(
-                pix_x < (im_w + slack - margin_w),
-                np.logical_and(
-                    pix_y >= -slack + margin_h,
-                    np.logical_and(pix_y < im_h + slack, pix_z > 0),
-                ),
-            ),
-        )
-        # make a 2D mask where valid pix is 1 and 0 otherwise
-        valid_pix = valid_pix.reshape(self._vol_dim).astype(int)
-        mask = np.max(valid_pix, axis=2)  # take the max over height (z)
-        return mask
-
-    def check_occupied_between(self, p1, p2, occupied, threshold):
-        direction = np.array([p2[0] - p1[0], p2[1] - p1[1]]).astype(float)
-        num_points = int(np.linalg.norm(direction))
-        dir_norm = direction / np.linalg.norm(direction)
-        points_between = (
-            p1[:2] + dir_norm * np.arange(num_points + 1)[:, np.newaxis]
-        ).astype(int)
-        points_occupied = np.sum(occupied[points_between[:, 0], points_between[:, 1]])
-        return points_occupied > threshold
-
     def check_within_bnds(self, pts, slack=0):
         return not (
             pts[0] <= slack
@@ -1106,25 +1081,6 @@ class TSDFPlanner:
             & (array[:, 1] >= 0)
             & (array[:, 1] < self._vol_dim[1])
         ]
-
-    def find_normal_into_space(self, point, island, space, num_check=10):
-        """Find the normal direction into the space"""
-        normal = find_normal(
-            island.astype(int), point[0], point[1]
-        )  # but normal is ambiguous, so need to find which direction is unoccupied
-        dir_1 = (point + np.arange(num_check)[:, np.newaxis] * normal).astype(int)
-        dir_2 = (point - np.arange(num_check)[:, np.newaxis] * normal).astype(int)
-        dir_1 = self.clip_2d_array(dir_1)
-        dir_2 = self.clip_2d_array(dir_2)
-        dir_1_occupied = np.sum(space[dir_1[:, 0], dir_1[:, 1]])
-        dir_2_occupied = np.sum(space[dir_2[:, 0], dir_2[:, 1]])
-        direction = normal
-        if dir_1_occupied < dir_2_occupied:
-            direction *= -1
-        elif dir_1_occupied == dir_2_occupied:  # randomly choose one
-            if random.random() < 0.5:
-                direction *= -1
-        return direction
 
     def get_closest_distance(self, path_points: List[np.ndarray], point: np.ndarray, normal: np.ndarray, pathfinder, height):
         # get the closest distance for each segment in the path curve

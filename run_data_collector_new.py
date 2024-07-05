@@ -342,12 +342,14 @@ def main(cfg):
                         if target_found:
                             break
 
-                    if target_found:
-                        break
+                    tsdf_planner.update_snapshots(min_num_obj_threshold=cfg.min_num_obj_threshold)
 
                     update_success = tsdf_planner.update_frontier_map(pts=pts_normal, cfg=cfg.planner)
                     if not update_success:
                         logging.info(f"Question id {question_data['question_id']}-path {path_idx} invalid: update frontier map failed!")
+                        break
+
+                    if target_found:
                         break
 
                     max_point_choice = tsdf_planner.get_next_choice(
@@ -416,6 +418,13 @@ def main(cfg):
                         step_dict["scene_graph_file2objs"][obj.image].append(
                             f"{obj_id}: {object_id_to_name[obj_id]}"
                         )
+
+                    # for debug
+                    assert len(step_dict["scene_graph_file2objs"]) == len(tsdf_planner.snapshots), f"{len(step_dict['scene_graph_file2objs'])} != {len(tsdf_planner.snapshots)}"
+                    total_objs_count = 0
+                    for snapshot in tsdf_planner.snapshots.values():
+                        total_objs_count += len(snapshot.selected_obj_list)
+                    assert len(tsdf_planner.simple_scene_graph) == total_objs_count, f"{len(tsdf_planner.simple_scene_graph)} != {total_objs_count}"
 
                     # save the ground truth choice
                     if type(max_point_choice) == Object:

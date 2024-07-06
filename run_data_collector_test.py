@@ -60,11 +60,6 @@ def main(cfg):
     # all_scene_list.sort(key=lambda x: int(x.split("-")[0]), reverse=True)
     logging.info(f"Loaded {len(questions_data)} questions.")
 
-    total_images_record = []
-    top_k_images_record = {5: [], 10: [], 15: [], 20: []}
-    top_k_correct_count = {5: 0, 10: 0, 15: 0, 20: 0}
-
-
     # for each scene, answer each question
     question_ind = 0
     success_count = 0
@@ -143,7 +138,7 @@ def main(cfg):
                 question_ind += 1
 
                 target_obj_id = question_data['object_id']
-                target_position = question_data['position']
+                target_observation_position = question_data['position']
                 target_rotation = question_data['rotation']
                 episode_data_dir = os.path.join(str(cfg.dataset_output_dir), f"{question_data['question_id']}_path_{path_idx}")
                 episode_frontier_dir = os.path.join(episode_data_dir, "frontier_rgb")
@@ -180,13 +175,13 @@ def main(cfg):
                     prev_start_positions = np.asarray(prev_start_positions)
 
                 # get a navigation start point
-                floor_height = target_position[1]
+                floor_height = target_observation_position[1]
                 tsdf_bnds, scene_size = get_scene_bnds(pathfinder, floor_height)
                 scene_length = (tsdf_bnds[:2, 1] - tsdf_bnds[:1, 0]).mean()
                 min_dist = max(cfg.min_travel_dist, scene_length * cfg.min_travel_dist_ratio)
                 pathfinder.seed(random.randint(0, 1000000))
                 start_position, path_points, travel_dist = get_navigable_point_to_new(
-                    target_position, pathfinder, max_search=1000, min_dist=min_dist,
+                    target_observation_position, pathfinder, max_search=1000, min_dist=min_dist,
                     prev_start_positions=prev_start_positions
                 )
                 if start_position is None or path_points is None:
@@ -304,19 +299,6 @@ def main(cfg):
                         )
                         plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), annotated_rgb)
 
-                        # check stop condition
-                        if target_in_view:
-                            if target_obj_id in tsdf_planner.simple_scene_graph.keys():
-                                target_obj_pix_ratio = np.sum(semantic_obs == target_obj_id) / (img_height * img_width)
-                                if target_obj_pix_ratio > 0:
-                                    obj_pix_center = np.mean(np.argwhere(semantic_obs == target_obj_id), axis=0)
-                                    bias_from_center = (obj_pix_center - np.asarray([img_height // 2, img_width // 2])) / np.asarray([img_height, img_width])
-                                    # currently just consider that the object should be in around the horizontal center, not the vertical center
-                                    # due to the viewing angle difference
-                                    if target_obj_pix_ratio > cfg.stop_min_pix_ratio and np.abs(bias_from_center)[1] < cfg.stop_max_bias_from_center:
-                                        logging.info(f"Stop condition met at step {cnt_step} view {view_idx}")
-                                        target_found = True
-
                         # TSDF fusion
                         tsdf_planner.integrate(
                             color_im=rgb,
@@ -350,6 +332,20 @@ def main(cfg):
                         logging.info(f"Question id {question_data['question_id']}-path {path_idx} invalid: update frontier map failed!")
                         break
 
+                    if np.linalg.norm(pts - np.asarray(target_observation_position)) < 1.5:
+                        # if the agent is close to the target observation position
+                        # then choose the proper snapshot as the answer
+                        if target_obj_id in tsdf_planner.simple_scene_graph.keys():
+                            target_snapshot = tsdf_planner.snapshots[
+                                tsdf_planner.simple_scene_graph[target_obj_id].image
+                            ]
+                            save_dir = os.path.join(episode_data_dir, 'target_snapshot')
+                            os.makedirs(save_dir, exist_ok=True)
+                            os.system(f"cp {os.path.join(object_feature_save_dir, target_snapshot.image)} {os.path.join(save_dir, 'target.png')}")
+                            target_found = True
+                            logging.info(f"Target object found at step {cnt_step}")
+                            break
+
                     if target_found:
                         break
 
@@ -363,7 +359,6 @@ def main(cfg):
                             pts=pts_normal,
                             path_points=path_points,
                             pathfinder=pathfinder,
-                            target_obj_id=target_obj_id,
                             cfg=cfg.planner,
                         )
                         if max_point_choice is None:
@@ -539,54 +534,9 @@ def main(cfg):
                     if cfg.del_fail_case:
                         os.system(f"rm -r {episode_data_dir}")
 
+                os.system(f"rm {object_feature_save_dir}/*.png")
+
                 logging.info(f"{question_ind}/{total_questions}: Success rate: {success_count}/{question_ind}")
-
-
-
-
-
-
-
-                # print the stats of total number of images
-                img_dict = {}
-                for obj_id, obj in tsdf_planner.simple_scene_graph.items():
-                    if obj.image not in img_dict:
-                        img_dict[obj.image] = []
-                    img_dict[obj.image].append(obj.object_id)
-                total_images = len(img_dict.keys())
-                total_images_record.append(total_images)
-                logging.info('\n')
-                logging.info(total_images_record)
-                logging.info(f"{question_data['question_id']}-path {path_idx} total images: {total_images}")
-                logging.info(f"Average total images: {np.mean(total_images_record):.2f} +- {np.std(total_images_record):.2f}")
-                logging.info(f"Max total images: {np.max(total_images_record)}, Min total images: {np.min(total_images_record)}")
-
-                filter_rank_all = json.load(open('data/selected_candidates.json', 'r'))
-                filter_rank = filter_rank_all[question_data['question'] + '_' + scene_id]
-                for top_k in [5, 10, 15, 20]:
-                    top_k_classes = filter_rank[:top_k]
-                    if object_id_to_name[target_obj_id] in top_k_classes:
-                        top_k_correct_count[top_k] += 1
-
-                    total_images = 0
-                    for obj_list in img_dict.values():
-                        for obj_id in obj_list:
-                            if object_id_to_name[obj_id] in top_k_classes:
-                                total_images += 1
-                                break
-                    top_k_images_record[top_k].append(total_images)
-                    logging.info('\n')
-                    logging.info(top_k_images_record[top_k])
-                    logging.info(f"{question_data['question_id']}-path {path_idx} top {top_k} images: {total_images}")
-                    logging.info(f"Average top {top_k} images: {np.mean(top_k_images_record[top_k]):.2f} +- {np.std(top_k_images_record[top_k]):.2f}")
-                    logging.info(f"Max top {top_k} images: {np.max(top_k_images_record[top_k])}, Min top {top_k} images: {np.min(top_k_images_record[top_k])}")
-                    logging.info(f"Top {top_k} correct count: {top_k_correct_count[top_k]}/{question_ind}")
-
-
-
-
-
-
 
             logging.info(f"Question id {question_data['question_id']} finished all paths")
 

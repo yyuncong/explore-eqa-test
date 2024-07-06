@@ -742,75 +742,64 @@ class TSDFPlanner:
             pts,
             path_points,
             pathfinder,
-            target_obj_id,
             cfg
-    ) -> Optional[Union[SnapShot, Frontier]]:
-        # determine whether the target object is in scene graph
-        if target_obj_id in self.simple_scene_graph.keys():
-            # find the snapshot that contains the target object
-            snapshot = self.snapshots[self.simple_scene_graph[target_obj_id].image]
+    ) -> Optional[Frontier]:
+        frontiers_weight = np.empty(0)
+        for frontier in self.frontiers:
+            # find normal of the frontier
+            normal = frontier.orientation
 
-            # for debug
-            assert target_obj_id in snapshot.selected_obj_list, f"Error in get_next_choice: {target_obj_id} not in {snapshot.selected_obj_list}"
+            # Then check how much unoccupied in that direction
+            max_pixel_check = int(cfg.max_unoccupied_check_frontier / self._voxel_size)
+            dir_pts = np.round(
+                frontier.position + np.arange(max_pixel_check)[:, np.newaxis] * normal
+            ).astype(int)
+            dir_pts = self.clip_2d_array(dir_pts)
+            unoccupied_rate = (
+                np.sum(self.unoccupied[dir_pts[:, 0], dir_pts[:, 1]] == 1)
+                / max_pixel_check
+            )
 
-            return snapshot
+            # Check the ratio of unexplored in the direction, until hits obstacle
+            max_pixel_check = int(cfg.max_unexplored_check_frontier / self._voxel_size)
+            dir_pts = np.round(
+                frontier.position + np.arange(max_pixel_check)[:, np.newaxis] * normal
+            ).astype(int)
+            dir_pts = self.clip_2d_array(dir_pts)
+            unexplored_rate = (
+                np.sum(self.unexplored[dir_pts[:, 0], dir_pts[:, 1]] == 1)
+                / max_pixel_check
+            )
+
+            # get weight for path points
+            pos_world = frontier.position * self._voxel_size + self._vol_origin[:2]
+            closest_dist, cosine_dist = self.get_closest_distance(path_points, pos_world, normal, pathfinder, pts[2])
+
+            # Get weight - unexplored, unoccupied, and value
+            weight = np.exp(unexplored_rate / cfg.unexplored_T)  # [0-1] before T
+            weight *= np.exp(unoccupied_rate / cfg.unoccupied_T)  # [0-1] before T
+
+            # add weight for path points
+            weight *= np.exp(- closest_dist) * 3
+            weight *= np.exp(cosine_dist)
+
+            # if the frontier is stuck, then reduce the weight
+            if frontier.is_stuck:
+                weight *= 1e-3
+
+            # Save weight
+            frontiers_weight = np.append(frontiers_weight, weight)
+        logging.info(f"Number of frontiers for next pose: {len(self.frontiers)}")
+        self.frontiers_weight = frontiers_weight
+
+        # choose the frontier with highest weight
+        if len(self.frontiers) > 0:
+            frontier_ind = np.argmax(frontiers_weight)
+            logging.info(f"Next choice: Frontier at {self.frontiers[frontier_ind].position} with weight {frontiers_weight[frontier_ind]:.3f}")
+            return self.frontiers[frontier_ind]
         else:
-            frontiers_weight = np.empty(0)
-            for frontier in self.frontiers:
-                # find normal of the frontier
-                normal = frontier.orientation
-
-                # Then check how much unoccupied in that direction
-                max_pixel_check = int(cfg.max_unoccupied_check_frontier / self._voxel_size)
-                dir_pts = np.round(
-                    frontier.position + np.arange(max_pixel_check)[:, np.newaxis] * normal
-                ).astype(int)
-                dir_pts = self.clip_2d_array(dir_pts)
-                unoccupied_rate = (
-                    np.sum(self.unoccupied[dir_pts[:, 0], dir_pts[:, 1]] == 1)
-                    / max_pixel_check
-                )
-
-                # Check the ratio of unexplored in the direction, until hits obstacle
-                max_pixel_check = int(cfg.max_unexplored_check_frontier / self._voxel_size)
-                dir_pts = np.round(
-                    frontier.position + np.arange(max_pixel_check)[:, np.newaxis] * normal
-                ).astype(int)
-                dir_pts = self.clip_2d_array(dir_pts)
-                unexplored_rate = (
-                    np.sum(self.unexplored[dir_pts[:, 0], dir_pts[:, 1]] == 1)
-                    / max_pixel_check
-                )
-
-                # get weight for path points
-                pos_world = frontier.position * self._voxel_size + self._vol_origin[:2]
-                closest_dist, cosine_dist = self.get_closest_distance(path_points, pos_world, normal, pathfinder, pts[2])
-
-                # Get weight - unexplored, unoccupied, and value
-                weight = np.exp(unexplored_rate / cfg.unexplored_T)  # [0-1] before T
-                weight *= np.exp(unoccupied_rate / cfg.unoccupied_T)  # [0-1] before T
-                
-                # add weight for path points
-                weight *= np.exp(- closest_dist) * 3
-                weight *= np.exp(cosine_dist)
-
-                # if the frontier is stuck, then reduce the weight
-                if frontier.is_stuck:
-                    weight *= 1e-3
-
-                # Save weight
-                frontiers_weight = np.append(frontiers_weight, weight)
-            logging.info(f"Number of frontiers for next pose: {len(self.frontiers)}")
-            self.frontiers_weight = frontiers_weight
-
-            # choose the frontier with highest weight
-            if len(self.frontiers) > 0:
-                frontier_ind = np.argmax(frontiers_weight)
-                logging.info(f"Next choice: Frontier at {self.frontiers[frontier_ind].position} with weight {frontiers_weight[frontier_ind]:.3f}")
-                return self.frontiers[frontier_ind]
-            else:
-                logging.error(f"Error in get_next_choice: no frontiers")
-                return None
+            logging.error(f"Error in get_next_choice: no frontiers")
+            return None
 
     def set_next_navigation_point(
             self,

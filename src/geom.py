@@ -394,6 +394,36 @@ def get_proper_observe_point(point, unoccupied_map, cur_point, dist=10):
     final_point = get_nearest_true_point(final_point, unoccupied_map)
     return final_point
 
+
+def get_proper_observe_point_with_pathfinder(target_point_habitat, pathfinder, height):
+    # target_point_habitat: [3] array in habitat coordinate
+    # return the proper observation point in habitat coordinate
+    try_count = 0
+    while True:
+        try_count += 1
+        if try_count > 100:
+            logging.error(f"Error in get_proper_observe_point_with_pathfinder: cannot find a proper observation point! try many tries")
+            return None
+
+        try:
+            target_navigable_point_habitat = pathfinder.get_random_navigable_point_near(
+                circle_center=target_point_habitat,
+                radius=1.0,
+            )
+        except:
+            logging.error(f"Error in get_proper_observe_point_with_pathfinder: pathfinder failed to find a navigable point!")
+            continue
+        if np.isnan(target_navigable_point_habitat).any():
+            logging.error(f"Error in get_proper_observe_point_with_pathfinder: pathfinder returned nan point!")
+            continue
+        if abs(target_navigable_point_habitat[1] - height) < 0.1:
+            return target_navigable_point_habitat
+
+    logging.error(f"Error in get_proper_observe_point_with_pathfinder: cannot find a proper observation point!")
+    return None
+
+
+
 def get_random_observe_point(point, unoccupied_map, min_dist=15, max_dist=30):
     # Get a random observation point between min_dist and max_dist around point
     # there shouldn't be obstacles between the point and the observation point
@@ -586,6 +616,91 @@ def pix_diff(region_1, region_2):
     # region 1, 2: boolean array of the same shape
     return np.sum(region_1 | region_2) - np.sum(region_1 & region_2)
 
+
+def get_proper_snapshot_observation_point(
+        obj_centers,
+        snapshot_observation_point,
+        unoccupied_map,
+        min_obs_dist=10,
+        max_obs_dist=15,
+):
+    # obj_centers: [N, 2] in voxel space
+    # unoccupied_map: [H, W] boolean array
+    # obs_dist: the distance between the observation point and the snapshot center in voxel space
+
+    snapshot_center = np.mean(obj_centers, axis=0)
+    if len(obj_centers) == 2:
+        # if there are two objects in the snapshot, then the long axis is the line bewteen the two objects
+        # and the short axis is the perpendicular line to the long axis
+        long_axis = obj_centers[1] - obj_centers[0]
+        long_axis = long_axis / np.linalg.norm(long_axis)
+        short_axis = np.array([-long_axis[1], long_axis[0]])
+    else:
+        obj_centers = obj_centers - snapshot_center
+        structure_tensor = np.cov(obj_centers.T)
+        eigenvalues, eigenvecs = np.linalg.eig(structure_tensor)
+        long_axis = eigenvecs[:, np.argmax(eigenvalues)]
+        short_axis = eigenvecs[:, np.argmin(eigenvalues)]
+        # when the object centers are generally on the same line, the short axis is very small
+        if eigenvalues.min() < 1e-3:
+            short_axis = np.array([-long_axis[1], long_axis[0]])
+        short_axis = short_axis / np.linalg.norm(short_axis)
+
+
+    # adjust the direction of the short axis
+    ss_direction = snapshot_center - snapshot_observation_point[:2]
+    if np.dot(ss_direction, short_axis) < 0:
+        short_axis = -short_axis
+
+    # get the points in unoccupied_map that are within the observation distance
+    unoccupied_coords = np.argwhere(unoccupied_map)  # [N, 2]
+    dists = np.linalg.norm(unoccupied_coords - snapshot_center, axis=1)  # [N]
+    valid_coords = unoccupied_coords[(dists > min_obs_dist) & (dists < max_obs_dist)]  # [N, 2]
+    if len(valid_coords) == 0:
+        logging.error(f"Error in get_random_snapshot_observation_point: no unoccupied points for {min_obs_dist}-{max_obs_dist} distance around snapshot center {snapshot_center}")
+        return None
+
+    # get the point that is the most opposite to the short axis
+    cos_values = np.dot(valid_coords - snapshot_center, short_axis) / np.linalg.norm(valid_coords - snapshot_center, axis=1)
+    indices_rank  = np.argsort(cos_values)
+    target_obs_point = None
+    for idx in indices_rank:
+        potential_obs_point = valid_coords[idx]
+
+        # we need to ensure that there is no occupied point between the observation point and the snapshot center
+        direction = snapshot_center - potential_obs_point
+        direction = direction / np.linalg.norm(direction)
+        # adjust the snapshot center: usually there are surrounding occupied regions around the snapshot center
+        snapshot_center_adjusted = snapshot_center.copy()
+        try_count_step_back = 0
+        adjust_success = True
+        while not unoccupied_map[int(snapshot_center_adjusted[0]), int(snapshot_center_adjusted[1])]:
+            try_count_step_back += 1
+            snapshot_center_adjusted = snapshot_center_adjusted - direction
+            if try_count_step_back > max_obs_dist * 2:
+                logging.error(f"Error in get_random_snapshot_observation_point: cannot backtrace from {snapshot_center} to {potential_obs_point}!")
+                adjust_success = False
+                break
+        if not adjust_success:
+            continue
+        snapshot_center_adjusted = snapshot_center_adjusted.astype(int)
+        direction = snapshot_center_adjusted - potential_obs_point
+
+        # then we can check whether there are occupied points between the observation point and the adjusted snapshot center
+        if check_distance(
+            occupied_map=np.logical_not(unoccupied_map),
+            pos=potential_obs_point,
+            direction=direction / np.linalg.norm(direction),
+            tolerance=int(np.linalg.norm(direction)) - 1
+        ):
+            target_obs_point = potential_obs_point
+            break
+
+    if target_obs_point is None:
+        logging.error(f"Error in get_random_snapshot_observation_point: cannot find a proper observation point!")
+        return None
+
+    return target_obs_point
 
 
 

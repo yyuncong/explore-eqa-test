@@ -52,8 +52,8 @@ class Frontier:
     orientation: np.ndarray  # directional vector of the frontier in float
     region: np.ndarray  # boolean array of the same shape as the voxel grid, indicating the region of the frontier
     frontier_id: int  # unique id for the frontier to identify its region on the frontier map
-    is_stuck: bool = False  # whether the frontier has been visited before
     image: str = None
+    target_detected: bool = False
 
     def __eq__(self, other):
         if not isinstance(other, Frontier):
@@ -721,6 +721,7 @@ class TSDFPlanner:
                             self.create_frontier(valid_ft_angles[update_ft_idx], frontier_edge_areas=frontier_edge_areas, cur_point=cur_point)
                         )
                         filtered_frontiers[-1].image = old_img_path
+                        filtered_frontiers[-1].target_detected = frontier.target_detected
                         valid_ft_angles.pop(update_ft_idx)
                         kept_frontier_area = kept_frontier_area | filtered_frontiers[-1].region
         self.frontiers = filtered_frontiers
@@ -745,13 +746,6 @@ class TSDFPlanner:
 
         # create new frontiers and add to frontier list
         for ft_data in valid_ft_angles:
-            # region_covered_ratio = np.sum(ft_data['region'] & kept_frontier_area) / np.sum(ft_data['region'])
-            # if region_covered_ratio < 1 - cfg.region_equal_threshold:
-            #     # if this frontier is not covered by the existing frontiers, then add it
-            #     self.frontiers.append(
-            #         self.create_frontier(ft_data, frontier_edge_areas=frontier_edge_areas, cur_point=cur_point)
-            #     )
-
             # exclude the new frontier's region that is already covered by the existing frontiers
             ft_data['region'] = ft_data['region'] & np.logical_not(kept_frontier_area)
             if np.sum(ft_data['region']) > 0:
@@ -819,9 +813,9 @@ class TSDFPlanner:
                 weight *= np.exp(- closest_dist) * 3
                 weight *= np.exp(cosine_dist)
 
-                # if the frontier is stuck, then reduce the weight
-                if frontier.is_stuck:
-                    weight *= 1e-3
+                # if the target object is detected in this frontier, then increase the weight
+                if frontier.target_detected:
+                    weight *= 1e3
 
                 # Save weight
                 frontiers_weight = np.append(frontiers_weight, weight)
@@ -872,54 +866,28 @@ class TSDFPlanner:
                     target_point_normal = target_point * self._voxel_size + self._vol_origin[:2]
                     target_point_normal = np.append(target_point_normal, pts[-1])
                     target_point_habitat = pos_normal_to_habitat(target_point_normal)
-                    try_count = 0
-                    while True:
-                        try_count += 1
-                        if try_count > 100:
-                            logging.error(f"Error in find_next_pose_with_path: cannot find a proper next point near object at {target_point}")
-                            return False
-                        try:
-                            target_navigable_point_habitat = pathfinder.get_random_navigable_point_near(
-                                circle_center=target_point_habitat,
-                                radius=1.0,
-                            )
-                        except:
-                            logging.error(f"Error in find_next_pose_with_path: pathfinder.get_random_navigable_point_near failed")
-                            continue
-                        if np.isnan(target_navigable_point_habitat).any():
-                            logging.error(f"Error in find_next_pose_with_path: pathfinder.get_random_navigable_point_near returned nan")
-                            continue
-                        if abs(target_navigable_point_habitat[1] - pts[-1]) < 0.1:
-                            break
+
+                    target_navigable_point_habitat = get_proper_observe_point_with_pathfinder(target_point_habitat, pathfinder, height=pts[-1])
+                    if target_navigable_point_habitat is None:
+                        logging.error(f"Error in set_next_navigation_point: cannot find a proper navigable point around the target object")
+                        return False
+
                     target_navigable_point = self.habitat2voxel(target_navigable_point_habitat)[:2]
                 self.target_point = target_navigable_point
                 return True
             else:
-                if len(obj_centers) == 2:
-                    # if there are two objects in the snapshot, then the long axis is the line bewteen the two objects
-                    # and the short axis is the perpendicular line to the long axis
-                    long_axis = obj_centers[1] - obj_centers[0]
-                    long_axis = long_axis / np.linalg.norm(long_axis)
-                    short_axis = np.array([-long_axis[1], long_axis[0]])
-                else:
-                    obj_centers = obj_centers - snapshot_center
-                    structure_tensor = np.cov(obj_centers.T)
-                    eigenvalues, eigenvecs = np.linalg.eig(structure_tensor)
-                    long_axis = eigenvecs[:, np.argmax(eigenvalues)]
-                    short_axis = eigenvecs[:, np.argmin(eigenvalues)]
-                    # when the object centers are generally on the same line, the short axis is very small
-                    if eigenvalues.min() < 1e-3:
-                        short_axis = np.array([-long_axis[1], long_axis[0]])
-                    short_axis = short_axis / np.linalg.norm(short_axis)
+                target_point = get_proper_snapshot_observation_point(
+                    obj_centers=obj_centers,
+                    snapshot_observation_point=choice.obs_point,
+                    unoccupied_map=self.unoccupied,
+                    min_obs_dist=cfg.final_observe_distance / self._voxel_size - 1,
+                    max_obs_dist=cfg.final_observe_distance / self._voxel_size + 1
+                )
+                if target_point is None:
+                    logging.error(f"Error in set_next_navigation_point: cannot find a proper observation point for the snapshot")
+                    return False
 
-                # find a proper observation point at short axis
-                ss_direction = snapshot_center - choice.obs_point[:2]
-                if np.dot(ss_direction, short_axis) < 0:
-                    short_axis = -short_axis
-                obs_dist = cfg.final_observe_distance / self._voxel_size
-
-                target_point = snapshot_center - short_axis * obs_dist
-                self.target_point = get_nearest_true_point(target_point, self.unoccupied)
+                self.target_point = target_point
                 return True
         elif type(choice) == Frontier:
             # find the direction into unexplored
@@ -1027,11 +995,6 @@ class TSDFPlanner:
             logging.warning(f"Warning in agent_step: next point is the same as the current point when determining the direction")
             direction = self.rad2vector(angle)
         direction = direction / np.linalg.norm(direction)
-
-        # if the next point is the same as the current point, and the target is a frontier
-        # then the frontier is stuck and cannot be reached
-        if np.linalg.norm(next_point - cur_point[:2]) < 1e-6 and type(self.max_point) == Frontier:
-            self.max_point.is_stuck = True
 
         # Plot
         fig = None

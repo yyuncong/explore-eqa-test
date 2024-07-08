@@ -1,7 +1,8 @@
 import numpy as np
 import quaternion
 import habitat_sim
-from .geom import get_collision_distance
+import supervision as sv
+from .geom import get_collision_distance, IoU
 from habitat_sim.utils.common import quat_to_coeffs, quat_from_angle_axis, quat_from_two_vectors, quat_to_angle_axis
 
 
@@ -502,19 +503,57 @@ def get_frontier_observation(
     return obs["color_sensor"]
 
 
+def get_frontier_observation_and_detect_target(
+        agent, simulator, cfg,
+        detection_model, target_obj_id, target_obj_class,
+        view_frontier_direction, init_pts, camera_tilt=0
+):
+    agent_state = habitat_sim.AgentState()
 
+    # solve edge cases of viewing direction
+    default_view_direction = np.asarray([0., 0., -1.])
+    if np.linalg.norm(view_frontier_direction) < 1e-3:
+        view_frontier_direction = default_view_direction
+    view_frontier_direction = view_frontier_direction / np.linalg.norm(view_frontier_direction)
 
+    # set agent observation direction
+    if np.dot(view_frontier_direction, default_view_direction) / np.linalg.norm(view_frontier_direction) < -1 + 1e-3:
+        # if the rotation is to rotate 180 degree, then the quaternion is not unique
+        # we need to specify rotating along y-axis
+        agent_state.rotation = quat_to_coeffs(
+            quaternion.quaternion(0, 0, 1, 0)
+            * quat_from_angle_axis(camera_tilt, np.array([1, 0, 0]))
+        ).tolist()
+    else:
+        agent_state.rotation = quat_to_coeffs(
+            quat_from_two_vectors(default_view_direction, view_frontier_direction)
+            * quat_from_angle_axis(camera_tilt, np.array([1, 0, 0]))
+        ).tolist()
 
+    agent_state.position = init_pts
+    agent.set_state(agent_state)
+    obs = simulator.get_sensor_observations()
 
+    rgb = obs["color_sensor"]
+    semantic_obs = obs["semantic_sensor"]
 
+    detection_model.set_classes([target_obj_class])
+    results = detection_model.infer(rgb[..., :3], confidence=cfg.confidence)
+    detections = sv.Detections.from_inference(results).with_nms(threshold=cfg.nms_threshold)
 
+    target_detected = False
+    if target_obj_id in np.unique(semantic_obs):
+        for i in range(len(detections)):
+            x_start, y_start, x_end, y_end = detections.xyxy[i].astype(int)
+            bbox_mask = np.zeros(semantic_obs.shape, dtype=bool)
+            bbox_mask[y_start:y_end, x_start:x_end] = True
 
+            target_x_start, target_y_start = np.argwhere(semantic_obs == target_obj_id).min(axis=0)
+            target_x_end, target_y_end = np.argwhere(semantic_obs == target_obj_id).max(axis=0)
+            obj_mask = np.zeros(semantic_obs.shape, dtype=bool)
+            obj_mask[target_x_start:target_x_end, target_y_start:target_y_end] = True
+            if IoU(bbox_mask, obj_mask) > cfg.iou_threshold:
+                target_detected = True
+                break
 
-
-
-
-
-
-
-
-
+    return rgb, target_detected

@@ -30,7 +30,7 @@ from src.habitat import (
     pose_normal_to_tsdf,
     get_quaternion,
     get_navigable_point_to_new,
-    get_frontier_observation
+    get_frontier_observation_and_detect_target
 )
 from src.geom import get_cam_intr, get_scene_bnds, get_collision_distance
 from src.tsdf_3 import TSDFPlanner, Frontier, SnapShot
@@ -75,11 +75,11 @@ def main(cfg):
         ##########################################################
         # if '00324' not in scene_id:
         #     continue
-        if int(scene_id.split("-")[0]) >= 800:
-            continue
+        # if int(scene_id.split("-")[0]) >= 800:
+        #     continue
         # rand_q = np.random.randint(0, len(all_questions_in_scene) - 1)
         # all_questions_in_scene = all_questions_in_scene[rand_q:rand_q+1]
-        # all_questions_in_scene = [q for q in all_questions_in_scene if '00569-YJDUB7hWg9h_27_table_491405' in q['question_id']]
+        # all_questions_in_scene = [q for q in all_questions_in_scene if '00324-DoSbsoo4EAg_225_refrigerator_695510' in q['question_id'] or '00324-DoSbsoo4EAg_199_armchair_322059' in q['question_id']]
         # if len(all_questions_in_scene) == 0:
         #     continue
         # random.shuffle(all_questions_in_scene)
@@ -302,20 +302,7 @@ def main(cfg):
                             obs_point=pts,
                             return_annotated=True
                         )
-                        plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), annotated_rgb)
-
-                        # # check stop condition
-                        # if target_in_view:
-                        #     if target_obj_id in tsdf_planner.simple_scene_graph.keys():
-                        #         target_obj_pix_ratio = np.sum(semantic_obs == target_obj_id) / (img_height * img_width)
-                        #         if target_obj_pix_ratio > 0:
-                        #             obj_pix_center = np.mean(np.argwhere(semantic_obs == target_obj_id), axis=0)
-                        #             bias_from_center = (obj_pix_center - np.asarray([img_height // 2, img_width // 2])) / np.asarray([img_height, img_width])
-                        #             # currently just consider that the object should be in around the horizontal center, not the vertical center
-                        #             # due to the viewing angle difference
-                        #             if target_obj_pix_ratio > cfg.stop_min_pix_ratio and np.abs(bias_from_center)[1] < cfg.stop_max_bias_from_center:
-                        #                 logging.info(f"Stop condition met at step {cnt_step} view {view_idx}")
-                        #                 target_found = True
+                        plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), rgb)
 
                         # TSDF fusion
                         tsdf_planner.integrate(
@@ -350,45 +337,6 @@ def main(cfg):
                     if target_found:
                         break
 
-                    # reset target point to allow the model to choose again
-                    tsdf_planner.max_point = None
-                    tsdf_planner.target_point = None
-
-                    if tsdf_planner.max_point is None and tsdf_planner.target_point is None:
-                        max_point_choice = tsdf_planner.get_next_choice(
-                            pts=pts_normal,
-                            path_points=path_points,
-                            pathfinder=pathfinder,
-                            target_obj_id=target_obj_id,
-                            cfg=cfg.planner,
-                        )
-                        if max_point_choice is None:
-                            logging.info(f"Question id {question_data['question_id']}-path {path_idx} invalid: no valid choice!")
-                            break
-
-                        update_success = tsdf_planner.set_next_navigation_point(
-                            choice=max_point_choice,
-                            pts=pts_normal,
-                            cfg=cfg.planner,
-                            pathfinder=pathfinder,
-                        )
-                        if not update_success:
-                            logging.info(f"Question id {question_data['question_id']}-path {path_idx} invalid: find next navigation point failed!")
-                            break
-
-                    return_values = tsdf_planner.agent_step(
-                        pts=pts_normal,
-                        angle=angle,
-                        pathfinder=pathfinder,
-                        cfg=cfg.planner,
-                        path_points=path_points,
-                        save_visualization=cfg.save_visualization,
-                    )
-                    if return_values[0] is None:
-                        logging.info(f"Question id {question_data['question_id']}-path {path_idx} invalid: find next navigation point failed!")
-                        break
-                    pts_normal, angle, pts_pix, fig, path_points, target_arrived = return_values
-
                     # Get observations for each frontier and store them
                     step_dict["frontiers"] = []
                     for i, frontier in enumerate(tsdf_planner.frontiers):
@@ -403,12 +351,13 @@ def main(cfg):
                         else:
                             view_frontier_direction = np.asarray([pos_world[0] - pts[0], 0., pos_world[2] - pts[2]])
 
-                            frontier_obs = get_frontier_observation(
-                                agent, simulator, cfg, tsdf_planner,
-                                view_frontier_direction=view_frontier_direction,
-                                init_pts=pts,
-                                max_try_count=0
+                            frontier_obs, target_detected = get_frontier_observation_and_detect_target(
+                                agent, simulator, cfg.scene_graph, detection_model,
+                                target_obj_id=target_obj_id, target_obj_class=object_id_to_name[target_obj_id],
+                                view_frontier_direction=view_frontier_direction, init_pts=pts
                             )
+                            if target_detected:
+                                frontier.target_detected = True
 
                             plt.imsave(
                                 os.path.join(episode_frontier_dir, f"{cnt_step}_{i}.png"),
@@ -417,6 +366,44 @@ def main(cfg):
                             frontier.image = f"{cnt_step}_{i}.png"
                             frontier_dict["rgb_id"] = f"{cnt_step}_{i}.png"
                         step_dict["frontiers"].append(frontier_dict)
+
+                    # reset target point to allow the model to choose again
+                    tsdf_planner.max_point = None
+                    tsdf_planner.target_point = None
+
+                    max_point_choice = tsdf_planner.get_next_choice(
+                        pts=pts_normal,
+                        path_points=path_points,
+                        pathfinder=pathfinder,
+                        target_obj_id=target_obj_id,
+                        cfg=cfg.planner,
+                    )
+                    if max_point_choice is None:
+                        logging.info(f"Question id {question_data['question_id']}-path {path_idx} invalid: no valid choice!")
+                        break
+
+                    update_success = tsdf_planner.set_next_navigation_point(
+                        choice=max_point_choice,
+                        pts=pts_normal,
+                        cfg=cfg.planner,
+                        pathfinder=pathfinder,
+                    )
+                    if not update_success:
+                        logging.info(f"Question id {question_data['question_id']}-path {path_idx} invalid: find next navigation point failed!")
+                        break
+
+                    return_values = tsdf_planner.agent_step(
+                        pts=pts_normal,
+                        angle=angle,
+                        pathfinder=pathfinder,
+                        cfg=cfg.planner,
+                        path_points=path_points,
+                        save_visualization=cfg.save_visualization,
+                    )
+                    if return_values[0] is None:
+                        logging.info(f"Question id {question_data['question_id']}-path {path_idx} invalid: find next navigation point failed!")
+                        break
+                    pts_normal, angle, pts_pix, fig, path_points, target_arrived = return_values
 
                     # save snapshots
                     step_dict["snapshots"] = []
@@ -428,14 +415,14 @@ def main(cfg):
                              }
                         )
 
-                    # tempt
-                    step_dict["scene_graph_file2objs"] = {}
-                    for obj_id, obj in tsdf_planner.simple_scene_graph.items():
-                        if obj.image not in step_dict["scene_graph_file2objs"]:
-                            step_dict["scene_graph_file2objs"][obj.image] = []
-                        step_dict["scene_graph_file2objs"][obj.image].append(
-                            f"{obj_id}: {object_id_to_name[obj_id]}"
-                        )
+                    # # tempt
+                    # step_dict["scene_graph_file2objs"] = {}
+                    # for obj_id, obj in tsdf_planner.simple_scene_graph.items():
+                    #     if obj.image not in step_dict["scene_graph_file2objs"]:
+                    #         step_dict["scene_graph_file2objs"][obj.image] = []
+                    #     step_dict["scene_graph_file2objs"][obj.image].append(
+                    #         f"{obj_id}: {object_id_to_name[obj_id]}"
+                    #     )
 
 
                     # for debug
@@ -452,7 +439,7 @@ def main(cfg):
                         prediction += [0.0 for _ in range(len(step_dict["frontiers"]))]
                     elif type(max_point_choice) == Frontier:
                         prediction = [0.0 for _ in range(len(step_dict["snapshots"]))]
-                        prediction += [float(ft == max_point_choice) for ft in tsdf_planner.frontiers]
+                        prediction += [float(ft_dict["rgb_id"] == max_point_choice.image) for ft_dict in step_dict["frontiers"]]
                     else:
                         raise ValueError("Invalid max_point_choice type")
                     assert len(prediction) == len(step_dict["snapshots"]) + len(step_dict["frontiers"]), f"{len(prediction)} != {len(step_dict['snapshots'])} + {len(step_dict['frontiers'])}"

@@ -23,7 +23,7 @@ from tqdm import tqdm
 import habitat_sim
 from habitat_sim.utils.common import quat_to_coeffs, quat_from_angle_axis, quat_from_two_vectors, quat_to_angle_axis
 from src.habitat import (
-    make_semantic_cfg,
+    make_semantic_cfg_new,
     pos_normal_to_habitat,
     pos_habitat_to_normal,
     pose_habitat_to_normal,
@@ -33,7 +33,7 @@ from src.habitat import (
     get_frontier_observation
 )
 from src.geom import get_cam_intr, get_scene_bnds, get_collision_distance
-from src.tsdf_3 import TSDFPlanner, Frontier, Object
+from src.tsdf_3 import TSDFPlanner, Frontier, SnapShot
 from inference.models import YOLOWorld
 
 
@@ -79,7 +79,7 @@ def main(cfg):
             continue
         # rand_q = np.random.randint(0, len(all_questions_in_scene) - 1)
         # all_questions_in_scene = all_questions_in_scene[rand_q:rand_q+1]
-        # all_questions_in_scene = [q for q in all_questions_in_scene if '00569-YJDUB7hWg9h_44_microwave_757000' in q['question_id']]
+        # all_questions_in_scene = [q for q in all_questions_in_scene if '00569-YJDUB7hWg9h_27_table_491405' in q['question_id']]
         # if len(all_questions_in_scene) == 0:
         #     continue
         # random.shuffle(all_questions_in_scene)
@@ -123,7 +123,7 @@ def main(cfg):
             "scene_dataset_config_file": cfg.scene_dataset_config_path,
             "camera_tilt": cfg.camera_tilt_deg * np.pi / 180,
         }
-        sim_cfg = make_semantic_cfg(sim_settings)
+        sim_cfg = make_semantic_cfg_new(sim_settings)
         simulator = habitat_sim.Simulator(sim_cfg)
         pathfinder = simulator.pathfinder
         pathfinder.seed(cfg.seed)
@@ -299,22 +299,23 @@ def main(cfg):
                             cfg=cfg.scene_graph,
                             target_obj_id=target_obj_id,
                             file_name=obs_file_name,
+                            obs_point=pts,
                             return_annotated=True
                         )
                         plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), annotated_rgb)
 
-                        # check stop condition
-                        if target_in_view:
-                            if target_obj_id in tsdf_planner.simple_scene_graph.keys():
-                                target_obj_pix_ratio = np.sum(semantic_obs == target_obj_id) / (img_height * img_width)
-                                if target_obj_pix_ratio > 0:
-                                    obj_pix_center = np.mean(np.argwhere(semantic_obs == target_obj_id), axis=0)
-                                    bias_from_center = (obj_pix_center - np.asarray([img_height // 2, img_width // 2])) / np.asarray([img_height, img_width])
-                                    # currently just consider that the object should be in around the horizontal center, not the vertical center
-                                    # due to the viewing angle difference
-                                    if target_obj_pix_ratio > cfg.stop_min_pix_ratio and np.abs(bias_from_center)[1] < cfg.stop_max_bias_from_center:
-                                        logging.info(f"Stop condition met at step {cnt_step} view {view_idx}")
-                                        target_found = True
+                        # # check stop condition
+                        # if target_in_view:
+                        #     if target_obj_id in tsdf_planner.simple_scene_graph.keys():
+                        #         target_obj_pix_ratio = np.sum(semantic_obs == target_obj_id) / (img_height * img_width)
+                        #         if target_obj_pix_ratio > 0:
+                        #             obj_pix_center = np.mean(np.argwhere(semantic_obs == target_obj_id), axis=0)
+                        #             bias_from_center = (obj_pix_center - np.asarray([img_height // 2, img_width // 2])) / np.asarray([img_height, img_width])
+                        #             # currently just consider that the object should be in around the horizontal center, not the vertical center
+                        #             # due to the viewing angle difference
+                        #             if target_obj_pix_ratio > cfg.stop_min_pix_ratio and np.abs(bias_from_center)[1] < cfg.stop_max_bias_from_center:
+                        #                 logging.info(f"Stop condition met at step {cnt_step} view {view_idx}")
+                        #                 target_found = True
 
                         # TSDF fusion
                         tsdf_planner.integrate(
@@ -339,9 +340,6 @@ def main(cfg):
                         if cfg.save_egocentric_view:
                             plt.imsave(os.path.join(egocentric_save_dir, f"{cnt_step}_view_{view_idx}.png"), rgb)
 
-                        if target_found:
-                            break
-
                     tsdf_planner.update_snapshots(min_num_obj_threshold=cfg.min_num_obj_threshold)
 
                     update_success = tsdf_planner.update_frontier_map(pts=pts_normal, cfg=cfg.planner)
@@ -352,31 +350,44 @@ def main(cfg):
                     if target_found:
                         break
 
-                    max_point_choice = tsdf_planner.get_next_choice(
-                        pts=pts_normal,
-                        angle=angle,
-                        path_points=path_points,
-                        pathfinder=pathfinder,
-                        target_obj_id=target_obj_id,
-                        cfg=cfg.planner,
-                    )
-                    if max_point_choice is None:
-                        logging.info(f"Question id {question_data['question_id']}-path {path_idx} invalid: no valid choice!")
-                        break
+                    # reset target point to allow the model to choose again
+                    tsdf_planner.max_point = None
+                    tsdf_planner.target_point = None
 
-                    return_values = tsdf_planner.get_next_navigation_point(
-                        choice=max_point_choice,
+                    if tsdf_planner.max_point is None and tsdf_planner.target_point is None:
+                        max_point_choice = tsdf_planner.get_next_choice(
+                            pts=pts_normal,
+                            path_points=path_points,
+                            pathfinder=pathfinder,
+                            target_obj_id=target_obj_id,
+                            cfg=cfg.planner,
+                        )
+                        if max_point_choice is None:
+                            logging.info(f"Question id {question_data['question_id']}-path {path_idx} invalid: no valid choice!")
+                            break
+
+                        update_success = tsdf_planner.set_next_navigation_point(
+                            choice=max_point_choice,
+                            pts=pts_normal,
+                            cfg=cfg.planner,
+                            pathfinder=pathfinder,
+                        )
+                        if not update_success:
+                            logging.info(f"Question id {question_data['question_id']}-path {path_idx} invalid: find next navigation point failed!")
+                            break
+
+                    return_values = tsdf_planner.agent_step(
                         pts=pts_normal,
                         angle=angle,
-                        path_points=path_points,
                         pathfinder=pathfinder,
                         cfg=cfg.planner,
+                        path_points=path_points,
                         save_visualization=cfg.save_visualization,
                     )
                     if return_values[0] is None:
                         logging.info(f"Question id {question_data['question_id']}-path {path_idx} invalid: find next navigation point failed!")
                         break
-                    pts_normal, angle, pts_pix, fig, path_points = return_values
+                    pts_normal, angle, pts_pix, fig, path_points, target_arrived = return_values
 
                     # Get observations for each frontier and store them
                     step_dict["frontiers"] = []
@@ -407,10 +418,17 @@ def main(cfg):
                             frontier_dict["rgb_id"] = f"{cnt_step}_{i}.png"
                         step_dict["frontiers"].append(frontier_dict)
 
-                    # Add object items in the scene graph to the step data
-                    step_dict["scene_graph_obj2file"] = {}
-                    for obj_id, obj in tsdf_planner.simple_scene_graph.items():
-                        step_dict["scene_graph_obj2file"][int(obj_id)] = obj.image
+                    # save snapshots
+                    step_dict["snapshots"] = []
+                    for snapshot in tsdf_planner.snapshots.values():
+                        step_dict["snapshots"].append(
+                            {
+                                "img_id": snapshot.image,
+                                "obj_ids": [int(obj_id) for obj_id in snapshot.selected_obj_list]
+                             }
+                        )
+
+                    # tempt
                     step_dict["scene_graph_file2objs"] = {}
                     for obj_id, obj in tsdf_planner.simple_scene_graph.items():
                         if obj.image not in step_dict["scene_graph_file2objs"]:
@@ -419,24 +437,25 @@ def main(cfg):
                             f"{obj_id}: {object_id_to_name[obj_id]}"
                         )
 
+
                     # for debug
-                    assert len(step_dict["scene_graph_file2objs"]) == len(tsdf_planner.snapshots), f"{len(step_dict['scene_graph_file2objs'])} != {len(tsdf_planner.snapshots)}"
+                    assert len(step_dict["snapshots"]) == len(tsdf_planner.snapshots), f"{len(step_dict['snapshots'])} != {len(tsdf_planner.snapshots)}"
                     total_objs_count = 0
                     for snapshot in tsdf_planner.snapshots.values():
                         total_objs_count += len(snapshot.selected_obj_list)
                     assert len(tsdf_planner.simple_scene_graph) == total_objs_count, f"{len(tsdf_planner.simple_scene_graph)} != {total_objs_count}"
 
                     # save the ground truth choice
-                    if type(max_point_choice) == Object:
-                        choice_obj_id = max_point_choice.object_id
-                        prediction = [float(scene_graph_obj_id == choice_obj_id) for scene_graph_obj_id in step_dict["scene_graph_obj2file"].keys()]
+                    if type(max_point_choice) == SnapShot:
+                        filename = max_point_choice.image
+                        prediction = [float(ss["img_id"] == filename) for ss in step_dict["snapshots"]]
                         prediction += [0.0 for _ in range(len(step_dict["frontiers"]))]
                     elif type(max_point_choice) == Frontier:
-                        prediction = [0.0 for _ in range(len(step_dict["scene_graph_obj2file"]))]
+                        prediction = [0.0 for _ in range(len(step_dict["snapshots"]))]
                         prediction += [float(ft == max_point_choice) for ft in tsdf_planner.frontiers]
                     else:
                         raise ValueError("Invalid max_point_choice type")
-                    assert len(prediction) == len(step_dict["scene_graph_obj2file"]) + len(step_dict["frontiers"]), f"{len(prediction)} != {len(step_dict['scene_graph_obj2file'])} + {len(step_dict['frontiers'])}"
+                    assert len(prediction) == len(step_dict["snapshots"]) + len(step_dict["frontiers"]), f"{len(prediction)} != {len(step_dict['snapshots'])} + {len(step_dict['frontiers'])}"
                     if sum(prediction) != 1.0:
                         logging.info(f"Error! Prediction sum is not 1.0: {sum(prediction)}")
                         logging.info(max_point_choice)
@@ -471,6 +490,8 @@ def main(cfg):
                         frontier_video_path = os.path.join(episode_data_dir, "frontier_video")
                         os.makedirs(frontier_video_path, exist_ok=True)
                         num_images = len(tsdf_planner.frontiers)
+                        if type(max_point_choice) == SnapShot:
+                            num_images += 1
                         side_length = int(np.sqrt(num_images)) + 1
                         side_length = max(2, side_length)
                         fig, axs = plt.subplots(side_length, side_length, figsize=(20, 20))
@@ -478,15 +499,18 @@ def main(cfg):
                             for w_idx in range(side_length):
                                 axs[h_idx, w_idx].axis('off')
                                 i = h_idx * side_length + w_idx
-                                if i < num_images:
+                                if (i < num_images - 1) or (i < num_images and type(max_point_choice) == Frontier):
                                     img_path = os.path.join(episode_frontier_dir, tsdf_planner.frontiers[i].image)
                                     img = matplotlib.image.imread(img_path)
                                     axs[h_idx, w_idx].imshow(img)
                                     if type(max_point_choice) == Frontier and max_point_choice.image == tsdf_planner.frontiers[i].image:
                                         axs[h_idx, w_idx].set_title('Chosen')
+                                elif i == num_images - 1 and type(max_point_choice) == SnapShot:
+                                    img_path = os.path.join(object_feature_save_dir, max_point_choice.image)
+                                    img = matplotlib.image.imread(img_path)
+                                    axs[h_idx, w_idx].imshow(img)
+                                    axs[h_idx, w_idx].set_title('Snapshot Chosen')
                         global_caption = f"{question_data['question']}\n{question_data['answer']}"
-                        if type(max_point_choice) == Object:
-                            global_caption += '\nToward target object'
                         fig.suptitle(global_caption, fontsize=16)
                         plt.tight_layout(rect=(0., 0., 1., 0.95))
                         plt.savefig(os.path.join(frontier_video_path, f'{cnt_step}.png'))
@@ -499,6 +523,20 @@ def main(cfg):
                     explore_dist += np.linalg.norm(pts_pixs[-1] - pts_pixs[-2]) * tsdf_planner._voxel_size
 
                     logging.info(f"Current position: {pts}, {explore_dist:.3f}/{max_explore_dist:.3f}")
+
+                    if type(max_point_choice) == SnapShot and target_arrived:
+                        target_found = True
+                        logging.info(f"Target observation position arrived at step {cnt_step}!")
+                        # get an observation and break
+                        agent_state.position = pts
+                        agent_state.rotation = rotation
+                        agent.set_state(agent_state)
+                        obs = simulator.get_sensor_observations()
+                        rgb = obs["color_sensor"]
+                        target_obs_save_dir = os.path.join(episode_data_dir, "target_observation")
+                        os.makedirs(target_obs_save_dir, exist_ok=True)
+                        plt.imsave(os.path.join(target_obs_save_dir, f"{cnt_step}_target_observation.png"), rgb)
+                        break
 
                 if target_found:
                     metadata["episode_length"] = cnt_step

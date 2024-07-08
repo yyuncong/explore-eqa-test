@@ -207,7 +207,7 @@ class TSDFPlanner:
             obs_point,  # position in habitat space
             return_annotated=False
     ):
-        target_found = False
+        object_added = False
 
         unique_obj_ids = np.unique(semantic_obs)
         class_to_obj_id = {}
@@ -222,9 +222,9 @@ class TSDFPlanner:
 
         if len(all_classes) == 0:
             if return_annotated:
-                return target_found, rgb
+                return object_added, rgb
             else:
-                return target_found
+                return object_added
 
         detection_model.set_classes(all_classes)
 
@@ -294,16 +294,14 @@ class TSDFPlanner:
                             snapshot.selected_obj_list.append(obj_id)
 
                     adopted_indices.append(i)
-                    if obj_id == target_obj_id:
-                        target_found = True
-
+                    object_added = True
                     break
 
         self.snapshots[file_name] = snapshot
 
         if return_annotated:
             if len(adopted_indices) == 0:
-                return target_found, rgb
+                return object_added, rgb
 
             # filter out the detections that are not adopted
             detections = detections[adopted_indices]
@@ -319,7 +317,9 @@ class TSDFPlanner:
             LABEL_ANNOTATOR = sv.LabelAnnotator(text_thickness=1, text_scale=0.5, text_color=sv.Color.BLACK)
             annotated_image = BOUNDING_BOX_ANNOTATOR.annotate(annotated_image, detections)
             annotated_image = LABEL_ANNOTATOR.annotate(annotated_image, detections)
-            return target_found, annotated_image
+            return object_added, annotated_image
+        else:
+            return object_added
 
     @staticmethod
     @njit(parallel=True)

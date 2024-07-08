@@ -290,7 +290,7 @@ def main(cfg):
 
                         # construct an frequency count map of each semantic id to a unique id
                         obs_file_name = f"{cnt_step}-view_{view_idx}.png"
-                        target_in_view, annotated_rgb = tsdf_planner.update_scene_graph(
+                        object_added = tsdf_planner.update_scene_graph(
                             detection_model=detection_model,
                             rgb=rgb[..., :3],
                             semantic_obs=semantic_obs,
@@ -300,9 +300,10 @@ def main(cfg):
                             target_obj_id=target_obj_id,
                             file_name=obs_file_name,
                             obs_point=pts,
-                            return_annotated=True
+                            return_annotated=False
                         )
-                        plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), rgb)
+                        if object_added:
+                            plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), rgb)
 
                         # TSDF fusion
                         tsdf_planner.integrate(
@@ -507,7 +508,9 @@ def main(cfg):
                     pts_normal = np.append(pts_normal, floor_height)
                     pts = pos_normal_to_habitat(pts_normal)
                     rotation = get_quaternion(angle, 0)
-                    explore_dist += np.linalg.norm(pts_pixs[-1] - pts_pixs[-2]) * tsdf_planner._voxel_size
+                    if type(max_point_choice) == Frontier:
+                        # count the explore distance only when the agent is exploring, not approaching the target
+                        explore_dist += np.linalg.norm(pts_pixs[-1] - pts_pixs[-2]) * tsdf_planner._voxel_size
 
                     logging.info(f"Current position: {pts}, {explore_dist:.3f}/{max_explore_dist:.3f}")
 

@@ -1,5 +1,5 @@
 # General
-seed: 77
+seed: 66
 exp_name: vlm_exp_frontiers
 output_parent_dir: results
 question_data_path: "generated_questions"
@@ -23,13 +23,12 @@ tsdf_grid_size: 0.1
 margin_w_ratio: 0.25
 margin_h_ratio: 0.6
 
-save_obs: false
+save_visualization_prev: true
 save_visualization: true
+save_frontier_video_prev: true
 save_frontier_video: true
 save_egocentric_view: true
 del_fail_case: false
-
-paths_per_question: 1
 
 # Stop criteria
 stop_min_pix_ratio: 0.01  # the target object should occupy at least 1% of the image
@@ -37,6 +36,7 @@ stop_max_bias_from_center: 0.4  # the target object should be within 60% of the 
 
 # Navigation
 init_clearance: 0.3
+max_step_dist_ratio_prev: 2.0
 max_step_dist_ratio: 1.5
 max_step_ratio: 2.5
 extra_view_phase_1: 4
@@ -54,7 +54,7 @@ planner:
   unoccupied_T: 2.0
   eps: 1
   max_dist_from_cur_phase_1: 1  # when the target object is not found, explore the frontiers with this step length
-  max_dist_from_cur_phase_2: 0.5  # when the target object is found, go to the target object with this step length
+  max_dist_from_cur_phase_2: 1  # when the target object is found, go to the target object with this step length
   max_unexplored_check_frontier: 3
   max_unoccupied_check_frontier: 1
   final_observe_distance: 1.5  # in phase 2, find a place that is this far from the target object to observe it
@@ -76,3 +76,4 @@ scene_graph:
   confidence: 0.003
   nms_threshold: 0.1
   iou_threshold: 0.5
+  obj_include_dist: 2.5

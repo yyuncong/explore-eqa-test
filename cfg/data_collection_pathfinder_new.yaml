@@ -1,13 +1,13 @@
 # General
 seed: 77
-exp_name: snapshot_test
-output_parent_dir: /work/pi_chuangg_umass_edu/yuncong/results
+exp_name: vlm_exp_frontiers
+output_parent_dir: results
 question_data_path: "generated_questions"
 scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
-scene_data_path: "/project/pi_chuangg_umass_edu/yuncong/data_v2/scene_datasets/hm3d"
-semantic_bbox_data_path: '/home/yuncongyang_umass_edu/scene_understanding/hm3d_obj_bbox_merged'
-dataset_output_dir: "exploration_data_snapshot_test"
-detection_model_name: "yolo_world/x"
+scene_data_path: "/home/hanyang/code/3d_project/explore-eqa/data/versioned_data/hm3d-0.2/hm3d"
+semantic_bbox_data_path: "/home/hanyang/code/3d_project/explore-eqa/data/hm3d_obj_bbox_merged"
+dataset_output_dir: "exploration_data"
+detection_model_name: "yolo_world/s"
 
 # Sampling navigation point
 min_travel_dist: 5.0
@@ -76,3 +76,4 @@ scene_graph:
   confidence: 0.003
   nms_threshold: 0.1
   iou_threshold: 0.5
+  obj_include_dist: 2.5

@@ -36,6 +36,7 @@ import scipy.ndimage as ndimage
 from skimage import measure
 from sklearn.cluster import DBSCAN, KMeans
 from scipy.ndimage import gaussian_filter
+from scipy import stats
 from .geom import *
 from .habitat import pos_normal_to_habitat, pos_habitat_to_normal
 import habitat_sim
@@ -103,6 +104,8 @@ class TSDFPlanner:
         floor_height_offset=0,
         pts_init=None,
         init_clearance=0,
+        occupancy_height=0.4,
+        vision_height=1.2
     ):
         """Constructor.
         Args:
@@ -175,6 +178,9 @@ class TSDFPlanner:
             self._vol_dim[:2],
         )
 
+        self.occupancy_height = occupancy_height  # the occupied/navigable map is acquired at this height
+        self.vision_height = vision_height  # the visibility map is acquired at this height
+
         self.max_point = None
         self.target_point = None
         self.simple_scene_graph: Dict[int, SceneGraphItem] = {}  # obj_id to object
@@ -192,7 +198,7 @@ class TSDFPlanner:
         self.unexplored_neighbors = None
         self.occupied_map_camera = None
 
-        self.frontiers_weight = None
+        self.frontiers_weight = np.empty(0)
 
     def update_scene_graph(
             self,
@@ -254,23 +260,16 @@ class TSDFPlanner:
                 obj_mask = np.zeros(semantic_obs.shape, dtype=bool)
                 obj_mask[obj_x_start:obj_x_end, obj_y_start:obj_y_end] = True
                 if IoU(bbox_mask, obj_mask) > cfg.iou_threshold:
-
-
-
-
                     # get the center of the bounding box to check whether it is close to the agent
                     bbox = obj_id_to_bbox[obj_id]["bbox"]
                     bbox = np.asarray(bbox)
                     bbox_center = np.mean(bbox, axis=0)
                     # change to x, z, y for habitat
                     bbox_center = bbox_center[[0, 2, 1]]
-                    if np.linalg.norm(np.asarray([bbox_center[0] - obs_point[0], bbox_center[2] - obs_point[2]])) > 2.5:
+
+                    # if the object is faraway, then just not add to the scene graph
+                    if np.linalg.norm(np.asarray([bbox_center[0] - obs_point[0], bbox_center[2] - obs_point[2]])) > cfg.obj_include_dist:
                         continue
-
-
-
-
-
 
                     # this object is counted as detected
                     snapshot.full_obj_list[obj_id] = confidence
@@ -567,7 +566,7 @@ class TSDFPlanner:
         """Determine the next frontier to traverse to with semantic-value-weighted sampling."""
         cur_point = self.world2vox(pts)
 
-        island, unoccupied = self.get_island_around_pts(pts, height=0.4)
+        island, unoccupied = self.get_island_around_pts(pts, height=self.occupancy_height)
         occupied = np.logical_not(unoccupied).astype(int)
         unexplored = (np.sum(self._explore_vol_cpu, axis=-1) == 0).astype(int)
         for point in self.init_points:
@@ -577,7 +576,7 @@ class TSDFPlanner:
             unexplored, kernel, mode="constant", cval=0.0
         )
         occupied_map_camera = np.logical_not(
-            self.get_island_around_pts(pts, height=1.2)[0]
+            self.get_island_around_pts(pts, height=self.vision_height)[0]
         )
         self.unexplored = unexplored
         self.unoccupied = unoccupied
@@ -1135,6 +1134,16 @@ class TSDFPlanner:
             island_coords = np.unravel_index(np.argmin(dist_all), dist_all.shape)
             islands_ind = islands[island_coords[0], island_coords[1]]
         island = islands == islands_ind
+
+        # also we need to include the island of all existing frontiers when calculating island at the same height as frontier
+        if abs(height - self.occupancy_height) < 1e-3:
+            for frontier in self.frontiers:
+                frontier_inds = islands[frontier.region]
+                # get the most common index
+                mode_result = stats.mode(frontier_inds, axis=None)
+                frontier_ind = mode_result.mode
+                island = island | (islands == frontier_ind)
+
         return island, unoccupied
 
     def check_within_bnds(self, pts, slack=0):

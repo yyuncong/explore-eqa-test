@@ -56,8 +56,9 @@ def main(cfg):
     # Load dataset
     with open(os.path.join(cfg.question_data_path, "generated_questions.json")) as f:
         questions_data = json.load(f)
+    questions_data = sorted(questions_data, key=lambda x: x["episode_history"])
+    questions_data = questions_data[int(args.start * len(questions_data)):int(args.end * len(questions_data))]
     all_scene_list = list(set([q["episode_history"] for q in questions_data]))
-    # all_scene_list.sort(key=lambda x: int(x.split("-")[0]), reverse=True)
     logging.info(f"Loaded {len(questions_data)} questions.")
 
     total_images_record = []
@@ -600,6 +601,8 @@ if __name__ == "__main__":
     parser.add_argument("-cf", "--cfg_file", help="cfg file path", default="", type=str)
     parser.add_argument("--path_id_offset", default=0, type=int)
     parser.add_argument("--seed", default=None, type=int)
+    parser.add_argument("--start", default=0.0, type=float)
+    parser.add_argument("--end", default=1.0, type=float)
     args = parser.parse_args()
     cfg = OmegaConf.load(args.cfg_file)
     OmegaConf.resolve(cfg)
@@ -623,6 +626,9 @@ if __name__ == "__main__":
     cfg.path_id_offset = args.path_id_offset
     if args.seed is not None:
         cfg.seed = args.seed
+
+    if args.start >= args.end:
+        raise ValueError(f"Start {args.start} should be less than end {args.end}")
 
     # run
     logging.info(f"***** Running {cfg.exp_name} *****")

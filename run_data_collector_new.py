@@ -183,10 +183,10 @@ def main(cfg):
                 floor_height = target_position[1]
                 tsdf_bnds, scene_size = get_scene_bnds(pathfinder, floor_height)
                 scene_length = (tsdf_bnds[:2, 1] - tsdf_bnds[:1, 0]).mean()
-                min_dist = max(cfg.min_travel_dist, scene_length * cfg.min_travel_dist_ratio)
+                min_dist = cfg.min_travel_dist
                 pathfinder.seed(random.randint(0, 1000000))
                 start_position, path_points, travel_dist = get_navigable_point_to_new(
-                    target_position, pathfinder, max_search=1000, min_dist=min_dist,
+                    target_position, pathfinder, max_search=1000, min_dist=min_dist, max_dist=min_dist + 5,
                     prev_start_positions=prev_start_positions
                 )
                 if start_position is None or path_points is None:
@@ -316,14 +316,6 @@ def main(cfg):
                             margin_w=int(cfg.margin_w_ratio * img_width),
                             explored_depth=cfg.explored_depth,
                         )
-
-                        if cfg.save_obs:
-                            observation_save_dir = os.path.join(episode_data_dir, 'observations')
-                            os.makedirs(observation_save_dir, exist_ok=True)
-                            if target_found:
-                                plt.imsave(os.path.join(observation_save_dir, f"{cnt_step}-view_{view_idx}-target.png"), annotated_rgb)
-                            else:
-                                plt.imsave(os.path.join(observation_save_dir, f"{cnt_step}-view_{view_idx}.png"), annotated_rgb)
 
                         if cfg.save_egocentric_view:
                             plt.imsave(os.path.join(egocentric_save_dir, f"{cnt_step}_view_{view_idx}.png"), rgb)

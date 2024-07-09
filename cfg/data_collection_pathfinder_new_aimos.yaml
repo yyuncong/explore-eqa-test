@@ -6,7 +6,7 @@ question_data_path: "generated_questions"
 scene_dataset_config_path: '/gpfs/u/home/LMCG/LMCGnngn/scratch/multisensory/MLLM/data/hm3d/hm3d_annotated_basis.scene_dataset_config.json'
 scene_data_path: "/gpfs/u/home/LMCG/LMCGnngn/scratch/multisensory/MLLM/data/hm3d"
 semantic_bbox_data_path: '/gpfs/u/home/LMCG/LMCGnngn/scratch/multisensory/MLLM/data/hm3d/hm3d_obj_bbox_merged'
-dataset_output_dir: "exploration_data_new"
+dataset_output_dir: "exploration_data_new_new"
 detection_model_name: "yolo_world/x"
 
 # Sampling navigation point
@@ -30,10 +30,6 @@ save_egocentric_view: true
 del_fail_case: false
 
 paths_per_question: 1
-
-# Stop criteria
-stop_min_pix_ratio: 0.01  # the target object should occupy at least 1% of the image
-stop_max_bias_from_center: 0.4  # the target object should be within 60% of the image center horizontally
 
 # Navigation
 init_clearance: 0.3
@@ -62,14 +58,13 @@ planner:
   surrounding_explored_radius: 0.7
 
   # about frontier selection
-  frontier_spacing: 0.5
   frontier_edge_area_min: 4
   frontier_edge_area_max: 6
   frontier_area_min: 8
   frontier_area_max: 9
   min_frontier_area: 20  # the frontier should have at least this many pixels
   max_frontier_angle_range_deg: 150  # the angle spanned by the pixels in a frontier should not be larger than this
-  min_frontier_angle_diff_deg: 45  # the angle between two frontiers should be larger than this. otherwise, merge them
+  min_frontier_angle_diff_deg: 0  # the angle between two frontiers should be larger than this. otherwise, merge them
   region_equal_threshold: 0.95
 
 scene_graph:

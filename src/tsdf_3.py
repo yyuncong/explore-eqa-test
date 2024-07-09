@@ -120,7 +120,7 @@ class TSDFPlanner:
         # Define voxel volume parameters
         self._vol_bnds = vol_bnds
         self._voxel_size = float(voxel_size)
-        self._trunc_margin = 5 * self._voxel_size  # truncation on SDF
+        self._trunc_margin = 1 * self._voxel_size  # truncation on SDF
         self._color_const = 256 * 256
 
         # Adjust volume bounds and ensure C-order contiguous
@@ -445,8 +445,9 @@ class TSDFPlanner:
 
         # Integrate TSDF
         depth_diff = depth_val - pix_z
-        valid_pts = np.logical_and(depth_val > 0, depth_diff >= -self._trunc_margin)
-        dist = np.maximum(-1, np.minimum(1, depth_diff / self._trunc_margin))
+        depth_margin = 1 * self._voxel_size
+        valid_pts = np.logical_and(depth_val > 0, depth_diff > depth_margin)
+        dist = np.where(depth_diff > depth_margin, 1.0, -1.0)
         valid_vox_x = self.vox_coords[valid_pts, 0]
         valid_vox_y = self.vox_coords[valid_pts, 1]
         valid_vox_z = self.vox_coords[valid_pts, 2]
@@ -454,7 +455,7 @@ class TSDFPlanner:
 
         depth_diff_narrow = depth_val_narrow - pix_z
         valid_pts_narrow = np.logical_and(
-            depth_val_narrow > 0, depth_diff_narrow >= -self._trunc_margin
+            depth_val_narrow > 0, depth_diff_narrow > depth_margin
         )
         valid_vox_x_narrow = self.vox_coords[valid_pts_narrow, 0]
         valid_vox_y_narrow = self.vox_coords[valid_pts_narrow, 1]
@@ -903,7 +904,7 @@ class TSDFPlanner:
                 next_point -= ft_direction
                 try_count += 1
                 if try_count > 1000:
-                    logging.error(f"Error in find_next_pose_with_path: cannot find a proper next point")
+                    logging.error(f"Error in set_next_navigation_point: cannot find a proper next point")
                     return False
 
             self.target_point = next_point.astype(int)
@@ -971,7 +972,7 @@ class TSDFPlanner:
                     next_point -= walk_dir
                     try_count += 1
                     if try_count > 1000:
-                        logging.error(f"Error in find_next_pose_with_path: cannot find a proper next point")
+                        logging.error(f"Error in agent_step: cannot find a proper next point")
                         return (None,)
                 next_point = np.round(next_point).astype(int)
         else:
@@ -1117,9 +1118,9 @@ class TSDFPlanner:
             unoccupied[point[0], point[1]] = 1
 
         # filter small islands smaller than size 2x2 and fill in gap of size 2
-        fill_size = int(fill_dim / self._voxel_size)
-        structuring_element_close = np.ones((fill_size, fill_size)).astype(bool)
-        unoccupied = close_operation(unoccupied, structuring_element_close)
+        # fill_size = int(fill_dim / self._voxel_size)
+        # structuring_element_close = np.ones((fill_size, fill_size)).astype(bool)
+        # unoccupied = close_operation(unoccupied, structuring_element_close)
 
         # Find the connected component closest to the current location is, if the current location is not free
         # this is a heuristic to determine reachable space, although not perfect
@@ -1135,6 +1136,8 @@ class TSDFPlanner:
             islands_ind = islands[island_coords[0], island_coords[1]]
         island = islands == islands_ind
 
+        assert (islands == 0).sum() == (unoccupied == 0).sum(), f"{(islands == 0).sum()} != {(unoccupied == 0).sum()}"
+
         # also we need to include the island of all existing frontiers when calculating island at the same height as frontier
         if abs(height - self.occupancy_height) < 1e-3:
             for frontier in self.frontiers:
@@ -1142,7 +1145,8 @@ class TSDFPlanner:
                 # get the most common index
                 mode_result = stats.mode(frontier_inds, axis=None)
                 frontier_ind = mode_result.mode
-                island = island | (islands == frontier_ind)
+                if frontier_ind != 0:
+                    island = island | (islands == frontier_ind)
 
         return island, unoccupied
 

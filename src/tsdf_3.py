@@ -600,12 +600,12 @@ class TSDFPlanner:
         if len(frontier_areas) == 0:
             # this happens when there are stairs on the floor, and the planner cannot handle this situation
             # just skip this question
-            logging.error(f'Error in find_next_pose_with_path: frontier area size is 0')
+            logging.error(f'Error in update_frontier_map: frontier area size is 0')
             self.frontiers = []
             return False
         if len(frontier_edge_areas) == 0:
             # this happens rather rarely
-            logging.error(f'Error in find_next_pose_with_path: frontier edge area size is 0')
+            logging.error(f'Error in update_frontier_map: frontier edge area size is 0')
             self.frontiers = []
             return False
 

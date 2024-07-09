@@ -337,9 +337,11 @@ def get_navigable_point_from(pos_start, pathfinder, max_search=1000, min_dist=6,
             return pos_end, path_points, max_distance_history
 
 
-def get_navigable_point_from_new(pos_start, pathfinder, max_search=1000, min_dist=6, prev_start_positions=None, min_dist_from_prev=3, max_samples=100):
+def get_navigable_point_from_new(pos_start, pathfinder, max_search=1000, min_dist=6, max_dist=999, prev_start_positions=None, min_dist_from_prev=3, max_samples=100):
     if min_dist < 0:
         return None, None, None
+    if max_dist <= min_dist:
+        max_dist = min_dist + 1
 
     pos_end_list = []
 
@@ -360,7 +362,7 @@ def get_navigable_point_from_new(pos_start, pathfinder, max_search=1000, min_dis
         path.requested_end = pos_end_current
         found_path = pathfinder.find_path(path)
         if found_path:
-            if path.geodesic_distance > min_dist:
+            if min_dist < path.geodesic_distance < max_dist:
                 if prev_start_positions is None:
                     pos_end_list.append(pos_end_current)
                 else:
@@ -381,6 +383,7 @@ def get_navigable_point_from_new(pos_start, pathfinder, max_search=1000, min_dis
             pathfinder,
             max_search,
             min_dist - 2,
+            max_dist + 2,
             prev_start_positions,
             min_dist_from_prev,
             max_samples
@@ -410,9 +413,9 @@ def get_navigable_point_to(pos_end, pathfinder, max_search=1000, min_dist=6, pre
     return pos_start, path_point, travel_dist
 
 
-def get_navigable_point_to_new(pos_end, pathfinder, max_search=1000, min_dist=6, prev_start_positions=None):
+def get_navigable_point_to_new(pos_end, pathfinder, max_search=1000, min_dist=6, max_dist=999, prev_start_positions=None):
     pos_start, path_point, travel_dist = get_navigable_point_from_new(
-        pos_end, pathfinder, max_search, min_dist, prev_start_positions
+        pos_end, pathfinder, max_search, min_dist, max_dist, prev_start_positions
     )
     if pos_start is None or path_point is None:
         return None, None, None

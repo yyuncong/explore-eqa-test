@@ -274,7 +274,7 @@ def main(cfg):
                     semantic_obs = obs["semantic_sensor"]
 
                     # construct an frequency count map of each semantic id to a unique id
-                    obs_file_name = f"{obj_feature_counter}.png"
+                    obs_file_name = f"{cnt_step}-view_{view_idx}-{obj_feature_counter}.png"
                     object_added, annotated_rgb = tsdf_planner.update_scene_graph(
                         detection_model=detection_model,
                         rgb=rgb[..., :3],
@@ -481,10 +481,10 @@ def main(cfg):
             floor_height = target_position[1]
             tsdf_bnds, scene_size = get_scene_bnds(pathfinder, floor_height)
             scene_length = (tsdf_bnds[:2, 1] - tsdf_bnds[:1, 0]).mean()
-            min_dist = max(cfg.min_travel_dist, scene_length * cfg.min_travel_dist_ratio)
+            min_dist = cfg.min_travel_dist
             pathfinder.seed(random.randint(0, 1000000))
             start_position, path_points, travel_dist = get_navigable_point_to_new(
-                target_position, pathfinder, max_search=1000, min_dist=min_dist,
+                target_position, pathfinder, max_search=1000, min_dist=min_dist, max_dist=min_dist + 5,
                 prev_start_positions=prev_start_positions
             )
             if start_position is None or path_points is None:
@@ -588,7 +588,7 @@ def main(cfg):
                     semantic_obs = obs["semantic_sensor"]
 
                     # construct an frequency count map of each semantic id to a unique id
-                    obs_file_name = f"{obj_feature_counter}.png"
+                    obs_file_name = f"{cnt_step}-view_{view_idx}-{obj_feature_counter}.png"
                     object_added, annotated_rgb = tsdf_planner.update_scene_graph(
                         detection_model=detection_model,
                         rgb=rgb[..., :3],

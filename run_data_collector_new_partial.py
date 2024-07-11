@@ -33,7 +33,7 @@ from src.habitat import (
     get_frontier_observation_and_detect_target
 )
 from src.geom import get_cam_intr, get_scene_bnds, get_collision_distance, points_in_circle
-from src.tsdf_3 import TSDFPlanner, Frontier, SnapShot
+from src.tsdf_new import TSDFPlanner, Frontier, SnapShot
 from inference.models import YOLOWorld
 
 
@@ -283,7 +283,6 @@ def main(cfg):
                         obj_id_to_name=object_id_to_name,
                         obj_id_to_bbox=object_id_to_bbox,
                         cfg=cfg.scene_graph,
-                        target_obj_id=target_obj_id,
                         file_name=obs_file_name,
                         obs_point=pts,
                         return_annotated=True
@@ -597,7 +596,6 @@ def main(cfg):
                         obj_id_to_name=object_id_to_name,
                         obj_id_to_bbox=object_id_to_bbox,
                         cfg=cfg.scene_graph,
-                        target_obj_id=target_obj_id,
                         file_name=obs_file_name,
                         obs_point=pts,
                         return_annotated=True

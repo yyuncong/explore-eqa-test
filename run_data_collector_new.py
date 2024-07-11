@@ -33,7 +33,7 @@ from src.habitat import (
     get_frontier_observation_and_detect_target
 )
 from src.geom import get_cam_intr, get_scene_bnds, get_collision_distance
-from src.tsdf_3 import TSDFPlanner, Frontier, SnapShot
+from src.tsdf_new import TSDFPlanner, Frontier, SnapShot
 from inference.models import YOLOWorld
 
 
@@ -298,7 +298,6 @@ def main(cfg):
                             obj_id_to_name=object_id_to_name,
                             obj_id_to_bbox=object_id_to_bbox,
                             cfg=cfg.scene_graph,
-                            target_obj_id=target_obj_id,
                             file_name=obs_file_name,
                             obs_point=pts,
                             return_annotated=False
@@ -383,7 +382,7 @@ def main(cfg):
                         pathfinder=pathfinder,
                     )
                     if not update_success:
-                        logging.info(f"Question id {question_data['question_id']}-path {path_idx} invalid: find next navigation point failed!")
+                        logging.info(f"Question id {question_data['question_id']}-path {path_idx} invalid: set_next_navigation_point failed!")
                         break
 
                     return_values = tsdf_planner.agent_step(

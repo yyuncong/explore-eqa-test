@@ -1,6 +1,6 @@
 # General
 seed: 66
-exp_name: exp_val_flex_filter_ego_openeqa
+exp_name: exp_val_snapshots_pos_filter_ego_openeqa_54
 output_parent_dir: /work/pi_chuangg_umass_edu/yuncong/results
 question_data_path: "generated_questions"
 scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
@@ -8,15 +8,19 @@ scene_data_path: /work/pi_chuangg_umass_edu/yuncong/data/scene_datasets/hm3d/
 semantic_bbox_data_path: '/home/yuncongyang_umass_edu/scene_understanding/hm3d_obj_bbox_merged'
 # dataset_output_dir: /work/pi_chuangg_umass_edu/yuncong/results/exploration_data
 detection_model_name: "yolo_world/x"
-questions_list_path: 'data/openeqa_filtered_data_subset.json'
-scene_features_path: /work/pi_chuangg_umass_edu/yuncong/data/scene_feature_dict_merged_flex/
-model_path: /work/pi_chuangg_umass_edu/yuncong/checkpoint_flex_filter_rand_ego_3.pt
+questions_list_path: 'data/generated_questions-eval.json'
+# scene_features_path: /work/pi_chuangg_umass_edu/yuncong/data/scene_feature_dict_merged_flex/
+# model_path: /work/pi_chuangg_umass_edu/yuncong/checkpoint_flex_filter_rand_ego_3.pt
+scene_features_path: /work/pi_chuangg_umass_edu/yuncong/data/scene_feature_dict_merged_snapshots/
+model_path: /project/pi_chuangg_umass_edu/yuncong/checkpoint_snapshots_pos_filter_ego_2.pt
 path_data_dir: exploration_data
 
 egocentric_views: true
 action_memory: false
 prefiltering: true
 top_k_categories: 10
+
+add_positional_encodings: true
 
 # Camera, image
 camera_height: 1.5

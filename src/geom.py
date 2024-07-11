@@ -576,10 +576,11 @@ def get_collision_distance(occupied_map, pos, direction, max_step=50):
     pos = pos[:2]
     curr_pos = pos
     count = 0
+    scene_bound = occupied_map.shape
     while count < max_step:
         count += 1
         curr_pos = curr_pos + direction
-        if occupied_map[int(curr_pos[0]), int(curr_pos[1])]:
+        if 0 <= curr_pos[0] < scene_bound[0] and 0 <= curr_pos[1] < scene_bound[1] and occupied_map[int(curr_pos[0]), int(curr_pos[1])]:
             break
     curr_pos = curr_pos.astype(int)
     return np.linalg.norm(curr_pos - pos)

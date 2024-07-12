@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from skimage import measure
 from sklearn.cluster import DBSCAN, KMeans
 from scipy import stats
-
+import torch
 import habitat_sim
 from typing import List, Tuple, Optional, Dict, Union
 from dataclasses import dataclass, field
@@ -23,7 +23,8 @@ class Frontier:
     region: np.ndarray  # boolean array of the same shape as the voxel grid, indicating the region of the frontier
     frontier_id: int  # unique id for the frontier to identify its region on the frontier map
     image: str = None
-    target_detected: bool = False
+    target_detected: bool = False  # whether the target object is detected in the snapshot, only used when generating data
+    feature: torch.Tensor = None  # the image feature of the snapshot, not used when generating data
 
     def __eq__(self, other):
         if not isinstance(other, Frontier):
@@ -83,7 +84,7 @@ class TSDFPlanner(TSDFPlannerBase):
 
         # about navigation
         self.max_point: [Frontier, SnapShot] = None  # the frontier/snapshot the agent chooses
-        self.target_point: Optional[np.ndarray] = None  # the corresponding navigable location of max_point. The agent goes to this point to observe the max_point
+        self.target_point: [np.ndarray] = None  # the corresponding navigable location of max_point. The agent goes to this point to observe the max_point
 
         self.simple_scene_graph: Dict[int, SceneGraphItem] = {}  # obj_id to object
         self.snapshots: Dict[str, SnapShot] = {}  # filename to snapshot
@@ -93,6 +94,7 @@ class TSDFPlanner(TSDFPlannerBase):
         self.frontier_map = np.zeros(self._vol_dim[:2], dtype=int)
         self.frontier_counter = 1
 
+        # about storing occupancy information on each step
         self.unexplored = None
         self.unoccupied = None
         self.occupied = None
@@ -425,11 +427,13 @@ class TSDFPlanner(TSDFPlannerBase):
                     ):
                         # create a new frontier with the old image
                         old_img_path = frontier.image
+                        old_img_feature = frontier.feature
                         filtered_frontiers.append(
                             self.create_frontier(valid_ft_angles[update_ft_idx], frontier_edge_areas=frontier_edge_areas, cur_point=cur_point)
                         )
                         filtered_frontiers[-1].image = old_img_path
                         filtered_frontiers[-1].target_detected = frontier.target_detected
+                        filtered_frontiers[-1].feature = old_img_feature
                         valid_ft_angles.pop(update_ft_idx)
                         kept_frontier_area = kept_frontier_area | filtered_frontiers[-1].region
         self.frontiers = filtered_frontiers
@@ -554,7 +558,6 @@ class TSDFPlanner(TSDFPlannerBase):
         self.max_point = choice
 
         if type(choice) == SnapShot:
-            # TODO: determine the target_navigable_point for the snapshot
             obj_centers = [self.simple_scene_graph[obj_id].bbox_center for obj_id in choice.selected_obj_list]
             obj_centers = np.asarray([self.habitat2voxel(center)[:2] for center in obj_centers])
             snapshot_center = np.mean(obj_centers, axis=0)

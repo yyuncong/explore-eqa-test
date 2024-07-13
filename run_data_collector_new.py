@@ -23,17 +23,17 @@ from tqdm import tqdm
 import habitat_sim
 from habitat_sim.utils.common import quat_to_coeffs, quat_from_angle_axis, quat_from_two_vectors, quat_to_angle_axis
 from src.habitat import (
-    make_semantic_cfg,
+    make_semantic_cfg_new,
     pos_normal_to_habitat,
     pos_habitat_to_normal,
     pose_habitat_to_normal,
     pose_normal_to_tsdf,
     get_quaternion,
     get_navigable_point_to_new,
-    get_frontier_observation
+    get_frontier_observation_and_detect_target
 )
 from src.geom import get_cam_intr, get_scene_bnds, get_collision_distance
-from src.tsdf_3 import TSDFPlanner, Frontier, Object
+from src.tsdf_new import TSDFPlanner, Frontier, SnapShot
 from inference.models import YOLOWorld
 
 
@@ -43,7 +43,6 @@ This code generate object features online
 
 
 def main(cfg):
-    camera_tilt = cfg.camera_tilt_deg * np.pi / 180
     img_height = cfg.img_height
     img_width = cfg.img_width
     cam_intr = get_cam_intr(cfg.hfov, img_height, img_width)
@@ -57,9 +56,15 @@ def main(cfg):
     # Load dataset
     with open(os.path.join(cfg.question_data_path, "generated_questions.json")) as f:
         questions_data = json.load(f)
+    questions_data = sorted(questions_data, key=lambda x: x["episode_history"])
+    questions_data = questions_data[int(args.start * len(questions_data)):int(args.end * len(questions_data))]
     all_scene_list = list(set([q["episode_history"] for q in questions_data]))
-    # all_scene_list.sort(key=lambda x: int(x.split("-")[0]), reverse=True)
     logging.info(f"Loaded {len(questions_data)} questions.")
+
+    total_images_record = []
+    top_k_images_record = {5: [], 10: [], 15: [], 20: []}
+    top_k_correct_count = {5: 0, 10: 0, 15: 0, 20: 0}
+
 
     # for each scene, answer each question
     question_ind = 0
@@ -69,9 +74,13 @@ def main(cfg):
         all_questions_in_scene = [q for q in questions_data if q["episode_history"] == scene_id]
 
         ##########################################################
+        # if '00324' not in scene_id:
+        #     continue
+        # if int(scene_id.split("-")[0]) >= 800:
+        #     continue
         # rand_q = np.random.randint(0, len(all_questions_in_scene) - 1)
         # all_questions_in_scene = all_questions_in_scene[rand_q:rand_q+1]
-        # all_questions_in_scene = [q for q in all_questions_in_scene if '421227' in q['question_id']]
+        # all_questions_in_scene = [q for q in all_questions_in_scene if '00324-DoSbsoo4EAg_225_refrigerator_695510' in q['question_id'] or '00324-DoSbsoo4EAg_199_armchair_322059' in q['question_id']]
         # if len(all_questions_in_scene) == 0:
         #     continue
         # random.shuffle(all_questions_in_scene)
@@ -85,8 +94,16 @@ def main(cfg):
         navmesh_path = os.path.join(cfg.scene_data_path, split, scene_id, scene_id.split("-")[1] + ".basis.navmesh")
         semantic_texture_path = os.path.join(cfg.scene_data_path, split, scene_id, scene_id.split("-")[1] + ".semantic.glb")
         scene_semantic_annotation_path = os.path.join(cfg.scene_data_path, split, scene_id, scene_id.split("-")[1] + ".semantic.txt")
-        assert os.path.exists(scene_mesh_path) and os.path.exists(navmesh_path), f'{scene_mesh_path}, {navmesh_path}'
-        assert os.path.exists(semantic_texture_path) and os.path.exists(scene_semantic_annotation_path), f'{semantic_texture_path}, {scene_semantic_annotation_path}'
+        bbox_data_path = os.path.join(cfg.semantic_bbox_data_path, scene_id + ".json")
+        if not os.path.exists(scene_mesh_path) or not os.path.exists(navmesh_path) or not os.path.exists(semantic_texture_path) or not os.path.exists(scene_semantic_annotation_path):
+            logging.info(f"Scene {scene_id} not exists")
+            continue
+        if not os.path.exists(bbox_data_path):
+            logging.info(f"Scene {scene_id} bbox data not exists")
+            continue
+
+        # assert os.path.exists(scene_mesh_path) and os.path.exists(navmesh_path), f'{scene_mesh_path}, {navmesh_path}'
+        # assert os.path.exists(semantic_texture_path) and os.path.exists(scene_semantic_annotation_path), f'{semantic_texture_path}, {scene_semantic_annotation_path}'
 
         try:
             del tsdf_planner
@@ -105,8 +122,9 @@ def main(cfg):
             "height": img_height,
             "hfov": cfg.hfov,
             "scene_dataset_config_file": cfg.scene_dataset_config_path,
+            "camera_tilt": cfg.camera_tilt_deg * np.pi / 180,
         }
-        sim_cfg = make_semantic_cfg(sim_settings)
+        sim_cfg = make_semantic_cfg_new(sim_settings)
         simulator = habitat_sim.Simulator(sim_cfg)
         pathfinder = simulator.pathfinder
         pathfinder.seed(cfg.seed)
@@ -131,6 +149,7 @@ def main(cfg):
                 episode_data_dir = os.path.join(str(cfg.dataset_output_dir), f"{question_data['question_id']}_path_{path_idx}")
                 episode_frontier_dir = os.path.join(episode_data_dir, "frontier_rgb")
                 egocentric_save_dir = os.path.join(episode_data_dir, 'egocentric')
+                object_feature_save_dir = os.path.join(episode_data_dir, 'object_features')
 
                 # if the data has already generated, skip
                 if os.path.exists(episode_data_dir) and os.path.exists(os.path.join(episode_data_dir, "metadata.json")):
@@ -144,6 +163,7 @@ def main(cfg):
                 os.makedirs(episode_data_dir, exist_ok=True)
                 os.makedirs(episode_frontier_dir, exist_ok=True)
                 os.makedirs(egocentric_save_dir, exist_ok=True)
+                os.makedirs(object_feature_save_dir, exist_ok=True)
 
                 # get the starting points of other generated paths for this object, if there exists any
                 # get all the folder in the form os.path.join(str(cfg.dataset_output_dir), f"{question_data['question_id']}_path_*")
@@ -164,10 +184,10 @@ def main(cfg):
                 floor_height = target_position[1]
                 tsdf_bnds, scene_size = get_scene_bnds(pathfinder, floor_height)
                 scene_length = (tsdf_bnds[:2, 1] - tsdf_bnds[:1, 0]).mean()
-                min_dist = max(cfg.min_travel_dist, scene_length * cfg.min_travel_dist_ratio)
+                min_dist = cfg.min_travel_dist
                 pathfinder.seed(random.randint(0, 1000000))
                 start_position, path_points, travel_dist = get_navigable_point_to_new(
-                    target_position, pathfinder, max_search=1000, min_dist=min_dist,
+                    target_position, pathfinder, max_search=1000, min_dist=min_dist, max_dist=min_dist + 5,
                     prev_start_positions=prev_start_positions
                 )
                 if start_position is None or path_points is None:
@@ -182,7 +202,7 @@ def main(cfg):
                 )
                 angle = angle * axis[1] / np.abs(axis[1])
                 pts = start_position.copy()
-                rotation = get_quaternion(angle, camera_tilt)
+                rotation = get_quaternion(angle, 0)
 
                 # initialize the TSDF
                 pts_normal = pos_habitat_to_normal(pts)
@@ -222,7 +242,6 @@ def main(cfg):
                 previous_choice_path = None
                 max_explore_dist = travel_dist * cfg.max_step_dist_ratio
                 max_step = int(travel_dist * cfg.max_step_ratio)
-                zero_image = np.zeros((img_height, img_width, 3), dtype=np.uint8)
                 explore_dist = 0.0
                 cnt_step = -1
                 while explore_dist < max_explore_dist and cnt_step < max_step:
@@ -247,41 +266,10 @@ def main(cfg):
                     main_angle = all_angles.pop(total_views // 2)
                     all_angles.append(main_angle)
 
-                    # get the occupied map
-                    if tsdf_planner.occupied_map_camera is None:
-                        occupied_map = np.logical_not(
-                            tsdf_planner.get_island_around_pts(pts_normal, height=1.2)[0]
-                        )
-                    else:
-                        occupied_map = tsdf_planner.occupied_map_camera
-
                     # observe and update the TSDF
-                    keep_forward_observation = False
-                    observation_kept_count = 0
                     for view_idx, ang in enumerate(all_angles):
-                        if cnt_step == 0:
-                            keep_forward_observation = True  # at the first exploration step, always keep the forward observation
-                        if view_idx == total_views - 1 and observation_kept_count == 0:
-                            keep_forward_observation = True  # if all previous observation is invalid, then we have to keep the forward one
-                        if pts_pixs.shape[0] >= 3:
-                            if np.linalg.norm(pts_pixs[-1] - pts_pixs[-2]) < 1e-3 and np.linalg.norm(pts_pixs[-2] - pts_pixs[-3]) < 1e-3:
-                                keep_forward_observation = True  # the agent is stuck somehow
-
-                        # check whether current view is valid
-                        collision_dist = tsdf_planner._voxel_size * get_collision_distance(
-                            occupied_map,
-                            pos=tsdf_planner.habitat2voxel(pts),
-                            direction=tsdf_planner.rad2vector(ang)
-                        )
-                        if collision_dist < cfg.collision_dist:
-                            if not (view_idx == total_views - 1 and keep_forward_observation):
-                                # logging.info(f"Collision detected at step {cnt_step} view {view_idx}")
-                                if cfg.save_egocentric_view:
-                                    plt.imsave(os.path.join(egocentric_save_dir, f"{cnt_step}_view_{view_idx}.png"), zero_image)
-                                continue
-
                         agent_state.position = pts
-                        agent_state.rotation = get_quaternion(ang, camera_tilt)
+                        agent_state.rotation = get_quaternion(ang, 0)
                         agent.set_state(agent_state)
                         pts_normal = pos_habitat_to_normal(pts)
 
@@ -301,45 +289,21 @@ def main(cfg):
                         depth = obs["depth_sensor"]
                         semantic_obs = obs["semantic_sensor"]
 
-                        # check whether the observation is valid
-                        keep_observation = True
-                        black_pix_ratio = np.sum(semantic_obs == 0) / (img_height * img_width)
-                        if black_pix_ratio > cfg.black_pixel_ratio:
-                            keep_observation = False
-                        positive_depth = depth[depth > 0]
-                        if positive_depth.size == 0 or np.percentile(positive_depth, 30) < cfg.min_30_percentile_depth:
-                            keep_observation = False
-                        if not keep_observation:
-                            if not (view_idx == total_views - 1 and keep_forward_observation):
-                                # logging.info(f"Invalid observation: black pixel ratio {black_pix_ratio}, 30 percentile depth {np.percentile(depth[depth > 0], 30)}")
-                                if cfg.save_egocentric_view:
-                                    plt.imsave(os.path.join(egocentric_save_dir, f"{cnt_step}_view_{view_idx}.png"), zero_image)
-                                continue
-
                         # construct an frequency count map of each semantic id to a unique id
-                        target_in_view, annotated_rgb = tsdf_planner.update_scene_graph(
+                        obs_file_name = f"{cnt_step}-view_{view_idx}.png"
+                        object_added = tsdf_planner.update_scene_graph(
                             detection_model=detection_model,
                             rgb=rgb[..., :3],
                             semantic_obs=semantic_obs,
                             obj_id_to_name=object_id_to_name,
                             obj_id_to_bbox=object_id_to_bbox,
                             cfg=cfg.scene_graph,
-                            target_obj_id=target_obj_id,
-                            return_annotated=True
+                            file_name=obs_file_name,
+                            obs_point=pts,
+                            return_annotated=False
                         )
-
-                        # check stop condition
-                        if target_in_view:
-                            if target_obj_id in tsdf_planner.simple_scene_graph.keys():
-                                target_obj_pix_ratio = np.sum(semantic_obs == target_obj_id) / (img_height * img_width)
-                                if target_obj_pix_ratio > 0:
-                                    obj_pix_center = np.mean(np.argwhere(semantic_obs == target_obj_id), axis=0)
-                                    bias_from_center = (obj_pix_center - np.asarray([img_height // 2, img_width // 2])) / np.asarray([img_height, img_width])
-                                    # currently just consider that the object should be in around the horizontal center, not the vertical center
-                                    # due to the viewing angle difference
-                                    if target_obj_pix_ratio > cfg.stop_min_pix_ratio and np.abs(bias_from_center)[1] < cfg.stop_max_bias_from_center:
-                                        logging.info(f"Stop condition met at step {cnt_step} view {view_idx}")
-                                        target_found = True
+                        if object_added:
+                            plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), rgb)
 
                         # TSDF fusion
                         tsdf_planner.integrate(
@@ -350,65 +314,24 @@ def main(cfg):
                             obs_weight=1.0,
                             margin_h=int(cfg.margin_h_ratio * img_height),
                             margin_w=int(cfg.margin_w_ratio * img_width),
+                            explored_depth=cfg.explored_depth,
                         )
-
-                        if cfg.save_obs:
-                            observation_save_dir = os.path.join(episode_data_dir, 'observations')
-                            os.makedirs(observation_save_dir, exist_ok=True)
-                            if target_found:
-                                plt.imsave(os.path.join(observation_save_dir, f"{cnt_step}-view_{view_idx}-target.png"), annotated_rgb)
-                            else:
-                                plt.imsave(os.path.join(observation_save_dir, f"{cnt_step}-view_{view_idx}.png"), annotated_rgb)
 
                         if cfg.save_egocentric_view:
                             plt.imsave(os.path.join(egocentric_save_dir, f"{cnt_step}_view_{view_idx}.png"), rgb)
 
-                        observation_kept_count += 1
-
-                        if target_found:
-                            break
-
-                    if target_found:
-                        break
-
-                    # record current scene graph
-                    step_dict["scene_graph"] = list(tsdf_planner.simple_scene_graph.keys())
-                    step_dict["scene_graph"] = [int(x) for x in step_dict["scene_graph"]]
-
-                    step_dict["frontiers"] = []
+                    tsdf_planner.update_snapshots(min_num_obj_threshold=cfg.min_num_obj_threshold)
 
                     update_success = tsdf_planner.update_frontier_map(pts=pts_normal, cfg=cfg.planner)
                     if not update_success:
                         logging.info(f"Question id {question_data['question_id']}-path {path_idx} invalid: update frontier map failed!")
                         break
 
-                    max_point_choice = tsdf_planner.get_next_choice(
-                        pts=pts_normal,
-                        angle=angle,
-                        path_points=path_points,
-                        pathfinder=pathfinder,
-                        target_obj_id=target_obj_id,
-                        cfg=cfg.planner,
-                    )
-                    if max_point_choice is None:
-                        logging.info(f"Question id {question_data['question_id']}-path {path_idx} invalid: no valid choice!")
+                    if target_found:
                         break
 
-                    return_values = tsdf_planner.get_next_navigation_point(
-                        choice=max_point_choice,
-                        pts=pts_normal,
-                        angle=angle,
-                        path_points=path_points,
-                        pathfinder=pathfinder,
-                        cfg=cfg.planner,
-                        save_visualization=cfg.save_visualization,
-                    )
-                    if return_values[0] is None:
-                        logging.info(f"Question id {question_data['question_id']}-path {path_idx} invalid: find next navigation point failed!")
-                        break
-                    pts_normal, angle, pts_pix, fig, path_points = return_values
-
-                    # Turn to face each frontier point and get rgb image
+                    # Get observations for each frontier and store them
+                    step_dict["frontiers"] = []
                     for i, frontier in enumerate(tsdf_planner.frontiers):
                         frontier_dict = {}
                         pos_voxel = frontier.position
@@ -421,13 +344,13 @@ def main(cfg):
                         else:
                             view_frontier_direction = np.asarray([pos_world[0] - pts[0], 0., pos_world[2] - pts[2]])
 
-                            frontier_obs = get_frontier_observation(
-                                agent, simulator, cfg, tsdf_planner,
-                                view_frontier_direction=view_frontier_direction,
-                                init_pts=pts,
-                                camera_tilt=camera_tilt,
-                                max_try_count=10
+                            frontier_obs, target_detected = get_frontier_observation_and_detect_target(
+                                agent, simulator, cfg.scene_graph, detection_model,
+                                target_obj_id=target_obj_id, target_obj_class=object_id_to_name[target_obj_id],
+                                view_frontier_direction=view_frontier_direction, init_pts=pts
                             )
+                            if target_detected:
+                                frontier.target_detected = True
 
                             plt.imsave(
                                 os.path.join(episode_frontier_dir, f"{cnt_step}_{i}.png"),
@@ -437,17 +360,82 @@ def main(cfg):
                             frontier_dict["rgb_id"] = f"{cnt_step}_{i}.png"
                         step_dict["frontiers"].append(frontier_dict)
 
+                    # reset target point to allow the model to choose again
+                    tsdf_planner.max_point = None
+                    tsdf_planner.target_point = None
+
+                    max_point_choice = tsdf_planner.get_next_choice(
+                        pts=pts_normal,
+                        path_points=path_points,
+                        pathfinder=pathfinder,
+                        target_obj_id=target_obj_id,
+                        cfg=cfg.planner,
+                    )
+                    if max_point_choice is None:
+                        logging.info(f"Question id {question_data['question_id']}-path {path_idx} invalid: no valid choice!")
+                        break
+
+                    update_success = tsdf_planner.set_next_navigation_point(
+                        choice=max_point_choice,
+                        pts=pts_normal,
+                        cfg=cfg.planner,
+                        pathfinder=pathfinder,
+                    )
+                    if not update_success:
+                        logging.info(f"Question id {question_data['question_id']}-path {path_idx} invalid: set_next_navigation_point failed!")
+                        break
+
+                    return_values = tsdf_planner.agent_step(
+                        pts=pts_normal,
+                        angle=angle,
+                        pathfinder=pathfinder,
+                        cfg=cfg.planner,
+                        path_points=path_points,
+                        save_visualization=cfg.save_visualization,
+                    )
+                    if return_values[0] is None:
+                        logging.info(f"Question id {question_data['question_id']}-path {path_idx} invalid: find next navigation point failed!")
+                        break
+                    pts_normal, angle, pts_pix, fig, path_points, target_arrived = return_values
+
+                    # save snapshots
+                    step_dict["snapshots"] = []
+                    for snapshot in tsdf_planner.snapshots.values():
+                        step_dict["snapshots"].append(
+                            {
+                                "img_id": snapshot.image,
+                                "obj_ids": [int(obj_id) for obj_id in snapshot.selected_obj_list]
+                             }
+                        )
+
+                    # # tempt
+                    # step_dict["scene_graph_file2objs"] = {}
+                    # for obj_id, obj in tsdf_planner.simple_scene_graph.items():
+                    #     if obj.image not in step_dict["scene_graph_file2objs"]:
+                    #         step_dict["scene_graph_file2objs"][obj.image] = []
+                    #     step_dict["scene_graph_file2objs"][obj.image].append(
+                    #         f"{obj_id}: {object_id_to_name[obj_id]}"
+                    #     )
+
+
+                    # for debug
+                    assert len(step_dict["snapshots"]) == len(tsdf_planner.snapshots), f"{len(step_dict['snapshots'])} != {len(tsdf_planner.snapshots)}"
+                    total_objs_count = 0
+                    for snapshot in tsdf_planner.snapshots.values():
+                        total_objs_count += len(snapshot.selected_obj_list)
+                    assert len(tsdf_planner.simple_scene_graph) == total_objs_count, f"{len(tsdf_planner.simple_scene_graph)} != {total_objs_count}"
+
                     # save the ground truth choice
-                    if type(max_point_choice) == Object:
-                        choice_obj_id = max_point_choice.object_id
-                        prediction = [float(scene_graph_obj_id == choice_obj_id) for scene_graph_obj_id in step_dict["scene_graph"]]
+                    if type(max_point_choice) == SnapShot:
+                        filename = max_point_choice.image
+                        prediction = [float(ss["img_id"] == filename) for ss in step_dict["snapshots"]]
                         prediction += [0.0 for _ in range(len(step_dict["frontiers"]))]
                     elif type(max_point_choice) == Frontier:
-                        prediction = [0.0 for _ in range(len(step_dict["scene_graph"]))]
-                        prediction += [float(ft == max_point_choice) for ft in tsdf_planner.frontiers]
+                        prediction = [0.0 for _ in range(len(step_dict["snapshots"]))]
+                        prediction += [float(ft_dict["rgb_id"] == max_point_choice.image) for ft_dict in step_dict["frontiers"]]
                     else:
                         raise ValueError("Invalid max_point_choice type")
-                    assert len(prediction) == len(step_dict["scene_graph"]) + len(step_dict["frontiers"]), f"{len(prediction)} != {len(step_dict['scene_graph'])} + {len(step_dict['frontiers'])}"
+                    assert len(prediction) == len(step_dict["snapshots"]) + len(step_dict["frontiers"]), f"{len(prediction)} != {len(step_dict['snapshots'])} + {len(step_dict['frontiers'])}"
                     if sum(prediction) != 1.0:
                         logging.info(f"Error! Prediction sum is not 1.0: {sum(prediction)}")
                         logging.info(max_point_choice)
@@ -481,15 +469,9 @@ def main(cfg):
                     if cfg.save_frontier_video:
                         frontier_video_path = os.path.join(episode_data_dir, "frontier_video")
                         os.makedirs(frontier_video_path, exist_ok=True)
-                        # if type(max_point_choice) == Frontier:
-                        #     img_path = os.path.join(episode_frontier_dir, max_point_choice.image)
-                        #     os.system(f"cp {img_path} {os.path.join(frontier_video_path, f'{cnt_step:04d}-frontier.png')}")
-                        # else:  # navigating to the objects
-                        #     if cfg.save_obs:
-                        #         img_path = os.path.join(observation_save_dir, f"{cnt_step}-view_{total_views - 1}.png")
-                        #         if os.path.exists(img_path):
-                        #             os.system(f"cp {img_path} {os.path.join(frontier_video_path, f'{cnt_step:04d}-object.png')}")
                         num_images = len(tsdf_planner.frontiers)
+                        if type(max_point_choice) == SnapShot:
+                            num_images += 1
                         side_length = int(np.sqrt(num_images)) + 1
                         side_length = max(2, side_length)
                         fig, axs = plt.subplots(side_length, side_length, figsize=(20, 20))
@@ -497,15 +479,18 @@ def main(cfg):
                             for w_idx in range(side_length):
                                 axs[h_idx, w_idx].axis('off')
                                 i = h_idx * side_length + w_idx
-                                if i < num_images:
+                                if (i < num_images - 1) or (i < num_images and type(max_point_choice) == Frontier):
                                     img_path = os.path.join(episode_frontier_dir, tsdf_planner.frontiers[i].image)
                                     img = matplotlib.image.imread(img_path)
                                     axs[h_idx, w_idx].imshow(img)
                                     if type(max_point_choice) == Frontier and max_point_choice.image == tsdf_planner.frontiers[i].image:
                                         axs[h_idx, w_idx].set_title('Chosen')
+                                elif i == num_images - 1 and type(max_point_choice) == SnapShot:
+                                    img_path = os.path.join(object_feature_save_dir, max_point_choice.image)
+                                    img = matplotlib.image.imread(img_path)
+                                    axs[h_idx, w_idx].imshow(img)
+                                    axs[h_idx, w_idx].set_title('Snapshot Chosen')
                         global_caption = f"{question_data['question']}\n{question_data['answer']}"
-                        if type(max_point_choice) == Object:
-                            global_caption += '\nToward target object'
                         fig.suptitle(global_caption, fontsize=16)
                         plt.tight_layout(rect=(0., 0., 1., 0.95))
                         plt.savefig(os.path.join(frontier_video_path, f'{cnt_step}.png'))
@@ -514,10 +499,26 @@ def main(cfg):
                     # update position and rotation
                     pts_normal = np.append(pts_normal, floor_height)
                     pts = pos_normal_to_habitat(pts_normal)
-                    rotation = get_quaternion(angle, camera_tilt)
-                    explore_dist += np.linalg.norm(pts_pixs[-1] - pts_pixs[-2]) * tsdf_planner._voxel_size
+                    rotation = get_quaternion(angle, 0)
+                    if type(max_point_choice) == Frontier:
+                        # count the explore distance only when the agent is exploring, not approaching the target
+                        explore_dist += np.linalg.norm(pts_pixs[-1] - pts_pixs[-2]) * tsdf_planner._voxel_size
 
                     logging.info(f"Current position: {pts}, {explore_dist:.3f}/{max_explore_dist:.3f}")
+
+                    if type(max_point_choice) == SnapShot and target_arrived:
+                        target_found = True
+                        logging.info(f"Target observation position arrived at step {cnt_step}!")
+                        # get an observation and break
+                        agent_state.position = pts
+                        agent_state.rotation = rotation
+                        agent.set_state(agent_state)
+                        obs = simulator.get_sensor_observations()
+                        rgb = obs["color_sensor"]
+                        target_obs_save_dir = os.path.join(episode_data_dir, "target_observation")
+                        os.makedirs(target_obs_save_dir, exist_ok=True)
+                        plt.imsave(os.path.join(target_obs_save_dir, f"{cnt_step}_target_observation.png"), rgb)
+                        break
 
                 if target_found:
                     metadata["episode_length"] = cnt_step
@@ -531,6 +532,53 @@ def main(cfg):
                         os.system(f"rm -r {episode_data_dir}")
 
                 logging.info(f"{question_ind}/{total_questions}: Success rate: {success_count}/{question_ind}")
+
+
+
+
+
+
+
+                # print the stats of total number of images
+                img_dict = {}
+                for obj_id, obj in tsdf_planner.simple_scene_graph.items():
+                    if obj.image not in img_dict:
+                        img_dict[obj.image] = []
+                    img_dict[obj.image].append(obj.object_id)
+                total_images = len(img_dict.keys())
+                total_images_record.append(total_images)
+                logging.info('\n')
+                logging.info(total_images_record)
+                logging.info(f"{question_data['question_id']}-path {path_idx} total images: {total_images}")
+                logging.info(f"Average total images: {np.mean(total_images_record):.2f} +- {np.std(total_images_record):.2f}")
+                logging.info(f"Max total images: {np.max(total_images_record)}, Min total images: {np.min(total_images_record)}")
+
+                filter_rank_all = json.load(open('data/selected_candidates.json', 'r'))
+                filter_rank = filter_rank_all[question_data['question'] + '_' + scene_id]
+                for top_k in [5, 10, 15, 20]:
+                    top_k_classes = filter_rank[:top_k]
+                    if object_id_to_name[target_obj_id] in top_k_classes:
+                        top_k_correct_count[top_k] += 1
+
+                    total_images = 0
+                    for obj_list in img_dict.values():
+                        for obj_id in obj_list:
+                            if object_id_to_name[obj_id] in top_k_classes:
+                                total_images += 1
+                                break
+                    top_k_images_record[top_k].append(total_images)
+                    logging.info('\n')
+                    logging.info(top_k_images_record[top_k])
+                    logging.info(f"{question_data['question_id']}-path {path_idx} top {top_k} images: {total_images}")
+                    logging.info(f"Average top {top_k} images: {np.mean(top_k_images_record[top_k]):.2f} +- {np.std(top_k_images_record[top_k]):.2f}")
+                    logging.info(f"Max top {top_k} images: {np.max(top_k_images_record[top_k])}, Min top {top_k} images: {np.min(top_k_images_record[top_k])}")
+                    logging.info(f"Top {top_k} correct count: {top_k_correct_count[top_k]}/{question_ind}")
+
+
+
+
+
+
 
             logging.info(f"Question id {question_data['question_id']} finished all paths")
 
@@ -552,6 +600,8 @@ if __name__ == "__main__":
     parser.add_argument("-cf", "--cfg_file", help="cfg file path", default="", type=str)
     parser.add_argument("--path_id_offset", default=0, type=int)
     parser.add_argument("--seed", default=None, type=int)
+    parser.add_argument("--start", default=0.0, type=float)
+    parser.add_argument("--end", default=1.0, type=float)
     args = parser.parse_args()
     cfg = OmegaConf.load(args.cfg_file)
     OmegaConf.resolve(cfg)
@@ -575,6 +625,9 @@ if __name__ == "__main__":
     cfg.path_id_offset = args.path_id_offset
     if args.seed is not None:
         cfg.seed = args.seed
+
+    if args.start >= args.end:
+        raise ValueError(f"Start {args.start} should be less than end {args.end}")
 
     # run
     logging.info(f"***** Running {cfg.exp_name} *****")

@@ -5,7 +5,7 @@ output_parent_dir: results
 question_data_path: "generated_questions"
 scene_dataset_config_path: '/gpfs/u/home/LMCG/LMCGnngn/scratch/multisensory/MLLM/data/hm3d/hm3d_annotated_basis.scene_dataset_config.json'
 scene_data_path: "/gpfs/u/home/LMCG/LMCGnngn/scratch/multisensory/MLLM/data/hm3d"
-questions_list_path: 'data/openeqa_filtered_data.json'
+questions_list_path: 'data/generated_questions-eval.json'
 save_obs: true
 save_freq: 10
 save_visualization: true

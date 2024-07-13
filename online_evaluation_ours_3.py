@@ -99,6 +99,8 @@ def inference(model, tokenizer, step_dict, cfg):
     #step_dict["use_egocentric_views"] = cfg.egocentric_views
     #step_dict["use_action_memory"] = cfg.action_memory
     step_dict["top_k_categories"] = cfg.top_k_categories
+    step_dict["add_positional_encodings"] = cfg.add_positional_encodings
+    # print("pos", step_dict["add_positional_encodings"])
     try:
         sample = get_item(
             tokenizer, step_dict
@@ -444,6 +446,16 @@ def main(cfg):
                 step_dict["scene_graph"] = list(tsdf_planner.simple_scene_graph.keys())
                 step_dict["scene_graph"] = [int(x) for x in step_dict["scene_graph"]]
                 step_dict["obj_map"] = object_id_to_name
+                step_dict["position"] = np.array(pts)[None,]
+                obj_positions_map = {
+                    obj["id"]: 
+                    (np.array(obj["bbox"][1]) + np.array(obj["bbox"][0])) / 2
+                    for obj in bounding_box_data
+                }
+                obj_positions_map = {
+                    key: value[[0, 2, 1]] - step_dict["position"] for key, value in obj_positions_map.items()
+                }
+                step_dict["obj_position_map"] = obj_positions_map
 
                 update_success = tsdf_planner.update_frontier_map(pts=pts_normal, cfg=cfg.planner)
                 if not update_success:
@@ -533,8 +545,12 @@ def main(cfg):
                             ],
                             dim=0
                         ).to("cpu")
+                        step_dict["frontier_positions"] = np.array(
+                            [f["coordinate"] for f in step_dict["frontiers"]]
+                        ) - step_dict["position"]
                     else:
                         step_dict["frontier_features"] = None
+                        step_dict["frontier_positions"] = None
                     step_dict["question"] = question
                     step_dict["scene"] = scene_id
                     step_dict["scene_feature_map"] = scene_feature_map
@@ -566,7 +582,11 @@ def main(cfg):
                     #             max_new_tokens=10,
                     #         )
                     #     outputs = tokenizer.decode(output_ids[0, input_ids.shape[1]:]).replace("</s>", "").strip()
-                    outputs, object_id_mapping = inference(model, tokenizer, step_dict, cfg)
+                    if cfg.prefiltering:
+                        outputs, object_id_mapping = inference(model, tokenizer, step_dict, cfg)
+                    else:
+                        outputs = inference(model, tokenizer, step_dict, cfg)
+                        object_id_mapping = None
                     if outputs is None:
                         # encounter generation error
                         logging.info(f"Question id {question_id} invalid: model generation error!")

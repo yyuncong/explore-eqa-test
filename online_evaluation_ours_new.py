@@ -35,7 +35,8 @@ from src.habitat import (
 )
 from src.geom import get_cam_intr, get_scene_bnds, get_collision_distance
 from src.tsdf_new import TSDFPlanner, Frontier, SnapShot
-from src.eval_utils_snapshot import prepare_step_dict, get_item, encode, load_scene_features, rgba2rgb, load_checkpoint, collate_wrapper, construct_selection_prompt
+#from src.eval_utils_snapshot import prepare_step_dict, get_item, encode, load_scene_features, rgba2rgb, load_checkpoint, collate_wrapper, construct_selection_prompt
+from src.eval_utils_snapshot_new import prepare_step_dict, get_item, encode, load_scene_features, rgba2rgb, load_checkpoint, collate_wrapper, construct_selection_prompt
 from inference.models import YOLOWorld
 
 from llava.model.builder import load_pretrained_model
@@ -78,13 +79,19 @@ def infer_selection(model, tokenizer, sample):
         scene_length = sample.scene_length,
     )
     input_ids = sample.input_ids.to("cuda")
-    # print(
-    #     tokenizer.decode(input_ids[0][input_ids[0] != tokenizer.pad_token_id])
-    # )
+    '''
+    print('final input to the model')
+    print(
+        tokenizer.decode(input_ids[0][input_ids[0] != tokenizer.pad_token_id])
+    )
+    '''
     # input()
+    # the loss of : exists in infer_selection
+    # but in final prompt
     if len(torch.where(sample.input_ids==22550)[1]) == 0:
         logging.info(f"invalid: no token 'answer'!")
         return None
+        #eixt(0)
     answer_ind = torch.where(sample.input_ids==22550)[1][0].item()
     input_ids = input_ids[:, :answer_ind+2]
     with torch.no_grad():
@@ -133,6 +140,13 @@ def inference(model, tokenizer, step_dict, cfg):
         outputs = infer_selection(model,tokenizer,sample)
         return outputs, object_id_mapping
     else:
+        # already loss Answer/:
+        '''
+        print('before input into inference')
+        print(
+            tokenizer.decode(sample.input_ids[0][sample.input_ids[0] != tokenizer.pad_token_id])
+        )
+        '''
         outputs = infer_selection(model,tokenizer,sample)
         return outputs
 
@@ -544,6 +558,8 @@ def main(cfg):
 
                     if target_type not in ["snapshot", "frontier"]:
                         logging.info(f"Invalid prediction type: {target_type}, failed!")
+                        #print(target_type)
+                        #exit(0)
                         break
 
                     if target_type == "snapshot":

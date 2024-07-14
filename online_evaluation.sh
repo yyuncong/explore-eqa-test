@@ -7,10 +7,9 @@
 #SBATCH --time=08:00:00
 #SBATCH -p gpu
 #SBATCH -G 1
-#SBATCH --cpus-per-task=4
-#SBATCH --constraint="a100"
+#SBATCH --constraint="vram40"
 
 module load miniconda/22.11.1-1
 conda activate explore-eqa
 
-python online_evaluation_ours_2.py -cf cfg/online_eval_ours_2.yaml
+python online_evaluation_openeqa_3.py -cf cfg/online_eval_openeqa.yaml

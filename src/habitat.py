@@ -382,7 +382,7 @@ def get_navigable_point_from_new(pos_start, pathfinder, max_search=1000, min_dis
             pos_start,
             pathfinder,
             max_search,
-            min_dist - 2,
+            min_dist - 0.5,
             max_dist + 2,
             prev_start_positions,
             min_dist_from_prev,

@@ -11,6 +11,9 @@ from torch.utils.data import DataLoader,Dataset,Subset
 from itertools import chain
 import random
 import numpy as np
+import math
+
+# Need to reorganize this file
 
 SCENE_TOKEN = "<scene>"
 # FRONTIER_TOKEN = "<frontier>"
@@ -26,6 +29,69 @@ GET_SOUND_TOKEN = "<tap>"
 SELECT_TOKEN = "<select>"
 
 # because sos token is added, the max_length should be +1?
+
+NUM_BINS = 128
+COORD_RANGE = (-7, 7)
+
+def positionalencoding2d(d_model, height, width):
+    """
+    :param d_model: dimension of the model
+    :param height: height of the positions
+    :param width: width of the positions
+    :return: d_model*height*width position matrix
+    """
+    if d_model % 4 != 0:
+        raise ValueError("Cannot use sin/cos positional encoding with "
+                         "odd dimension (got dim={:d})".format(d_model))
+    pe = torch.zeros(d_model, height, width)
+    # Each dimension use half of d_model
+    d_model = int(d_model / 2)
+    div_term = torch.exp(torch.arange(0., d_model, 2) *
+                         -(math.log(10000.0) / d_model))
+    pos_w = torch.arange(0., width).unsqueeze(1)
+    pos_h = torch.arange(0., height).unsqueeze(1)
+    pe[0:d_model:2, :, :] = torch.sin(pos_w * div_term).transpose(0, 1).unsqueeze(1).repeat(1, height, 1)
+    pe[1:d_model:2, :, :] = torch.cos(pos_w * div_term).transpose(0, 1).unsqueeze(1).repeat(1, height, 1)
+    pe[d_model::2, :, :] = torch.sin(pos_h * div_term).transpose(0, 1).unsqueeze(2).repeat(1, 1, width)
+    pe[d_model + 1::2, :, :] = torch.cos(pos_h * div_term).transpose(0, 1).unsqueeze(2).repeat(1, 1, width)
+
+    return pe
+
+PE = positionalencoding2d(1024, NUM_BINS, NUM_BINS)
+
+def discretize_coordinates(coords, num_bins=128, coord_range=(-10, 10)):
+    # Ensure coords is a torch tensor
+    if not isinstance(coords, torch.Tensor):
+        coords = torch.tensor(coords, dtype=torch.float32)
+
+    # Extract min and max values from the coord_range
+    min_val, max_val = coord_range
+
+    # Normalize coordinates to range [0, 1]
+    normalized_coords = (coords - min_val) / (max_val - min_val)
+
+    # Scale normalized coordinates to range [0, num_bins - 1]
+    scaled_coords = normalized_coords * (num_bins - 1)
+
+    # Round to get discrete bin indices and clamp to ensure within range
+    discretized_coords = torch.round(scaled_coords).long()
+    discretized_coords = torch.clamp(discretized_coords, 0, num_bins - 1)
+
+    return discretized_coords
+
+def sum_positional_encodings(x, pos, pe, num_bins=128, coord_range=(-10, 10)):
+    '''
+    x: (num_points, d_model)
+    pos: (num_points, 2)
+    pe: (d_model, num_bins, num_bins)
+    '''
+    # Discretize the coordinates
+    discretized_coords = discretize_coordinates(pos, num_bins=num_bins, coord_range=coord_range).unsqueeze(0)
+    # Get the positional encodings for the coordinates
+    x_pe = pe[:, discretized_coords[:, :, 0], discretized_coords[:, :, 2]].permute(1, 2, 0).squeeze(0)
+    # Sum the positional encodings along the num_points dimension
+    x += x_pe
+    return x
 
 def load_checkpoint(model, checkpoint_path):
     checkpoint = torch.load(checkpoint_path, map_location="cpu")
@@ -107,10 +173,23 @@ def prepare_prompt_before_object(step):
         for i in range(len(step["egocentric_view_features"])):
             text += f"<scene> "
         text += "/\n"
-        multi_src_feature.append(step["egocentric_view_features"])
+        egocentric_features = step["egocentric_view_features"]
+        if step.get("add_positional_encodings") is True:
+            egocentric_positions = torch.cat(
+                [
+                    torch.tensor(step["position"] - step["position"])
+                    for _ in range(egocentric_features.shape[0])
+                ],
+                dim=0
+            )
+            egocentric_features = sum_positional_encodings(
+                egocentric_features, egocentric_positions, PE, num_bins=NUM_BINS, coord_range=COORD_RANGE
+            )
+        multi_src_feature.append(egocentric_features)
     
     text += f"Select the frontier/object that would help finding the answer of the question.\n"
 
+    # TODO: add position to memory if possible?
     if step.get("use_action_memory") is True:
         text += f"Here is your selection in the previous step:\n "
         if step["memory_feature"] is None:
@@ -132,6 +211,11 @@ def prepare_frontier(step):
         text += f"No frontier available "
     text += "/\n"
     frontier_features = step["frontier_features"]
+    if len(step['frontiers']) > 0 and step.get("add_positional_encodings") is True:
+        frontier_positions = torch.tensor(step["frontier_positions"])
+        frontier_features = sum_positional_encodings(
+            frontier_features, frontier_positions, PE, num_bins=NUM_BINS, coord_range=COORD_RANGE
+        )
     
     return text, frontier_features
     
@@ -144,6 +228,8 @@ def prepare_object_input(
     topk,
 ):
     object_index = len(object_classes)
+    # the mapping from transformed object index to original object index(used by tsdf)
+    object_id_mapping = None
     if prefiltering:
         ranking = [cls for cls in ranking if cls in class2object.keys()]
         ranking = ranking[:topk]
@@ -151,6 +237,7 @@ def prepare_object_input(
         object_features = [
             object_features[obj_idx] for cls in ranking for obj_idx in class2object[cls]
         ]
+        object_id_mapping = [obj_idx for cls in ranking for obj_idx in class2object[cls]]
         # Note that if apply prefiltering, we may have #(objects) < object_index
         # 4. reassign object_index = #(object)
         object_index = len(object_classes)
@@ -167,7 +254,7 @@ def prepare_object_input(
         object_features = torch.stack(object_features, dim=0)
     text += "/\n"
     #print("object prompt \n", text)
-    return text, object_features, object_index
+    return text, object_features, object_index, object_id_mapping
 
 def prepare_prefiltering_prompt(question, tokenizer, classes, max_length, topk):
     filter_text = f"Question: {question}\n"
@@ -208,7 +295,7 @@ def construct_selection_prompt(
     ranking,
     topk
 ):
-    object_text, object_features, object_index = prepare_object_input(
+    object_text, object_features, object_index, object_id_mapping = prepare_object_input(
         object_info_dict.class2object,
         object_info_dict.classes,
         object_info_dict.features,
@@ -250,7 +337,7 @@ def construct_selection_prompt(
         scene_feature=scene_feature,
         scene_insert_loc=scene_insert_loc,
     )
-    return input_dict
+    return input_dict, object_id_mapping
 
 def collate_prefilter_wrapper(batch):
     # wrap up the prefiltering batch
@@ -275,6 +362,7 @@ def get_item(tokenizer, step_dict):
     scene = step['scene']
     scene_feature_map = step['scene_feature_map']
     obj_map = step['obj_map']
+    obj_position_map = step['obj_position_map']
     '''
     text_before_object =  f"Question: {step['question']}\n" 
 
@@ -299,6 +387,7 @@ def get_item(tokenizer, step_dict):
     text_before_object, feature_before_object = prepare_prompt_before_object(step)
     # replace scene graph in each steps with scene feature
     object_features,object_classes = [],[]
+    object_positions = []
     object_index = 0
     class2object = defaultdict(list)
     '''
@@ -323,11 +412,25 @@ def get_item(tokenizer, step_dict):
                 object_feature = scene_feature_map[str(sid)]
                 object_classes.append(obj_map[sid])
                 object_features.append(object_feature)
+                # object_positions.append(obj_position_map[sid])
+                object_positions.append(obj_position_map[str(sid)])
                 class2object[obj_map[sid]].append(object_index)
                 object_index += 1
             except:
                 continue
     print("length object features", len(object_features))
+    if step.get("add_positional_encodings") is True:
+        object_features = [
+            sum_positional_encodings(
+                object_features[i].unsqueeze(0), 
+                object_positions[i],
+                PE, 
+                num_bins=NUM_BINS, 
+                coord_range=COORD_RANGE
+            ).squeeze(0)
+            for i in range(len(object_features))
+        ]
+
     '''
     if len(object_features) == 0:
         # construct zero scene feature if all objects are missed
@@ -378,7 +481,8 @@ def get_item(tokenizer, step_dict):
         return collate_prefilter_wrapper([input_dict])
     else:
         # format selection input
-        input_dict = construct_selection_prompt(
+        # no need use id mapping when not use prefiltering
+        input_dict,_ = construct_selection_prompt(
             tokenizer,
             text_before_object,
             feature_before_object,

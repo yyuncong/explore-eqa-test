@@ -61,7 +61,6 @@ class TSDFPlannerBase:
         # Define voxel volume parameters
         self._vol_bnds = vol_bnds
         self._voxel_size = float(voxel_size)
-        self._trunc_margin = 1 * self._voxel_size  # truncation on SDF
         self._color_const = 256 * 256
 
         # Adjust volume bounds and ensure C-order contiguous

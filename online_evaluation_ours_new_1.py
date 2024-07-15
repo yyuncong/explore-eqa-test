@@ -122,13 +122,13 @@ def inference(model, tokenizer, step_dict, cfg):
         if filter_outputs is None:
             return None
         selection_dict = sample.selection_dict[0]
-        selection_input, object_id_mapping = construct_selection_prompt(
+        selection_input, snapshot_id_mapping = construct_selection_prompt(
             tokenizer, 
-            selection_dict.text_before_object,
-            selection_dict.feature_before_object,
+            selection_dict.text_before_snapshot,
+            selection_dict.feature_before_snapshot,
             selection_dict.frontier_text,
             selection_dict.frontier_features,
-            selection_dict.object_info_dict,
+            selection_dict.snapshot_info_dict,
             2048,
             True,
             filter_outputs,
@@ -136,7 +136,7 @@ def inference(model, tokenizer, step_dict, cfg):
         )
         sample = collate_wrapper([selection_input])
         outputs = infer_selection(model,tokenizer,sample)
-        return outputs, object_id_mapping
+        return outputs, snapshot_id_mapping
     else:
         # already loss Answer/:
         print('before input into inference')
@@ -176,7 +176,9 @@ def main(cfg):
     # model_path = "liuhaotian/llava-v1.5-7b"
     model_path = "/work/pi_chuangg_umass_edu/yuncong/llava-v1.5-7b"
     model_name = get_model_name_from_path(model_path)
-    tokenizer, model, image_processor, context_len = load_pretrained_model(model_path, None, model_name, device_map=None, add_multisensory_token=True)  
+    tokenizer, model, image_processor, context_len = load_pretrained_model(
+        model_path, None, model_name, device_map=None, add_multisensory_token=True
+    )  
     # model = model.to("cuda")
     load_checkpoint(model, cfg.model_path)
     model = model.to("cuda")

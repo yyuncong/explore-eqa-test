@@ -36,7 +36,7 @@ from src.habitat import (
 from src.geom import get_cam_intr, get_scene_bnds, get_collision_distance
 from src.tsdf_new import TSDFPlanner, Frontier, SnapShot
 #from src.eval_utils_snapshot import prepare_step_dict, get_item, encode, load_scene_features, rgba2rgb, load_checkpoint, collate_wrapper, construct_selection_prompt
-from src.eval_utils_snapshot_new import prepare_step_dict, get_item, encode, load_scene_features, rgba2rgb, load_checkpoint, collate_wrapper, construct_selection_prompt
+from src.eval_utils_snapshot import prepare_step_dict, get_item, encode, load_scene_features, rgba2rgb, load_checkpoint, collate_wrapper, construct_selection_prompt
 from inference.models import YOLOWorld
 
 from llava.model.builder import load_pretrained_model

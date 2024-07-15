@@ -110,7 +110,7 @@ def collate_wrapper(batch):
         scene_feature[j, :b.scene_feature.shape[0]] = b.scene_feature
         # frontier_feature[j, :b.frontier_feature.shape[0]] = b.frontier_feature
         scene_insert_loc[j, :b.scene_insert_loc.shape[0]] = b.scene_insert_loc
-    
+    print(batch[0].input_ids)
     return EasyDict(
         input_ids=torch.cat([b.input_ids for b in batch])[...,:max_length],
         attention_mask=torch.cat([b.attention_mask for b in batch])[...,:max_length],
@@ -234,20 +234,26 @@ def prepare_snapshot_input(
 
     # prefiltering TODO
     if prefiltering:
+        #print("seen classes", seen_classes)
+        #print("ranking", ranking)
         ranking = [cls for cls in ranking if cls in seen_classes]
         ranking = ranking[:topk]
         ranking_set = set(ranking)
+        #print("filtered ranking",ranking)
         snap_indices = [
             snap_idx
             for snap_idx in range(snapshot_index)
             if len(set(snapshot_classes[snap_idx]) & ranking_set) > 0
         ]
+        #print("snap_indices", snap_indices)
+        #print("raw snapshot classes", snapshot_classes)
         snapshot_classes = [
             snapshot_classes[snap_idx] for snap_idx in snap_indices
         ]
         object_features = [
             snapshot_features[snap_idx] for snap_idx in snap_indices
         ]
+        #print("filtered snapshot classes", snapshot_classes)
         # Note that if apply prefiltering, we may have #(objects) < object_index
         # 4. reassign object_index = #(object)
         snapshot_index = len(snapshot_classes)
@@ -293,6 +299,24 @@ def prepare_prefiltering_prompt(question, tokenizer, classes, max_length, topk):
     filter_attention_mask = filter_text["attention_mask"]
     return filter_input_ids, filter_length, filter_attention_mask
 
+def test_tokenizer(tokenizer):
+    print(tokenizer.decode(tokenizer.encode("bath tub")))
+    print(tokenizer.encode("bath tub"))
+    print(tokenizer.decode(tokenizer.encode(" bath tub")))
+    print(tokenizer.encode(" bath tub"))
+    print(tokenizer.decode(tokenizer.encode("<scene> bath tub")))
+    print(tokenizer.encode("<scene> bath tub"))
+    print(tokenizer.decode(tokenizer.encode("<scene>  bath tub")))
+    print(tokenizer.encode("<scene>  bath tub"))
+    print(tokenizer.decode(tokenizer.encode("<scene>bath tub")))
+    print(tokenizer.encode("<scene>bath tub"))
+    print(tokenizer.decode(tokenizer.encode("<scene> pillow")))  
+    print(tokenizer.encode("<scene>"))
+    print(tokenizer.decode(tokenizer.encode("<scene> ")))
+    print(tokenizer.decode(tokenizer.encode("<scene> chair")))
+    print(tokenizer.decode(tokenizer.encode("chair <scene>")))
+    print(input_ids.shape)
+
 def construct_selection_prompt(
     tokenizer,
     text_before_snapshot,
@@ -332,8 +356,12 @@ def construct_selection_prompt(
     )
     input_ids = text["input_ids"]
     length = torch.nonzero(input_ids).shape[0]
-    print('length', length)
 
+    print('length', length)
+    print(
+        tokenizer.decode(input_ids[0][0:length+1])
+    )
+    
     attention_mask = text["attention_mask"]
     scene_token_id = tokenizer(SCENE_TOKEN).input_ids[-1]
     scene_insert_loc = (
@@ -389,7 +417,7 @@ def get_item(tokenizer, step_dict):
         # dummy test
         for scls in snapshot_class:
             if len(scls) == 0:
-                print('empty class')
+                logging.info('empty class')
                 exit(0)
         seen_classes.update(snapshot_class)
         snapshot_classes.append(
@@ -433,7 +461,7 @@ def get_item(tokenizer, step_dict):
         filter_input_ids, filter_length, filter_attention_mask = prepare_prefiltering_prompt(
             step["question"],
             tokenizer,
-            list(class2object.keys()),
+            list(seen_classes),
             1024,
             step["top_k_categories"],
         )

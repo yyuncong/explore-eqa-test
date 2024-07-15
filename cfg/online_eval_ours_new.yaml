@@ -16,7 +16,7 @@ question_file_path: generated_questions/generated_questions.json
 choose_every_step: false
 egocentric_views: true
 action_memory: false
-prefiltering: false
+prefiltering: true #false
 top_k_categories: 10
 
 add_positional_encodings: true

@@ -824,7 +824,7 @@ class TSDFPlanner(TSDFPlannerBase):
         cur_point = self.world2vox(pts)
 
         # Check if the height voxel is occupied
-        height_voxel = int(height / self._voxel_size) + self.min_height_voxel
+        height_voxel = int((height + pts[-1] - self._vol_origin[-1]) / self._voxel_size) + self.min_height_voxel
         unoccupied = np.logical_and(
             self._tsdf_vol_cpu[:, :, height_voxel] > 0, self._tsdf_vol_cpu[:, :, 0] < 0
         )  # check there is ground below

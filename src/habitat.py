@@ -290,7 +290,7 @@ def get_navigable_point_from(pos_start, pathfinder, max_search=1000, min_dist=6,
             break
 
         pos_end_current = pathfinder.get_random_navigable_point()
-        if np.abs(pos_end_current[1] - pos_start[1]) > 0.4:  # make sure the end point is on the same level
+        if np.abs(pos_end_current[1] - pos_start[1]) > 0.2:  # make sure the end point is on the same level
             continue
 
         path = habitat_sim.ShortestPath()
@@ -354,7 +354,7 @@ def get_navigable_point_from_new(pos_start, pathfinder, max_search=1000, min_dis
             break
 
         pos_end_current = pathfinder.get_random_navigable_point()
-        if np.abs(pos_end_current[1] - pos_start[1]) > 0.4:  # make sure the end point is on the same level
+        if np.abs(pos_end_current[1] - pos_start[1]) > 0.2:  # make sure the end point is on the same level
             continue
 
         path = habitat_sim.ShortestPath()

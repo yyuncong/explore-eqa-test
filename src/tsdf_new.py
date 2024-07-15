@@ -548,7 +548,8 @@ class TSDFPlanner(TSDFPlannerBase):
             choice: Union[SnapShot, Frontier],
             pts,
             cfg,
-            pathfinder
+            pathfinder,
+            random_position=False
     ) -> bool:
         if self.max_point is not None or self.target_point is not None:
             # if the next point is already set
@@ -570,7 +571,15 @@ class TSDFPlanner(TSDFPlannerBase):
                 # target_navigable_point = get_nearest_true_point(target_point, unoccupied)  # get the nearest unoccupied point for the nav target
                 # since it's not proper to directly go to the target point,
                 # we'd better find a navigable point that is certain distance from it to better observe the target
-                target_navigable_point = get_proper_observe_point(target_point, self.unoccupied, cur_point=cur_point, dist=cfg.final_observe_distance / self._voxel_size)
+                if not random_position:
+                    # the target navigation point is deterministic
+                    target_navigable_point = get_proper_observe_point(target_point, self.unoccupied, cur_point=cur_point, dist=cfg.final_observe_distance / self._voxel_size)
+                else:
+                    target_navigable_point = get_random_observe_point(
+                        target_point, self.unoccupied,
+                        min_dist=cfg.final_observe_distance / self._voxel_size,
+                        max_dist=(cfg.final_observe_distance + 1.5) / self._voxel_size
+                    )
                 if target_navigable_point is None:
                     # this is usually because the target object is too far, so its surroundings are not detected as unoccupied
                     # so we just temporarily use pathfinder to find a navigable point around it
@@ -587,13 +596,22 @@ class TSDFPlanner(TSDFPlannerBase):
                 self.target_point = target_navigable_point
                 return True
             else:
-                target_point = get_proper_snapshot_observation_point(
-                    obj_centers=obj_centers,
-                    snapshot_observation_point=choice.obs_point,
-                    unoccupied_map=self.unoccupied,
-                    min_obs_dist=cfg.final_observe_distance / self._voxel_size - 1,
-                    max_obs_dist=cfg.final_observe_distance / self._voxel_size + 1
-                )
+                if not random_position:
+                    target_point = get_proper_snapshot_observation_point(
+                        obj_centers=obj_centers,
+                        snapshot_observation_point=choice.obs_point,
+                        unoccupied_map=self.unoccupied,
+                        min_obs_dist=cfg.final_observe_distance / self._voxel_size - 1,
+                        max_obs_dist=cfg.final_observe_distance / self._voxel_size + 1
+                    )
+                else:
+                    target_point = get_random_snapshot_observation_point(
+                        obj_centers=obj_centers,
+                        snapshot_observation_point=choice.obs_point,
+                        unoccupied_map=self.unoccupied,
+                        min_obs_dist=cfg.final_observe_distance / self._voxel_size - 1,
+                        max_obs_dist=cfg.final_observe_distance / self._voxel_size + 1
+                    )
                 if target_point is None:
                     logging.error(f"Error in set_next_navigation_point: cannot find a proper observation point for the snapshot")
                     return False

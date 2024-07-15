@@ -5,4 +5,5 @@ __pycache__/
 results
 results/*
 exploration_data/
+exploration_data_new/
 output/

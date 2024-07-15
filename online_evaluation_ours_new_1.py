@@ -37,6 +37,7 @@ from src.geom import get_cam_intr, get_scene_bnds, get_collision_distance
 from src.tsdf_new import TSDFPlanner, Frontier, SnapShot
 #from src.eval_utils_snapshot import prepare_step_dict, get_item, encode, load_scene_features, rgba2rgb, load_checkpoint, collate_wrapper, construct_selection_prompt
 from src.eval_utils_snapshot_new import prepare_step_dict, get_item, encode, load_scene_features, rgba2rgb, load_checkpoint, collate_wrapper, construct_selection_prompt
+from src.eval_utils_snapshot_new import SCENE_TOKEN
 from inference.models import YOLOWorld
 
 from llava.model.builder import load_pretrained_model
@@ -79,10 +80,10 @@ def infer_selection(model, tokenizer, sample):
         scene_length = sample.scene_length,
     )
     input_ids = sample.input_ids.to("cuda")
-    print('final input to the model')
-    print(
-        tokenizer.decode(input_ids[0][input_ids[0] != tokenizer.pad_token_id])
-    )
+    # print('final input to the model')
+    # print(
+    #     tokenizer.decode(input_ids[0][input_ids[0] != tokenizer.pad_token_id])
+    # )
     # input()
     # the loss of : exists in infer_selection
     # but in final prompt
@@ -139,10 +140,10 @@ def inference(model, tokenizer, step_dict, cfg):
         return outputs, snapshot_id_mapping
     else:
         # already loss Answer/:
-        print('before input into inference')
-        print(
-            tokenizer.decode(sample.input_ids[0][sample.input_ids[0] != tokenizer.pad_token_id])
-        )
+        # print('before input into inference')
+        # print(
+        #     tokenizer.decode(sample.input_ids[0][sample.input_ids[0] != tokenizer.pad_token_id])
+        # )
         outputs = infer_selection(model,tokenizer,sample)
         return outputs
 
@@ -178,7 +179,7 @@ def main(cfg):
     model_name = get_model_name_from_path(model_path)
     tokenizer, model, image_processor, context_len = load_pretrained_model(
         model_path, None, model_name, device_map=None, add_multisensory_token=True
-    )  
+    )
     # model = model.to("cuda")
     load_checkpoint(model, cfg.model_path)
     model = model.to("cuda")
@@ -396,8 +397,8 @@ def main(cfg):
                             obs_point=pts,
                             return_annotated=True
                         )
-                    if object_added:
-                        plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), rgb)
+                    # if object_added:
+                    #     plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), rgb)
 
                     # TSDF fusion
                     tsdf_planner.integrate(
@@ -464,10 +465,10 @@ def main(cfg):
                             max_try_count=0
                         )
 
-                        plt.imsave(
-                            os.path.join(episode_frontier_dir, f"{cnt_step}_{i}.png"),
-                            frontier_obs,
-                        )
+                        # plt.imsave(
+                        #     os.path.join(episode_frontier_dir, f"{cnt_step}_{i}.png"),
+                        #     frontier_obs,
+                        # )
                         processed_rgb = rgba2rgb(frontier_obs)
                         with torch.no_grad():
                             img_feature = encode(model, image_processor, processed_rgb).mean(1)

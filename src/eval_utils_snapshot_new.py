@@ -110,7 +110,7 @@ def collate_wrapper(batch):
         scene_feature[j, :b.scene_feature.shape[0]] = b.scene_feature
         # frontier_feature[j, :b.frontier_feature.shape[0]] = b.frontier_feature
         scene_insert_loc[j, :b.scene_insert_loc.shape[0]] = b.scene_insert_loc
-    print(batch[0].input_ids)
+    # print(batch[0].input_ids)
     return EasyDict(
         input_ids=torch.cat([b.input_ids for b in batch])[...,:max_length],
         attention_mask=torch.cat([b.attention_mask for b in batch])[...,:max_length],
@@ -260,11 +260,12 @@ def prepare_snapshot_input(
 
     text = "These are the snapshots:\n"
     for i, class_names in enumerate(snapshot_classes):
-        text += f"snapshot {i} <scene> "
+        text += f"placeholder {i} "
         class_names_set = set(class_names)
         # yuncong TODO: align this with the model later
         for class_name in class_names_set:
             text += f"{class_name}, "
+        text += "<scene> "
 
     if snapshot_index == 0:
         text += f"No snapshot available "
@@ -299,23 +300,25 @@ def prepare_prefiltering_prompt(question, tokenizer, classes, max_length, topk):
     filter_attention_mask = filter_text["attention_mask"]
     return filter_input_ids, filter_length, filter_attention_mask
 
-def test_tokenizer(tokenizer):
-    print(tokenizer.decode(tokenizer.encode("bath tub")))
-    print(tokenizer.encode("bath tub"))
-    print(tokenizer.decode(tokenizer.encode(" bath tub")))
-    print(tokenizer.encode(" bath tub"))
-    print(tokenizer.decode(tokenizer.encode("<scene> bath tub")))
-    print(tokenizer.encode("<scene> bath tub"))
-    print(tokenizer.decode(tokenizer.encode("<scene>  bath tub")))
-    print(tokenizer.encode("<scene>  bath tub"))
-    print(tokenizer.decode(tokenizer.encode("<scene>bath tub")))
-    print(tokenizer.encode("<scene>bath tub"))
-    print(tokenizer.decode(tokenizer.encode("<scene> pillow")))  
-    print(tokenizer.encode("<scene>"))
-    print(tokenizer.decode(tokenizer.encode("<scene> ")))
-    print(tokenizer.decode(tokenizer.encode("<scene> chair")))
-    print(tokenizer.decode(tokenizer.encode("chair <scene>")))
-    print(input_ids.shape)
+# def test_tokenizer(tokenizer):
+#     print("snapshot", tokenizer.encode("snapshot"))
+#     print("object", tokenizer.encode("object"))
+#     # print(tokenizer.decode(tokenizer.encode("bath tub")))
+#     # print(tokenizer.encode("bath tub"))
+#     # print(tokenizer.decode(tokenizer.encode(" bath tub")))
+#     # print(tokenizer.encode(" bath tub"))
+#     # print(tokenizer.decode(tokenizer.encode("<scene> bath tub")))
+#     # print(tokenizer.encode("<scene> bath tub"))
+#     # print(tokenizer.decode(tokenizer.encode("<scene>  bath tub")))
+#     # print(tokenizer.encode("<scene>  bath tub"))
+#     # print(tokenizer.decode(tokenizer.encode("<scene>bath tub")))
+#     # print(tokenizer.encode("<scene>bath tub"))
+#     # print(tokenizer.decode(tokenizer.encode("<scene> pillow")))  
+#     # print(tokenizer.encode("<scene>"))
+#     # print(tokenizer.decode(tokenizer.encode("<scene> ")))
+#     # print(tokenizer.decode(tokenizer.encode("<scene> chair")))
+#     # print(tokenizer.decode(tokenizer.encode("chair <scene>")))
+#     # print(input_ids.shape)
 
 def construct_selection_prompt(
     tokenizer,
@@ -345,7 +348,9 @@ def construct_selection_prompt(
     scene_feature = torch.cat(scene_feature, dim=0)
     # format answer
     text += "Answer: "
-    print("final selection prompt \n", text)
+    # print("final selection prompt \n", text)
+    # print("snapshot", tokenizer.encode("snapshot"))
+    # print("placeholder", tokenizer.encode("placeholder"))
     
     text = tokenizer(
         text,
@@ -355,18 +360,24 @@ def construct_selection_prompt(
         padding="max_length"
     )
     input_ids = text["input_ids"]
+    # replace the placeholder token with the snapshot token
+    snapshot_token_id = tokenizer("snapshot").input_ids[-1]
+    placeholder_token_id = 27074
+    input_ids[input_ids == placeholder_token_id] = snapshot_token_id
     length = torch.nonzero(input_ids).shape[0]
 
-    print('length', length)
-    print(
-        tokenizer.decode(input_ids[0][0:length+1])
-    )
+    # print('length', length)
+    # print(
+    #     tokenizer.decode(input_ids[0][0:length+1])
+    # )
     
     attention_mask = text["attention_mask"]
     scene_token_id = tokenizer(SCENE_TOKEN).input_ids[-1]
     scene_insert_loc = (
         (input_ids == scene_token_id).nonzero()[:, 1].reshape(-1)
     )
+    # print every token right after a scene token
+    # print(input_ids[0][scene_insert_loc + 1])
     
     input_dict = EasyDict(
         text=text,
@@ -496,6 +507,6 @@ def get_item(tokenizer, step_dict):
             None
         )
         batch = [input_dict]
-        print('before wrap up')
-        print(tokenizer.decode(input_dict.input_ids[input_dict.input_ids != tokenizer.pad_token_id]))
+        # print('before wrap up')
+        # print(tokenizer.decode(input_dict.input_ids[input_dict.input_ids != tokenizer.pad_token_id]))
         return collate_wrapper(batch)

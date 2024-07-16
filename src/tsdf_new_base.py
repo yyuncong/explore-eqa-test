@@ -393,8 +393,8 @@ class TSDFPlannerBase:
         return np.array([-np.sin(angle), np.cos(angle)])
 
     def get_distance(self, p1, p2, height, pathfinder, input_voxel=True):
-        # p1, p2 are in voxel space
-        # convert p1, p2 to habitat space
+        # p1, p2 are in voxel space or habitat space
+        # convert p1, p2 to habitat space if input_voxel is True
         if input_voxel:
             p1_world = p1 * self._voxel_size + self._vol_origin[:2]
             p2_world = p2 * self._voxel_size + self._vol_origin[:2]
@@ -415,11 +415,23 @@ class TSDFPlannerBase:
 
         if found_path:
             return path.geodesic_distance, path.points
+
+        # if path not found, then try to find a path to a near point of p1 and p2
+        p1_habitat_near = get_near_navigable_point(p1_habitat, pathfinder, radius=0.2)
+        p2_habitat_near = get_near_navigable_point(p2_habitat, pathfinder, radius=0.2)
+
+        if p1_habitat_near is not None and p2_habitat_near is not None:
+            path.requested_start = p1_habitat_near
+            path.requested_end = p2_habitat_near
+            found_path = pathfinder.find_path(path)
+            if found_path:
+                return path.geodesic_distance, path.points
+
+        # if still not found, then return the euclidean distance
+        if input_voxel:
+            return np.linalg.norm(p1 - p2) * self._voxel_size, None
         else:
-            if input_voxel:
-                return np.linalg.norm(p1 - p2) * self._voxel_size, None
-            else:
-                return np.linalg.norm(p1 - p2), None
+            return np.linalg.norm(p1 - p2), None
 
     def habitat2voxel(self, pts):
         pts_normal = pos_habitat_to_normal(pts)

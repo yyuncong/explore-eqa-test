@@ -202,9 +202,6 @@ def main(cfg):
     dist_from_chosen_to_target_list = []
 
     for scene_id in all_scene_list:
-        if '00723' in scene_id:
-            continue
-
         all_question_id_in_scene = [q for q in all_questions_list if scene_id in q]
 
         ##########################################################
@@ -220,22 +217,16 @@ def main(cfg):
 
         # load scene
         scene_path = cfg.scene_data_path_train if int(scene_id.split("-")[0]) < 800 else cfg.scene_data_path_val
-        scene_features_path = cfg.scene_features_path_train if int(scene_id.split("-")[0]) < 800 else cfg.scene_features_path_val
         scene_mesh_path = os.path.join(scene_path, scene_id, scene_id.split("-")[1] + ".basis.glb")
         navmesh_path = os.path.join(scene_path, scene_id, scene_id.split("-")[1] + ".basis.navmesh")
         semantic_texture_path = os.path.join(scene_path, scene_id, scene_id.split("-")[1] + ".semantic.glb")
         scene_semantic_annotation_path = os.path.join(scene_path, scene_id, scene_id.split("-")[1] + ".semantic.txt")
         bbox_data_path = os.path.join(cfg.semantic_bbox_data_path, scene_id + ".json")
-        # assert os.path.exists(scene_mesh_path) and os.path.exists(navmesh_path), f'{scene_mesh_path}, {navmesh_path}'
-        # assert os.path.exists(semantic_texture_path) and os.path.exists(scene_semantic_annotation_path), f'{semantic_texture_path}, {scene_semantic_annotation_path}'
         if not os.path.exists(scene_mesh_path) or not os.path.exists(navmesh_path) or not os.path.exists(semantic_texture_path) or not os.path.exists(scene_semantic_annotation_path):
             logging.info(f"Scene {scene_id} not found, skip")
             continue
         if not os.path.exists(bbox_data_path):
             logging.info(f"Scene {scene_id} bbox data not found, skip")
-            continue
-        if not os.path.exists(scene_features_path):
-            logging.info(f"Scene {scene_id} features not found, skip")
             continue
 
         try:
@@ -295,11 +286,13 @@ def main(cfg):
             obj_bbox_center = obj_bbox_center[[0, 2, 1]]
 
             episode_data_dir = os.path.join(str(cfg.output_dir), question_id)
+            episode_object_observe_dir = os.path.join(episode_data_dir, 'object_observations')
             episode_frontier_dir = os.path.join(episode_data_dir, "frontier_rgb")
-            object_feature_save_dir = os.path.join(episode_data_dir, 'object_features')
+            episode_snapshot_dir = os.path.join(episode_data_dir, 'snapshot')
             os.makedirs(episode_data_dir, exist_ok=True)
+            os.makedirs(episode_object_observe_dir, exist_ok=True)
             os.makedirs(episode_frontier_dir, exist_ok=True)
-            os.makedirs(object_feature_save_dir, exist_ok=True)
+            os.makedirs(episode_snapshot_dir, exist_ok=True)
 
             pts = init_pts
             angle = init_angle
@@ -332,12 +325,7 @@ def main(cfg):
 
             logging.info(f'\n\nQuestion id {scene_id} initialization successful!')
 
-            # init an empty observation for future use
-            zero_image = np.zeros((img_height, img_width, 3), dtype=np.uint8)
-
             # run steps
-            path_length = 0
-            prev_pts = pts.copy()
             target_found = False
             explore_dist = 0.0
             cnt_step = -1
@@ -387,10 +375,6 @@ def main(cfg):
                     # collect all view features
                     obs_file_name = f"{cnt_step}-view_{view_idx}.png"
                     with torch.no_grad():
-                        img_feature = encode(model, image_processor, rgb).mean(1)
-                    all_snapshot_features[obs_file_name] = img_feature.to("cpu")
-
-                    with torch.no_grad():
                         object_added, annotated_rgb = tsdf_planner.update_scene_graph(
                             detection_model=detection_model,
                             rgb=rgb[..., :3],
@@ -402,8 +386,12 @@ def main(cfg):
                             obs_point=pts,
                             return_annotated=True
                         )
-                    # if object_added:
-                    #     plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), rgb)
+                    if object_added:
+                        with torch.no_grad():
+                            img_feature = encode(model, image_processor, rgb).mean(1)
+                        all_snapshot_features[obs_file_name] = img_feature.to("cpu")
+                        if cfg.save_visualization or cfg.save_frontier_video:
+                            plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), rgb)
 
                     # TSDF fusion
                     tsdf_planner.integrate(
@@ -470,10 +458,11 @@ def main(cfg):
                             max_try_count=0
                         )
 
-                        # plt.imsave(
-                        #     os.path.join(episode_frontier_dir, f"{cnt_step}_{i}.png"),
-                        #     frontier_obs,
-                        # )
+                        if cfg.save_frontier_video or cfg.save_visualization:
+                            plt.imsave(
+                                os.path.join(episode_frontier_dir, f"{cnt_step}_{i}.png"),
+                                frontier_obs,
+                            )
                         processed_rgb = rgba2rgb(frontier_obs)
                         with torch.no_grad():
                             img_feature = encode(model, image_processor, processed_rgb).mean(1)
@@ -495,8 +484,6 @@ def main(cfg):
                     ft_id_to_vlm_id = {}
                     vlm_id_count = 0
                     for i, frontier in enumerate(tsdf_planner.frontiers):
-                        # if frontier.is_stuck:
-                        #     continue
                         frontier_dict = {}
                         pos_voxel = frontier.position
                         pos_world = pos_voxel * tsdf_planner._voxel_size + tsdf_planner._vol_origin[:2]
@@ -581,7 +568,7 @@ def main(cfg):
                         logging.info(
                             "pred_target_class: "+str(' '.join([object_id_to_name[obj_id] for obj_id in pred_target_snapshot.selected_obj_list]))
                         )
-                        
+
                         logging.info(f"Next choice Snapshot")
                         tsdf_planner.frontiers_weight = np.zeros((len(tsdf_planner.frontiers)))
                         # TODO: where to go if snapshot?
@@ -669,7 +656,7 @@ def main(cfg):
                                 if type(max_point_choice) == Frontier and max_point_choice.image == tsdf_planner.frontiers[i].image:
                                     axs[h_idx, w_idx].set_title('Chosen')
                             elif i == num_images - 1 and type(max_point_choice) == SnapShot:
-                                img_path = os.path.join(object_feature_save_dir, max_point_choice.image)
+                                img_path = os.path.join(episode_snapshot_dir, max_point_choice.image)
                                 img = matplotlib.image.imread(img_path)
                                 axs[h_idx, w_idx].imshow(img)
                                 axs[h_idx, w_idx].set_title('Snapshot Chosen')
@@ -683,7 +670,11 @@ def main(cfg):
                 pts_normal = np.append(pts_normal, floor_height)
                 pts = pos_normal_to_habitat(pts_normal)
                 rotation = get_quaternion(angle, 0)
-                explore_dist += np.linalg.norm(pts_pixs[-1] - pts_pixs[-2]) * tsdf_planner._voxel_size
+                if type(max_point_choice) == Frontier:
+                    # count the explore distance only when the agent is exploring, not approaching the target
+                    explore_dist += np.linalg.norm(pts_pixs[-1] - pts_pixs[-2]) * tsdf_planner._voxel_size
+
+                logging.info(f"Current position: {pts}, {explore_dist:.3f}")
 
                 if type(max_point_choice) == SnapShot and target_arrived:
                     # the model found a target snapshot and arrived at a proper observation point
@@ -694,9 +685,7 @@ def main(cfg):
                     agent.set_state(agent_state_obs)
                     obs = simulator.get_sensor_observations()
                     rgb = obs["color_sensor"]
-                    target_obs_save_dir = os.path.join(episode_data_dir, "target_observation")
-                    os.makedirs(target_obs_save_dir, exist_ok=True)
-                    plt.imsave(os.path.join(target_obs_save_dir, f"target.png"), rgb)
+                    plt.imsave(os.path.join(episode_object_observe_dir, f"target.png"), rgb)
 
                     # get some statistics
 

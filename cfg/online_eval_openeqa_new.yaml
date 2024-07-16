@@ -41,7 +41,7 @@ max_target_observation: 4
 min_num_obj_threshold: 1
 
 # Semantic map
-explored_depth: 1.5
+explored_depth: 1.7
 planner:
   unexplored_T: 2.0
   unoccupied_T: 2.0

@@ -32,10 +32,10 @@ save_frontier_video: true
 
 # Navigation
 init_clearance: 0.3
-max_step_room_size_ratio: 11
+max_step_room_size_ratio: 8
 extra_view_phase_1: 4
 extra_view_angle_deg_phase_1: 60
-max_target_observation: 10
+max_target_observation: 4
 
 # Snapshot
 min_num_obj_threshold: 1

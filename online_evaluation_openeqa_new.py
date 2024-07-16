@@ -167,7 +167,9 @@ def main(cfg):
     questions_list = json.load(open(cfg.questions_list_path, "r"))
     total_questions = len(questions_list)
     # sort the data according to the question id
-    questions_list = sorted(questions_list, key=lambda x: x['question_id'])
+    # questions_list = sorted(questions_list, key=lambda x: x['question_id'])
+    # shuffle the data
+    random.shuffle(questions_list)
     print("number of questions: ", total_questions)
     print("question path: ", cfg.questions_list_path)
 
@@ -579,7 +581,7 @@ def main(cfg):
                     pts=pts_normal,
                     cfg=cfg.planner,
                     pathfinder=pathfinder,
-                    random_position=True
+                    random_position=False if target_observation_count == 0 else True  # use the best observation point for the first observation, and random for the rest
                 )
                 if not update_success:
                     logging.info(f"Question id {question_id} invalid: set_next_navigation_point failed!")

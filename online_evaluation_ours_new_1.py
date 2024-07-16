@@ -84,10 +84,10 @@ def infer_selection(model, tokenizer, sample):
         scene_length = sample.scene_length,
     )
     input_ids = sample.input_ids.to("cuda")
-    logging.info('final input to the model')
-    logging.info(
-        tokenizer.decode(input_ids[0][input_ids[0] != tokenizer.pad_token_id])
-    )
+    # logging.info('final input to the model')
+    # logging.info(
+    #     tokenizer.decode(input_ids[0][input_ids[0] != tokenizer.pad_token_id])
+    # )
     # input()
     # the loss of : exists in infer_selection
     # but in final prompt
@@ -564,7 +564,6 @@ def main(cfg):
                     if target_type not in ["snapshot", "frontier"]:
                         logging.info(f"Invalid prediction type: {target_type}, failed!")
                         print(target_type)
-                        exit(0)
                         break
 
                     if target_type == "snapshot":

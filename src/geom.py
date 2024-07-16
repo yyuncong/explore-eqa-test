@@ -748,7 +748,9 @@ def get_random_snapshot_observation_point(
         return None
 
     # get the weight for random selection
-    cos_values = np.dot(snapshot_center - valid_coords, short_axis) / np.linalg.norm(snapshot_center - valid_coords, axis=1) * 0.5  # [-0.5, 0.5]
+    dists = np.linalg.norm(snapshot_center - valid_coords, axis=1)
+    dists = np.where(dists < 1e-6, 1e-6, dists)
+    cos_values = np.dot(snapshot_center - valid_coords, short_axis) / dists * 0.5  # [-0.5, 0.5]
     selection_weight = np.exp(cos_values) / np.sum(np.exp(cos_values))
 
     # randomly pick a point in the  valid_coords, and check its validity

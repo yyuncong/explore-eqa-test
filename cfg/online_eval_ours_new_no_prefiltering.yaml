@@ -1,6 +1,6 @@
 # General
 seed: 66
-exp_name: exp_val_snapshots_pos_ego_ours_every
+exp_name: exp_val_snapshots_pos_ego_ours_every_no_prefiltering
 output_parent_dir: /work/pi_chuangg_umass_edu/yuncong/results
 scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
 scene_data_path_train: /project/pi_chuangg_umass_edu/yuncong/data_v2/scene_datasets/hm3d/train
@@ -16,7 +16,7 @@ question_file_path: generated_questions/generated_questions.json
 choose_every_step: true
 egocentric_views: true
 action_memory: false
-prefiltering: true
+prefiltering: false
 top_k_categories: 10
 
 add_positional_encodings: true

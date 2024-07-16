@@ -54,7 +54,10 @@ def infer_prefilter(model, tokenizer, sample):
         return None
     answer_ind = torch.where(sample.filter_input_ids==22550)[1][0].item()
     filter_input_ids = filter_input_ids[:, :answer_ind+2]
-
+    logging.info('prefiltering prompt')
+    logging.info(
+        tokenizer.decode(filter_input_ids[0][filter_input_ids[0] != tokenizer.pad_token_id])
+    )
     with torch.no_grad():
         with torch.inference_mode() and torch.autocast(device_type="cuda"):
             filter_output_ids = model.generate(
@@ -66,6 +69,7 @@ def infer_prefilter(model, tokenizer, sample):
     # parse the prefilter output
         filter_outputs = tokenizer.decode(filter_output_ids[0, filter_input_ids.shape[1]:]).replace("</s>", "").strip()
     # print("the output of prefiltering", filter_outputs)
+    logging.info(f"prefiltering output: {filter_outputs}")
     if filter_outputs == "No object available":
         return []
     else:
@@ -80,10 +84,10 @@ def infer_selection(model, tokenizer, sample):
         scene_length = sample.scene_length,
     )
     input_ids = sample.input_ids.to("cuda")
-    # print('final input to the model')
-    # print(
-    #     tokenizer.decode(input_ids[0][input_ids[0] != tokenizer.pad_token_id])
-    # )
+    logging.info('final input to the model')
+    logging.info(
+        tokenizer.decode(input_ids[0][input_ids[0] != tokenizer.pad_token_id])
+    )
     # input()
     # the loss of : exists in infer_selection
     # but in final prompt
@@ -118,6 +122,7 @@ def inference(model, tokenizer, step_dict, cfg):
     # except:
     #     logging.info(f"Get item failed! (most likely no frontiers and no objects)")
     #     return None
+    
     if cfg.prefiltering:
         filter_outputs = infer_prefilter(model,tokenizer,sample)
         if filter_outputs is None:
@@ -140,10 +145,10 @@ def inference(model, tokenizer, step_dict, cfg):
         return outputs, snapshot_id_mapping
     else:
         # already loss Answer/:
-        # print('before input into inference')
-        # print(
-        #     tokenizer.decode(sample.input_ids[0][sample.input_ids[0] != tokenizer.pad_token_id])
-        # )
+        #print('before input into inference')
+        #print(
+        #    tokenizer.decode(sample.input_ids[0][sample.input_ids[0] != tokenizer.pad_token_id])
+        #)
         outputs = infer_selection(model,tokenizer,sample)
         return outputs
 
@@ -540,17 +545,18 @@ def main(cfg):
                     step_dict["question"] = question
                     step_dict["scene"] = scene_id
                     if cfg.prefiltering:
-                        outputs, object_id_mapping = inference(model, tokenizer, step_dict, cfg)
+                        outputs, snapshot_id_mapping = inference(model, tokenizer, step_dict, cfg)
                     else:
                         outputs = inference(model, tokenizer, step_dict, cfg)
-                        object_id_mapping = None
+                        snapshot_id_mapping = None
                     if outputs is None:
                         # encounter generation error
                         logging.info(f"Question id {question_id} invalid: model generation error!")
                         break
                     try:
                         target_type, target_index = outputs.split(" ")[0], outputs.split(" ")[1]
-                        print(f"Prediction: {target_type}, {target_index}")
+                        #print(f"Prediction: {target_type}, {target_index}")
+                        logging.info(f"Prediction: {target_type}, {target_index}")
                     except:
                         logging.info(f"Wrong output format, failed!")
                         break
@@ -563,15 +569,20 @@ def main(cfg):
 
                     if target_type == "snapshot":
                         # TODO: the problem needed to be fixed here
-                        if object_id_mapping is not None:
-                            if int(target_index) < 0 or int(target_index) >= len(object_id_mapping):
+                        if snapshot_id_mapping is not None:
+                            if int(target_index) < 0 or int(target_index) >= len(snapshot_id_mapping):
                                 logging.info(f"target index can not match real objects: {target_index}, failed!")
                                 break
-                            target_index = object_id_mapping[int(target_index)]
+                            target_index = snapshot_id_mapping[int(target_index)]
+                            logging.info(f"The index of target snapshot {target_index}")
                         if int(target_index) < 0 or int(target_index) >= len(tsdf_planner.simple_scene_graph):
                             logging.info(f"Prediction out of range: {target_index}, {len(tsdf_planner.simple_scene_graph)}, failed!")
                             break
                         pred_target_snapshot = list(tsdf_planner.snapshots.values())[int(target_index)]
+                        logging.info(
+                            "pred_target_class: "+str(' '.join([object_id_to_name[obj_id] for obj_id in pred_target_snapshot.selected_obj_list]))
+                        )
+                        
                         logging.info(f"Next choice Snapshot")
                         tsdf_planner.frontiers_weight = np.zeros((len(tsdf_planner.frontiers)))
                         # TODO: where to go if snapshot?

@@ -12,4 +12,5 @@
 module load miniconda/22.11.1-1
 conda activate explore-eqa
 
-python online_evaluation_openeqa_3.py -cf cfg/online_eval_openeqa.yaml
+#python online_evaluation_ours_new_1.py -cf cfg/online_eval_ours_new.yaml
+python online_evaluation_ours_new_1.py -cf cfg/online_eval_ours_new_no_prefiltering.yaml

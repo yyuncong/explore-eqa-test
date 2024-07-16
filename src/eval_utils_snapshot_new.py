@@ -228,32 +228,32 @@ def prepare_snapshot_input(
     ranking,
     topk,
 ):
+    import logging
     snapshot_index = len(snapshot_classes)
     # the mapping from transformed object index to original object index(used by tsdf)
     snap_indices = None
 
     # prefiltering TODO
     if prefiltering:
-        #print("seen classes", seen_classes)
-        #print("ranking", ranking)
         ranking = [cls for cls in ranking if cls in seen_classes]
         ranking = ranking[:topk]
         ranking_set = set(ranking)
-        #print("filtered ranking",ranking)
+        logging.info("filtered ranking")
+        logging.info('_'.join(ranking))
         snap_indices = [
             snap_idx
             for snap_idx in range(snapshot_index)
             if len(set(snapshot_classes[snap_idx]) & ranking_set) > 0
         ]
-        #print("snap_indices", snap_indices)
-        #print("raw snapshot classes", snapshot_classes)
+        logging.info("snap_indices: "+' '.join([str(idx) for idx in snap_indices]))
+        logging.info("raw snapshot classes: "+'/'.join([','.join(sc) for sc in snapshot_classes]))
         snapshot_classes = [
             snapshot_classes[snap_idx] for snap_idx in snap_indices
         ]
-        object_features = [
+        snapshot_features = [
             snapshot_features[snap_idx] for snap_idx in snap_indices
         ]
-        #print("filtered snapshot classes", snapshot_classes)
+        logging.info("filtered snapshot classes: "+'/'.join([','.join(sc) for sc in snapshot_classes]))
         # Note that if apply prefiltering, we may have #(objects) < object_index
         # 4. reassign object_index = #(object)
         snapshot_index = len(snapshot_classes)
@@ -275,6 +275,7 @@ def prepare_snapshot_input(
         snapshot_features = torch.cat(snapshot_features, dim=0)
     text += "/\n"
     return text, snapshot_features, snapshot_index, snap_indices
+
 def prepare_prefiltering_prompt(question, tokenizer, classes, max_length, topk):
     filter_text = f"Question: {question}\n"
     filter_text += "These are the objects available in current scene graph\n"
@@ -348,7 +349,6 @@ def construct_selection_prompt(
     scene_feature = torch.cat(scene_feature, dim=0)
     # format answer
     text += "Answer: "
-    # print("final selection prompt \n", text)
     # print("snapshot", tokenizer.encode("snapshot"))
     # print("placeholder", tokenizer.encode("placeholder"))
     
@@ -425,11 +425,6 @@ def get_item(tokenizer, step_dict):
         # No need to filter here (both scene_graph and snapshots objects from the json files)
         snapshot_feature = step["snapshot_features"][rgb_id]
         snapshot_class = [obj_map[int(sid)] for sid in step["snapshot_objects"][rgb_id]]
-        # dummy test
-        for scls in snapshot_class:
-            if len(scls) == 0:
-                logging.info('empty class')
-                exit(0)
         seen_classes.update(snapshot_class)
         snapshot_classes.append(
             snapshot_class

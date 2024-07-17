@@ -238,22 +238,29 @@ def prepare_snapshot_input(
         ranking = [cls for cls in ranking if cls in seen_classes]
         ranking = ranking[:topk]
         ranking_set = set(ranking)
-        logging.info("filtered ranking")
-        logging.info('_'.join(ranking))
+        # logging.info("filtered ranking")
+        # logging.info('_'.join(ranking))
         snap_indices = [
             snap_idx
             for snap_idx in range(snapshot_index)
             if len(set(snapshot_classes[snap_idx]) & ranking_set) > 0
         ]
         logging.info("snap_indices: "+' '.join([str(idx) for idx in snap_indices]))
-        logging.info("raw snapshot classes: "+'/'.join([','.join(sc) for sc in snapshot_classes]))
+        # logging.info("raw snapshot classes: "+'/'.join([','.join(sc) for sc in snapshot_classes]))
         snapshot_classes = [
             snapshot_classes[snap_idx] for snap_idx in snap_indices
+        ]
+        #snapshot_classes = [
+        #    set(sc)&ranking_set for sc in snapshot_classes
+        #]
+        snapshot_classes = [
+            [scls for scls in list(dict.fromkeys(snap_cls)) if scls in ranking_set] 
+            for snap_cls in snapshot_classes
         ]
         snapshot_features = [
             snapshot_features[snap_idx] for snap_idx in snap_indices
         ]
-        logging.info("filtered snapshot classes: "+'/'.join([','.join(sc) for sc in snapshot_classes]))
+        # logging.info("filtered snapshot classes: "+'/'.join([','.join(sc) for sc in snapshot_classes]))
         # Note that if apply prefiltering, we may have #(objects) < object_index
         # 4. reassign object_index = #(object)
         snapshot_index = len(snapshot_classes)
@@ -261,9 +268,9 @@ def prepare_snapshot_input(
     text = "These are the snapshots:\n"
     for i, class_names in enumerate(snapshot_classes):
         text += f"placeholder {i} "
-        class_names_set = set(class_names)
+        #class_names_set = set(class_names)
         # yuncong TODO: align this with the model later
-        for class_name in class_names_set:
+        for class_name in class_names:
             text += f"{class_name}, "
         text += "<scene> "
 
@@ -468,7 +475,7 @@ def get_item(tokenizer, step_dict):
             step["question"],
             tokenizer,
             list(seen_classes),
-            1024,
+            2048,
             step["top_k_categories"],
         )
         selection_dict = EasyDict(

@@ -1,18 +1,18 @@
 # General
 seed: 66
-exp_name: exp_new_val_snapshots_openeqa
+exp_name: exp_new_val_snapshots_filter_openeqa_every_3
 output_parent_dir: /work/pi_chuangg_umass_edu/yuncong/results
 scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
 scene_data_path: /work/pi_chuangg_umass_edu/yuncong/data/scene_datasets/hm3d/
 semantic_bbox_data_path: '/home/yuncongyang_umass_edu/scene_understanding/hm3d_obj_bbox_merged'
 detection_model_name: "yolo_world/x"
 questions_list_path: 'data/generated_questions-eval.json'
-model_path: /work/pi_chuangg_umass_edu/yuncong/snapshots_pos_ego_2.pt
+model_path: /work/pi_chuangg_umass_edu/yuncong/snapshots_filter_top10_rand_pos_ego_3.pt
 
-choose_every_step: false
+choose_every_step: true
 egocentric_views: true
 action_memory: false
-prefiltering: false
+prefiltering: true
 top_k_categories: 10
 
 add_positional_encodings: true
@@ -27,12 +27,12 @@ tsdf_grid_size: 0.1
 margin_w_ratio: 0.25
 margin_h_ratio: 0.6
 
-save_visualization: true
-save_frontier_video: true
+save_visualization: false
+save_frontier_video: false
 
 # Navigation
 init_clearance: 0.3
-max_step_room_size_ratio: 8
+max_step_room_size_ratio: 3
 extra_view_phase_1: 4
 extra_view_angle_deg_phase_1: 60
 max_target_observation: 4

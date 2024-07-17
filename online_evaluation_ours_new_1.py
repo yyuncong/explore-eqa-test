@@ -54,10 +54,10 @@ def infer_prefilter(model, tokenizer, sample):
         return None
     answer_ind = torch.where(sample.filter_input_ids==22550)[1][0].item()
     filter_input_ids = filter_input_ids[:, :answer_ind+2]
-    logging.info('prefiltering prompt')
-    logging.info(
-        tokenizer.decode(filter_input_ids[0][filter_input_ids[0] != tokenizer.pad_token_id])
-    )
+    # logging.info('prefiltering prompt')
+    # logging.info(
+    #     tokenizer.decode(filter_input_ids[0][filter_input_ids[0] != tokenizer.pad_token_id])
+    # )
     with torch.no_grad():
         with torch.inference_mode() and torch.autocast(device_type="cuda"):
             filter_output_ids = model.generate(
@@ -69,7 +69,7 @@ def infer_prefilter(model, tokenizer, sample):
     # parse the prefilter output
         filter_outputs = tokenizer.decode(filter_output_ids[0, filter_input_ids.shape[1]:]).replace("</s>", "").strip()
     # print("the output of prefiltering", filter_outputs)
-    logging.info(f"prefiltering output: {filter_outputs}")
+    # logging.info(f"prefiltering output: {filter_outputs}")
     if filter_outputs == "No object available":
         return []
     else:

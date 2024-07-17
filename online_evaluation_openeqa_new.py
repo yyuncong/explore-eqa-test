@@ -211,9 +211,6 @@ def main(cfg):
 
         # Extract question
         scene_id = question_data["episode_history"]
-        # TODO: leave this scene out for now (no extracted features)
-        if scene_id in ["00802-wcojb4TFT35"]:
-            continue
         init_pts = question_data["position"]
         init_quat = quaternion.quaternion(*question_data["rotation"])
         logging.info(f"\n========\nIndex: {question_idx} Scene: {scene_id}")

@@ -245,11 +245,12 @@ def prepare_snapshot_input(
             for snap_idx in range(snapshot_index)
             if len(set(snapshot_classes[snap_idx]) & ranking_set) > 0
         ]
-        logging.info("snap_indices: "+' '.join([str(idx) for idx in snap_indices]))
+        #logging.info("snap_indices: "+' '.join([str(idx) for idx in snap_indices]))
         # logging.info("raw snapshot classes: "+'/'.join([','.join(sc) for sc in snapshot_classes]))
         snapshot_classes = [
             snapshot_classes[snap_idx] for snap_idx in snap_indices
         ]
+        #print("snapshot classes before filtering", snapshot_classes)
         #snapshot_classes = [
         #    set(sc)&ranking_set for sc in snapshot_classes
         #]
@@ -257,6 +258,7 @@ def prepare_snapshot_input(
             [scls for scls in list(dict.fromkeys(snap_cls)) if scls in ranking_set] 
             for snap_cls in snapshot_classes
         ]
+        #print("snapshot classes after filtering", snapshot_classes)
         snapshot_features = [
             snapshot_features[snap_idx] for snap_idx in snap_indices
         ]
@@ -268,9 +270,10 @@ def prepare_snapshot_input(
     text = "These are the snapshots:\n"
     for i, class_names in enumerate(snapshot_classes):
         text += f"placeholder {i} "
-        #class_names_set = set(class_names)
-        # yuncong TODO: align this with the model later
-        for class_name in class_names:
+        class_names_set = set(class_names)
+        class_names_list = list(class_names_set)
+        sorted_class_names = sorted(class_names_list)
+        for class_name in sorted_class_names:
             text += f"{class_name}, "
         text += "<scene> "
 

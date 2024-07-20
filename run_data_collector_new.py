@@ -460,6 +460,8 @@ def main(cfg):
                     num_snapshot = len(step_dict["snapshots"])
                     chosen_idx = np.argwhere(np.array(step_dict["prediction"]) > 0.5).squeeze()
                     print(f'!!!!!! {chosen_idx} !!!!!!!')
+                    assert len(chosen_idx) == 1, f"{len(chosen_idx)} != 1"
+                    chosen_idx = chosen_idx[0]
                     if chosen_idx >= num_snapshot:
                         chosen_idx -= num_snapshot
                         assert step_dict["frontiers"][chosen_idx]["rgb_id"] == max_point_choice.image, f"{step_dict['frontiers'][chosen_idx]['rgb_id']} != {max_point_choice.image}"

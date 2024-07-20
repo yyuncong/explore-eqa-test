@@ -727,6 +727,12 @@ def main(cfg):
                 for snapshot in tsdf_planner.snapshots.values():
                     total_objs_count += len(snapshot.selected_obj_list)
                 assert len(tsdf_planner.simple_scene_graph) == total_objs_count, f"{len(tsdf_planner.simple_scene_graph)} != {total_objs_count}"
+                for obj_id in tsdf_planner.simple_scene_graph.keys():
+                    exist_count = 0
+                    for ss in step_dict["snapshots"]:
+                        if obj_id in ss["obj_ids"]:
+                            exist_count += 1
+                    assert exist_count == 1, f"{exist_count} != 1 for obj_id {obj_id}, {object_id_to_name[obj_id]}"
 
                 # save the ground truth choice
                 if type(max_point_choice) == SnapShot:
@@ -751,6 +757,18 @@ def main(cfg):
                 step_dict["previous_choice"] = previous_choice_path  # this could be None or an image path of the frontier in last step
                 if type(max_point_choice) == Frontier:
                     previous_choice_path = max_point_choice.image
+
+                # sanity check
+                num_frontier = len(step_dict["frontiers"])
+                num_snapshot = len(step_dict["snapshots"])
+                chosen_idx = np.argwhere(np.array(step_dict["prediction"]) > 0.5).squeeze()
+                if chosen_idx >= num_snapshot:
+                    chosen_idx -= num_snapshot
+                    assert step_dict["frontiers"][chosen_idx]["rgb_id"] == max_point_choice.image, f"{step_dict['frontiers'][chosen_idx]['rgb_id']} != {max_point_choice.image}"
+                    assert type(max_point_choice) == Frontier, f"{type(max_point_choice)} != Frontier"
+                else:
+                    assert step_dict["snapshots"][chosen_idx]["img_id"] == max_point_choice.image, f"{step_dict['snapshots'][chosen_idx]['img_id']} != {max_point_choice.image}"
+                    assert type(max_point_choice) == SnapShot, f"{type(max_point_choice)} != SnapShot"
 
                 # Save step data
                 with open(os.path.join(episode_data_dir, f"{cnt_step:04d}.json"), "w") as f:

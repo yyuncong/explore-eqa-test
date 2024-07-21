@@ -430,6 +430,7 @@ def get_random_observe_point(point, unoccupied_map, min_dist=15, max_dist=30):
     unoccupied_coords = np.argwhere(unoccupied_map)  # [N, 2]
     dists = np.linalg.norm(unoccupied_coords - point, axis=1)  # [N]
     valid_coords = unoccupied_coords[(dists > min_dist) & (dists < max_dist)]  # [N, 2]
+    H, W = unoccupied_map.shape
 
     if len(valid_coords) == 0:
         logging.error(f"Error in get_random_observe_point: no unoccupied points for {min_dist}-{max_dist} distance around point {point}")
@@ -452,6 +453,10 @@ def get_random_observe_point(point, unoccupied_map, min_dist=15, max_dist=30):
             target_point_adjusted = target_point_adjusted - direction
             if try_count_step_back > max_dist * 2:
                 logging.error(f"Error in get_random_observe_point: cannot backtrace from {point} to {potential_obs_point}!")
+                adjust_success = False
+                break
+            if not (0 <= target_point_adjusted[0] < H and 0 <= target_point_adjusted[1] < W):
+                logging.error(f"Error in get_random_observe_point: adjusted point {target_point_adjusted} is out of the map of shape {unoccupied_map.shape}")
                 adjust_success = False
                 break
         if not adjust_success:
@@ -665,6 +670,7 @@ def get_proper_snapshot_observation_point(
     cos_values = np.dot(valid_coords - snapshot_center, short_axis) / np.linalg.norm(valid_coords - snapshot_center, axis=1)
     indices_rank  = np.argsort(cos_values)
     target_obs_point = None
+    H, W = unoccupied_map.shape
     for idx in indices_rank:
         potential_obs_point = valid_coords[idx]
 
@@ -680,6 +686,10 @@ def get_proper_snapshot_observation_point(
             snapshot_center_adjusted = snapshot_center_adjusted - direction
             if try_count_step_back > max_obs_dist * 2:
                 logging.error(f"Error in get_random_snapshot_observation_point: cannot backtrace from {snapshot_center} to {potential_obs_point}!")
+                adjust_success = False
+                break
+            if not (0 <= snapshot_center_adjusted[0] < H and 0 <= snapshot_center_adjusted[1] < W):
+                logging.error(f"Error in get_random_snapshot_observation_point: adjusted point {snapshot_center_adjusted} is out of the map of shape {unoccupied_map.shape}")
                 adjust_success = False
                 break
         if not adjust_success:
@@ -756,6 +766,7 @@ def get_random_snapshot_observation_point(
     # randomly pick a point in the  valid_coords, and check its validity
     try_count_pick = 0
     target_obs_point = None
+    H, W = unoccupied_map.shape
     while True:
         try_count_pick += 1
         if try_count_pick > 100:
@@ -776,6 +787,10 @@ def get_random_snapshot_observation_point(
             snapshot_center_adjusted = snapshot_center_adjusted - direction
             if try_count_step_back > max_obs_dist * 2:
                 logging.error(f"Error in get_random_snapshot_observation_point: cannot backtrace from {snapshot_center} to {potential_obs_point}!")
+                adjust_success = False
+                break
+            if not (0 <= snapshot_center_adjusted[0] < H and 0 <= snapshot_center_adjusted[1] < W):
+                logging.error(f"Error in get_random_snapshot_observation_point: adjusted point {snapshot_center_adjusted} is out of the map of shape {unoccupied_map.shape}")
                 adjust_success = False
                 break
         if not adjust_success:

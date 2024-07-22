@@ -648,6 +648,7 @@ def main(cfg):
             explore_dist += np.linalg.norm(pts_pixs[-1] - pts_pixs[-2]) * tsdf_planner._voxel_size
 
             if type(max_point_choice) == SnapShot and target_arrived:
+                # observe the snapshot at the target point
                 agent_state_obs = habitat_sim.AgentState()
                 agent_state_obs.position = pts
                 agent_state_obs.rotation = rotation
@@ -657,6 +658,10 @@ def main(cfg):
                 plt.imsave(
                     os.path.join(episode_object_observe_dir, f"target_{target_observation_count}.png"), rgb
                 )
+                # also, save the snapshot image itself
+                snapshot_filename = max_point_choice.image.split(".")[0]
+                os.system(f"cp {os.path.join(episode_snapshot_dir, max_point_choice.image)} {os.path.join(episode_object_observe_dir, f'snapshot_{snapshot_filename}.png')}")
+
                 target_observation_count += 1
                 if target_observation_count >= max_target_observation:
                     target_found = True

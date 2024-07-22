@@ -663,7 +663,7 @@ def get_proper_snapshot_observation_point(
     dists = np.linalg.norm(unoccupied_coords - snapshot_center, axis=1)  # [N]
     valid_coords = unoccupied_coords[(dists > min_obs_dist) & (dists < max_obs_dist)]  # [N, 2]
     if len(valid_coords) == 0:
-        logging.error(f"Error in get_random_snapshot_observation_point: no unoccupied points for {min_obs_dist}-{max_obs_dist} distance around snapshot center {snapshot_center}")
+        logging.error(f"Error in get_proper_snapshot_observation_point: no unoccupied points for {min_obs_dist}-{max_obs_dist} distance around snapshot center {snapshot_center}")
         return None
 
     # get the point that is the most opposite to the short axis
@@ -685,11 +685,11 @@ def get_proper_snapshot_observation_point(
             try_count_step_back += 1
             snapshot_center_adjusted = snapshot_center_adjusted - direction
             if try_count_step_back > max_obs_dist * 2:
-                logging.error(f"Error in get_random_snapshot_observation_point: cannot backtrace from {snapshot_center} to {potential_obs_point}!")
+                logging.error(f"Error in get_proper_snapshot_observation_point: cannot backtrace from {snapshot_center} to {potential_obs_point}!")
                 adjust_success = False
                 break
             if not (0 <= snapshot_center_adjusted[0] < H and 0 <= snapshot_center_adjusted[1] < W):
-                logging.error(f"Error in get_random_snapshot_observation_point: adjusted point {snapshot_center_adjusted} is out of the map of shape {unoccupied_map.shape}")
+                logging.error(f"Error in get_proper_snapshot_observation_point: adjusted point {snapshot_center_adjusted} is out of the map of shape {unoccupied_map.shape}")
                 adjust_success = False
                 break
         if not adjust_success:
@@ -708,7 +708,7 @@ def get_proper_snapshot_observation_point(
             break
 
     if target_obs_point is None:
-        logging.error(f"Error in get_random_snapshot_observation_point: cannot find a proper observation point!")
+        logging.error(f"Error in get_proper_snapshot_observation_point: cannot find a proper observation point among {len(indices_rank)} candidates!")
         return None
 
     return target_obs_point
@@ -809,7 +809,7 @@ def get_random_snapshot_observation_point(
             break
 
     if target_obs_point is None:
-        logging.error(f"Error in get_random_snapshot_observation_point: cannot find a proper observation point!")
+        logging.error(f"Error in get_random_snapshot_observation_point: cannot find a proper observation point among {len(valid_coords)} candidates!")
         return None
 
     return target_obs_point

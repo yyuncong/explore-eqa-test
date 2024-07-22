@@ -74,13 +74,13 @@ def main(cfg):
         all_questions_in_scene = [q for q in questions_data if q["episode_history"] == scene_id]
 
         ##########################################################
-        # if '00324' not in scene_id:
+        # if '00732' not in scene_id:
         #     continue
         # if int(scene_id.split("-")[0]) >= 800:
         #     continue
         # rand_q = np.random.randint(0, len(all_questions_in_scene) - 1)
         # all_questions_in_scene = all_questions_in_scene[rand_q:rand_q+1]
-        # all_questions_in_scene = [q for q in all_questions_in_scene if '00324-DoSbsoo4EAg_225_refrigerator_695510' in q['question_id'] or '00324-DoSbsoo4EAg_199_armchair_322059' in q['question_id']]
+        # all_questions_in_scene = [q for q in all_questions_in_scene if '00732-Z2DQddYp1fn_60_bed_table_338871' in q['question_id']]
         # if len(all_questions_in_scene) == 0:
         #     continue
         # random.shuffle(all_questions_in_scene)

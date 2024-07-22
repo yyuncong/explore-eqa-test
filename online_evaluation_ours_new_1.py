@@ -36,7 +36,16 @@ from src.habitat import (
 from src.geom import get_cam_intr, get_scene_bnds, get_collision_distance
 from src.tsdf_new import TSDFPlanner, Frontier, SnapShot
 #from src.eval_utils_snapshot import prepare_step_dict, get_item, encode, load_scene_features, rgba2rgb, load_checkpoint, collate_wrapper, construct_selection_prompt
-from src.eval_utils_snapshot_new import prepare_step_dict, get_item, encode, load_scene_features, rgba2rgb, load_checkpoint, collate_wrapper, construct_selection_prompt
+from src.eval_utils_snapshot_new import (
+    prepare_step_dict, 
+    get_item, 
+    encode, 
+    load_scene_features, 
+    rgba2rgb, load_checkpoint, 
+    collate_wrapper, 
+    construct_selection_prompt,
+    merge_patches,
+)
 from src.eval_utils_snapshot_new import SCENE_TOKEN
 from inference.models import YOLOWorld
 
@@ -86,12 +95,11 @@ def infer_selection(model, tokenizer, sample):
         scene_length = sample.scene_length,
     )
     input_ids = sample.input_ids.to("cuda")
-    '''
-    logging.info('final input to the model')
-    logging.info(
-        tokenizer.decode(input_ids[0][input_ids[0] != tokenizer.pad_token_id])
-    )
-    '''
+
+    # logging.info('final input to the model')
+    # logging.info(
+    #     tokenizer.decode(input_ids[0][input_ids[0] != tokenizer.pad_token_id])
+    # )
     
     # input()
     # the loss of : exists in infer_selection
@@ -119,6 +127,9 @@ def inference(model, tokenizer, step_dict, cfg):
     #step_dict["use_action_memory"] = cfg.action_memory
     step_dict["top_k_categories"] = cfg.top_k_categories
     step_dict["add_positional_encodings"] = cfg.add_positional_encodings
+
+    num_visual_tokens = (cfg.visual_feature_size // cfg.patch_size) ** 2
+    step_dict["num_visual_tokens"] = num_visual_tokens
     # print("pos", step_dict["add_positional_encodings"])
     # try:
     sample = get_item(
@@ -140,7 +151,7 @@ def inference(model, tokenizer, step_dict, cfg):
             selection_dict.frontier_text,
             selection_dict.frontier_features,
             selection_dict.snapshot_info_dict,
-            2048,
+            4096,
             True,
             filter_outputs,
             cfg.top_k_categories
@@ -394,7 +405,11 @@ def main(cfg):
                         )
                     if object_added:
                         with torch.no_grad():
-                            img_feature = encode(model, image_processor, rgb).mean(1)
+                            img_feature = encode(model, image_processor, rgb).mean(0)
+                        img_feature = merge_patches(
+                            img_feature.view(cfg.visual_feature_size, cfg.visual_feature_size, -1), 
+                            cfg.patch_size
+                        )
                         all_snapshot_features[obs_file_name] = img_feature.to("cpu")
                         if cfg.save_visualization or cfg.save_frontier_video:
                             plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), rgb)
@@ -471,7 +486,11 @@ def main(cfg):
                             )
                         processed_rgb = rgba2rgb(frontier_obs)
                         with torch.no_grad():
-                            img_feature = encode(model, image_processor, processed_rgb).mean(1)
+                            img_feature = encode(model, image_processor, processed_rgb).mean(0)
+                        img_feature = merge_patches(
+                            img_feature.view(cfg.visual_feature_size, cfg.visual_feature_size, -1), 
+                            cfg.patch_size
+                        )
                         assert img_feature is not None
                         frontier.image = f"{cnt_step}_{i}.png"
                         frontier.feature = img_feature
@@ -511,7 +530,11 @@ def main(cfg):
                         for rgb_view in rgb_egocentric_views:
                             processed_rgb = rgba2rgb(rgb_view)
                             with torch.no_grad():
-                                img_feature = encode(model, image_processor, processed_rgb).mean(1)
+                                img_feature = encode(model, image_processor, processed_rgb).mean(0)
+                            img_feature = merge_patches(
+                                img_feature.view(cfg.visual_feature_size, cfg.visual_feature_size, -1), 
+                                cfg.patch_size
+                            )
                             egocentric_views_features.append(img_feature)
                         egocentric_views_features = torch.cat(egocentric_views_features, dim=0)
                         step_dict["egocentric_view_features"] = egocentric_views_features.to("cpu")
@@ -567,7 +590,7 @@ def main(cfg):
                                 break
                             target_index = snapshot_id_mapping[int(target_index)]
                             logging.info(f"The index of target snapshot {target_index}")
-                        if int(target_index) < 0 or int(target_index) >= len(tsdf_planner.simple_scene_graph):
+                        if int(target_index) < 0 or int(target_index) >= len(list(tsdf_planner.snapshots.values())):
                             logging.info(f"Prediction out of range: {target_index}, {len(tsdf_planner.simple_scene_graph)}, failed!")
                             break
                         pred_target_snapshot = list(tsdf_planner.snapshots.values())[int(target_index)]

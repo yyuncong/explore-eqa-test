@@ -59,6 +59,23 @@ def positionalencoding2d(d_model, height, width):
 
 PE = positionalencoding2d(1024, NUM_BINS, NUM_BINS)
 
+def merge_patches(patches, patch_size):
+    num_patches, num_patches, patch_dim = patches.shape
+    new_num_patches = num_patches // patch_size
+    assert num_patches % patch_size == 0
+    patches = patches.view(
+        new_num_patches,
+        patch_size,
+        new_num_patches,
+        patch_size,
+        patch_dim,
+    )
+    patches = patches.permute(0, 2, 1, 3, 4).reshape(
+        new_num_patches, new_num_patches, patch_size ** 2, patch_dim
+    ).mean(-2)
+    patches = patches.view(new_num_patches * new_num_patches, patch_dim)
+    return patches
+
 def discretize_coordinates(coords, num_bins=128, coord_range=(-10, 10)):
     # Ensure coords is a torch tensor
     if not isinstance(coords, torch.Tensor):
@@ -165,14 +182,14 @@ def encode(model, image_processor, img):
 
 # jiachen TODO: add prefiltering and parts from eval_dataset here
 def prepare_prompt_before_snapshot(step):
-    
+    num_visual_tokens = step["num_visual_tokens"]
     text =  f"Question: {step['question']}\n" 
     multi_src_feature = []
     if step.get("use_egocentric_views") is True:
         text += "Followings are the egocentric views:\n "
         for i in range(len(step["egocentric_view_features"])):
-            text += f"<scene> "
-        text += "/\n"
+            text += f"<scene>"
+        text += " /\n"
         egocentric_features = step["egocentric_view_features"]
         if step.get("add_positional_encodings") is True:
             egocentric_positions = torch.cat(
@@ -203,14 +220,17 @@ def prepare_prompt_before_snapshot(step):
     return text, multi_src_feature
 
 def prepare_frontier(step):
-    
+    num_visual_tokens = step["num_visual_tokens"]
     text = "Below are all the frontiers that we can explore:\n"
     if len(step['frontiers']) > 0:
         for i, frontier in enumerate(step['frontiers']):
-            text += f"frontier {i} <scene> "
+            text += f"frontier {i} "
+            for _ in range(num_visual_tokens):
+                text += f"<scene>"
+            text += " / "
     else:
         text += f"No frontier available "
-    text += "/\n"
+    text += "\n"
     frontier_features = step["frontier_features"]
     if len(step['frontiers']) > 0 and step.get("add_positional_encodings") is True:
         frontier_positions = torch.tensor(step["frontier_positions"])
@@ -227,6 +247,7 @@ def prepare_snapshot_input(
     prefiltering,
     ranking,
     topk,
+    num_visual_tokens,
 ):
     import logging
     snapshot_index = len(snapshot_classes)
@@ -269,13 +290,15 @@ def prepare_snapshot_input(
 
     text = "These are the snapshots:\n"
     for i, class_names in enumerate(snapshot_classes):
-        text += f"placeholder {i} "
+        text += f"snapshot {i} "
         class_names_set = set(class_names)
         class_names_list = list(class_names_set)
         sorted_class_names = sorted(class_names_list)
         for class_name in sorted_class_names:
             text += f"{class_name}, "
-        text += "<scene> "
+        for _ in range(num_visual_tokens):
+            text += "<scene>"
+        text += " / "
 
     if snapshot_index == 0:
         text += f"No snapshot available "
@@ -283,7 +306,7 @@ def prepare_snapshot_input(
         snapshot_features = None
     else:
         snapshot_features = torch.cat(snapshot_features, dim=0)
-    text += "/\n"
+    text += "\n"
     return text, snapshot_features, snapshot_index, snap_indices
 
 def prepare_prefiltering_prompt(question, tokenizer, classes, max_length, topk):
@@ -342,7 +365,8 @@ def construct_selection_prompt(
     prefiltering,
     # parse result of prefiltering output
     ranking,
-    topk
+    topk,
+    num_visual_tokens,
 ):
     snapshot_text, snapshot_features, snapshot_index, snapshot_id_mapping = prepare_snapshot_input(
         snapshot_info_dict.seen_classes,
@@ -350,7 +374,8 @@ def construct_selection_prompt(
         snapshot_info_dict.features,
         prefiltering,
         ranking,
-        topk
+        topk,
+        num_visual_tokens,
     )
     
     text = text_before_snapshot + snapshot_text + frontier_text
@@ -361,7 +386,6 @@ def construct_selection_prompt(
     text += "Answer: "
     # print("snapshot", tokenizer.encode("snapshot"))
     # print("placeholder", tokenizer.encode("placeholder"))
-    
     text = tokenizer(
         text,
         return_tensors="pt",
@@ -371,9 +395,16 @@ def construct_selection_prompt(
     )
     input_ids = text["input_ids"]
     # replace the placeholder token with the snapshot token
-    snapshot_token_id = tokenizer("snapshot").input_ids[-1]
-    placeholder_token_id = 27074
-    input_ids[input_ids == placeholder_token_id] = snapshot_token_id
+    # snapshot_token_id = tokenizer("frame").input_ids[-1]
+    # print(tokenizer("frame").input_ids)
+    # print(tokenizer("<scene> / frame").input_ids)
+    # print(tokenizer("frontier").input_ids)
+    # print(tokenizer("<scene> / frontier").input_ids)
+    # print(tokenizer.decode(8862))
+    # print(tokenizer.decode(631))
+    # input()
+    # placeholder_token_id = 27074
+    # input_ids[input_ids == placeholder_token_id] = snapshot_token_id
     length = torch.nonzero(input_ids).shape[0]
 
     # print('length', length)
@@ -506,10 +537,11 @@ def get_item(tokenizer, step_dict):
             frontier_text,
             frontier_features,
             snapshot_info_dict,
-            2048,
+            4096,
             False,
             None,
-            None
+            None,
+            step["num_visual_tokens"],
         )
         batch = [input_dict]
         # print('before wrap up')

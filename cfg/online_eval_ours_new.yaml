@@ -18,6 +18,7 @@ egocentric_views: true
 action_memory: false
 prefiltering: false
 top_k_categories: 10
+not_observe_snapshot: false
 
 add_positional_encodings: true
 

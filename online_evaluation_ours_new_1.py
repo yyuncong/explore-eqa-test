@@ -597,6 +597,28 @@ def main(cfg):
                         logging.info(f"Question id {question_id} invalid: no valid choice!")
                         break
 
+                    if type(max_point_choice) == SnapShot and cfg.not_observe_snapshot:
+                        # then just check the correctness of the snapshot and finish this question
+                        # save the snapshot as the observation
+                        os.system(f"cp {os.path.join(episode_snapshot_dir, max_point_choice.image)} {os.path.join(episode_object_observe_dir, 'target.png')}")
+
+                        # check whether the target object is in the selected snapshot
+                        if target_obj_id in max_point_choice.selected_obj_list:
+                            logging.info(f"{target_obj_id} in Chosen snapshot {max_point_choice.image}! Success!")
+                            target_found = True
+                        else:
+                            logging.info(f"Question id {question_id} choose the wrong snapshot! Failed!")
+
+                        # check whether the class of the target object is the same as the class of the selected snapshot
+                        for ss_obj_id in max_point_choice.selected_obj_list:
+                            if object_id_to_name[ss_obj_id] == object_id_to_name[target_obj_id]:
+                                same_class_count += 1
+                                break
+
+                        # get the distance between current position to target observation position
+                        dist_from_chosen_to_target = np.linalg.norm(pts - target_obs_pos)
+                        break
+
                     update_success = tsdf_planner.set_next_navigation_point(
                         choice=max_point_choice,
                         pts=pts_normal,

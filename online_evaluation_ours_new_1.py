@@ -213,6 +213,9 @@ def main(cfg):
     question_ind = 0
     success_count = 0
     same_class_count = 0
+    wrong_snapshot_count = 0
+    too_many_steps_count = 0
+    other_errors_count = 0
 
     success_list = []
     path_length_list = []
@@ -765,6 +768,15 @@ def main(cfg):
             else:
                 success_list.append(0)
                 logging.info(f"Question id {question_id} failed, {explore_dist} length")
+
+                if dist_from_chosen_to_target is not None:
+                    # meaning that there is a snapshot chosen but the target object is not in the snapshot
+                    wrong_snapshot_count += 1
+                elif cnt_step >= num_step - 1:
+                    too_many_steps_count += 1
+                else:
+                    other_errors_count += 1
+
             path_length_list.append(explore_dist)
             if dist_from_chosen_to_target is not None:
                 dist_from_chosen_to_target_list.append(dist_from_chosen_to_target)
@@ -775,6 +787,9 @@ def main(cfg):
             logging.info(f"Mean path length for success exploration: {np.mean([x for i, x in enumerate(path_length_list) if success_list[i] == 1])}")
             logging.info(f"Mean path length for all exploration: {np.mean(path_length_list)}")
             logging.info(f"Mean distance from final position to target observation position: {np.mean(dist_from_chosen_to_target_list)}")
+            logging.info(f"Wrong snapshot count: {wrong_snapshot_count}/{question_ind - success_count}")
+            logging.info(f"Too many steps count: {too_many_steps_count}/{question_ind - success_count}")
+            logging.info(f"Other errors count: {other_errors_count}/{question_ind - success_count}")
             logging.info(f"#######################################################\n")
 
         logging.info(f'Scene {scene_id} finish')
@@ -785,6 +800,9 @@ def main(cfg):
     result_dict["mean_path_length"] = np.mean(path_length_list)
     result_dict["mean_success_path_length"] = np.mean([x for i, x in enumerate(path_length_list) if success_list[i] == 1])
     result_dict["mean_distance_from_chosen_to_target"] = np.mean(dist_from_chosen_to_target_list)
+    result_dict["wrong_snapshot_ratio"] = wrong_snapshot_count / (question_ind - success_count)
+    result_dict["too_many_steps_ratio"] = too_many_steps_count / (question_ind - success_count)
+    result_dict["other_errors_ratio"] = other_errors_count / (question_ind - success_count)
     with open(os.path.join(cfg.output_dir, "result.json"), "w") as f:
         json.dump(result_dict, f, indent=4)
 

@@ -642,7 +642,7 @@ def main(cfg):
                                 break
 
                         # get the distance between current position to target observation position
-                        dist_from_chosen_to_target = np.linalg.norm(pts - target_obs_pos)
+                        dist_from_chosen_to_target = np.linalg.norm(np.asarray(pts) - np.asarray(target_obs_pos))
                         break
 
                     update_success = tsdf_planner.set_next_navigation_point(

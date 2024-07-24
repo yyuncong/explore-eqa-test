@@ -605,10 +605,9 @@ def main(cfg):
                                 "pred_target_class: "+str(' '.join([object_id_to_name[obj_id] for obj_id in pred_target_snapshot.selected_obj_list]))
                             )
 
-                            logging.info(f"Next choice Snapshot")
                             tsdf_planner.frontiers_weight = np.zeros((len(tsdf_planner.frontiers)))
-                            # TODO: where to go if snapshot?
                             max_point_choice = pred_target_snapshot
+                            logging.info(f"Next choice: Snapshot {max_point_choice.image}")
                         else:
                             target_index = int(target_index)
                             if target_index not in vlm_id_to_ft_id.keys():
@@ -616,9 +615,9 @@ def main(cfg):
                                 break
                             target_index = vlm_id_to_ft_id[target_index]
                             target_point = tsdf_planner.frontiers[target_index].position
-                            logging.info(f"Next choice: Frontier at {target_point}")
                             tsdf_planner.frontiers_weight = np.zeros((len(tsdf_planner.frontiers)))
                             max_point_choice = tsdf_planner.frontiers[target_index]
+                            logging.info(f"Next choice: Frontier at {target_point}, {max_point_choice.image}")
 
                             # TODO: modify this: update memory feature only in frontiers (for now)
                             memory_feature = tsdf_planner.frontiers[target_index].feature.to("cpu")

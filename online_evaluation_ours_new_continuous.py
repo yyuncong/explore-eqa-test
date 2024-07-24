@@ -331,6 +331,7 @@ def main(cfg):
             )
 
             all_snapshot_features = {}
+            total_step = 0
 
 
             for question_id in all_question_id_in_floor:
@@ -372,7 +373,8 @@ def main(cfg):
 
                 while cnt_step < num_step - 1:
                     cnt_step += 1
-                    logging.info(f"\n== step: {cnt_step}")
+                    total_step += 1
+                    logging.info(f"\n== current step: {cnt_step}, total step {total_step} ==")
                     step_dict = {}
                     angle_increment = cfg.extra_view_angle_deg_phase_1 * np.pi / 180
                     total_views = 1 + cfg.extra_view_phase_1
@@ -409,7 +411,7 @@ def main(cfg):
                         rgb_egocentric_views.append(rgb)
 
                         # collect all view features
-                        obs_file_name = f"{cnt_step}-view_{view_idx}.png"
+                        obs_file_name = f"{total_step}-view_{view_idx}.png"
                         with torch.no_grad():
                             object_added, annotated_rgb = tsdf_planner.update_scene_graph(
                                 detection_model=detection_model,
@@ -496,14 +498,14 @@ def main(cfg):
 
                             if cfg.save_frontier_video or cfg.save_visualization:
                                 plt.imsave(
-                                    os.path.join(episode_frontier_dir, f"{cnt_step}_{i}.png"),
+                                    os.path.join(episode_frontier_dir, f"{total_step}_{i}.png"),
                                     frontier_obs,
                                 )
                             processed_rgb = rgba2rgb(frontier_obs)
                             with torch.no_grad():
                                 img_feature = encode(model, image_processor, processed_rgb).mean(1)
                             assert img_feature is not None
-                            frontier.image = f"{cnt_step}_{i}.png"
+                            frontier.image = f"{total_step}_{i}.png"
                             frontier.feature = img_feature
 
                     if cfg.choose_every_step:

@@ -281,16 +281,19 @@ def main(cfg):
 
         # get the floor height for each question
         n_floors = scene_floor_heights[scene_id]['num_point_cluster']
-        floor_heights_map = {}
-        for question_id in all_question_id_in_scene:
-            floor_heights_map[question_id] = question_file[question_id.split('_path')[0]]['position'][1]
-        all_heights = list(floor_heights_map.values())
-        hist, bin_edges = np.histogram(all_heights, bins=n_floors)
-        questions_per_floor = []
-        for l_edge, r_edge in zip(bin_edges[:-1], bin_edges[1:]):
-            questions_per_floor.append(
-                [question_id for question_id, height in floor_heights_map.items() if l_edge <= height < r_edge]
-            )
+        if n_floors == 1:
+            questions_per_floor = [all_question_id_in_scene]
+        else:
+            floor_heights_map = {}
+            for question_id in all_question_id_in_scene:
+                floor_heights_map[question_id] = question_file[question_id.split('_path')[0]]['position'][1]
+            all_heights = list(floor_heights_map.values())
+            hist, bin_edges = np.histogram(all_heights, bins=n_floors)
+            questions_per_floor = []
+            for l_edge, r_edge in zip(bin_edges[:-1], bin_edges[1:]):
+                questions_per_floor.append(
+                    [question_id for question_id, height in floor_heights_map.items() if l_edge <= height < r_edge]
+                )
 
         # Evaluate each question on each floor
         for floor_id, all_question_id_in_floor in enumerate(questions_per_floor):

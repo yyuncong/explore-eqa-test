@@ -690,7 +690,7 @@ def main(cfg):
                         ax2.scatter(target_center_voxel[1], target_center_voxel[0], c=color, s=120)
 
                         fig.tight_layout()
-                        plt.savefig(os.path.join(visualization_path, "{}_map.png".format(cnt_step)))
+                        plt.savefig(os.path.join(visualization_path, f"{question_id}_{cnt_step}.png"))
                         plt.close()
 
                     if cfg.save_frontier_video:
@@ -720,7 +720,7 @@ def main(cfg):
                         global_caption = f"{question}\n{answer}"
                         fig.suptitle(global_caption, fontsize=16)
                         plt.tight_layout(rect=(0., 0., 1., 0.95))
-                        plt.savefig(os.path.join(frontier_video_path, f'{cnt_step}.png'))
+                        plt.savefig(os.path.join(frontier_video_path, f'{question_id}_{cnt_step}.png'))
                         plt.close()
 
                     # update position and rotation

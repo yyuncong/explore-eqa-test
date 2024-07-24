@@ -280,7 +280,7 @@ def main(cfg):
         question_file = {item['question_id']: item for item in question_file}
 
         # get the floor height for each question
-        n_floors = len(scene_floor_heights[scene_id])
+        n_floors = scene_floor_heights[scene_id]['num_point_cluster']
         floor_heights_map = {}
         for question_id in all_question_id_in_scene:
             floor_heights_map[question_id] = question_file[question_id.split('_path')[0]]['position'][1]

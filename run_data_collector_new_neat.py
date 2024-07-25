@@ -9,31 +9,22 @@ os.environ["MAGNUM_LOG"] = "quiet"
 import numpy as np
 
 np.set_printoptions(precision=3)
-import csv
-import pickle
 import json
 import logging
 import glob
-import math
-import quaternion
 import matplotlib.pyplot as plt
 import matplotlib.image
-from PIL import Image, ImageDraw, ImageFont
-from tqdm import tqdm
-import habitat_sim
-from habitat_sim.utils.common import quat_to_coeffs, quat_from_angle_axis, quat_from_two_vectors, quat_to_angle_axis
+from habitat_sim.utils.common import quat_from_two_vectors, quat_to_angle_axis
 from src.habitat import (
-    make_semantic_cfg_new,
     pos_normal_to_habitat,
     pos_habitat_to_normal,
     pose_habitat_to_normal,
     pose_normal_to_tsdf,
     get_quaternion,
-    get_navigable_point_to_new,
-    get_frontier_observation_and_detect_target
 )
-from src.geom import get_cam_intr, get_scene_bnds, get_collision_distance
+from src.geom import get_cam_intr, get_scene_bnds
 from src.tsdf_new import TSDFPlanner, Frontier, SnapShot
+from src.scene import Scene
 from inference.models import YOLOWorld
 
 
@@ -89,49 +80,12 @@ def main(cfg):
         ##########################################################
 
         # load scene
-        split = "train" if int(scene_id.split("-")[0]) < 800 else "val"
-        scene_mesh_path = os.path.join(cfg.scene_data_path, split, scene_id, scene_id.split("-")[1] + ".basis.glb")
-        navmesh_path = os.path.join(cfg.scene_data_path, split, scene_id, scene_id.split("-")[1] + ".basis.navmesh")
-        semantic_texture_path = os.path.join(cfg.scene_data_path, split, scene_id, scene_id.split("-")[1] + ".semantic.glb")
-        scene_semantic_annotation_path = os.path.join(cfg.scene_data_path, split, scene_id, scene_id.split("-")[1] + ".semantic.txt")
-        bbox_data_path = os.path.join(cfg.semantic_bbox_data_path, scene_id + ".json")
-        if not os.path.exists(scene_mesh_path) or not os.path.exists(navmesh_path) or not os.path.exists(semantic_texture_path) or not os.path.exists(scene_semantic_annotation_path):
-            logging.info(f"Scene {scene_id} not exists")
-            continue
-        if not os.path.exists(bbox_data_path):
-            logging.info(f"Scene {scene_id} bbox data not exists")
-            continue
-
-        # assert os.path.exists(scene_mesh_path) and os.path.exists(navmesh_path), f'{scene_mesh_path}, {navmesh_path}'
-        # assert os.path.exists(semantic_texture_path) and os.path.exists(scene_semantic_annotation_path), f'{semantic_texture_path}, {scene_semantic_annotation_path}'
-
         try:
-            del tsdf_planner
-        except:
-            pass
-        try:
-            simulator.close()
+            del scene
         except:
             pass
 
-        sim_settings = {
-            "scene": scene_mesh_path,
-            "default_agent": 0,
-            "sensor_height": cfg.camera_height,
-            "width": img_width,
-            "height": img_height,
-            "hfov": cfg.hfov,
-            "scene_dataset_config_file": cfg.scene_dataset_config_path,
-            "camera_tilt": cfg.camera_tilt_deg * np.pi / 180,
-        }
-        sim_cfg = make_semantic_cfg_new(sim_settings)
-        simulator = habitat_sim.Simulator(sim_cfg)
-        pathfinder = simulator.pathfinder
-        pathfinder.seed(cfg.seed)
-        pathfinder.load_nav_mesh(navmesh_path)
-        agent = simulator.initialize_agent(sim_settings["default_agent"])
-        agent_state = habitat_sim.AgentState()
-        logging.info(f"Load scene {scene_id} successfully")
+        scene = Scene(scene_id, cfg)
 
         # load semantic object bbox data
         bounding_box_data = json.load(open(os.path.join(cfg.semantic_bbox_data_path, scene_id + ".json"), "r"))
@@ -182,12 +136,11 @@ def main(cfg):
 
                 # get a navigation start point
                 floor_height = target_position[1]
-                tsdf_bnds, scene_size = get_scene_bnds(pathfinder, floor_height)
+                tsdf_bnds, scene_size = get_scene_bnds(scene.pathfinder, floor_height)
                 scene_length = (tsdf_bnds[:2, 1] - tsdf_bnds[:1, 0]).mean()
                 min_dist = cfg.min_travel_dist
-                pathfinder.seed(random.randint(0, 1000000))
-                start_position, path_points, travel_dist = get_navigable_point_to_new(
-                    target_position, pathfinder, max_search=1000, min_dist=min_dist, max_dist=min_dist + 5,
+                start_position, path_points, travel_dist = scene.get_navigable_point_to(
+                    target_position, max_search=1000, min_dist=min_dist, max_dist=min_dist + 5,
                     prev_start_positions=prev_start_positions
                 )
                 if start_position is None or path_points is None:
@@ -268,26 +221,13 @@ def main(cfg):
 
                     # observe and update the TSDF
                     for view_idx, ang in enumerate(all_angles):
-                        agent_state.position = pts
-                        agent_state.rotation = get_quaternion(ang, 0)
-                        agent.set_state(agent_state)
-                        pts_normal = pos_habitat_to_normal(pts)
-
-                        # Update camera info
-                        sensor = agent.get_state().sensor_states["depth_sensor"]
-                        quaternion_0 = sensor.rotation
-                        translation_0 = sensor.position
-                        cam_pose = np.eye(4)
-                        cam_pose[:3, :3] = quaternion.as_rotation_matrix(quaternion_0)
-                        cam_pose[:3, 3] = translation_0
-                        cam_pose_normal = pose_habitat_to_normal(cam_pose)
-                        cam_pose_tsdf = pose_normal_to_tsdf(cam_pose_normal)
-
-                        # Get observation at current pose - skip black image, meaning robot is outside the floor
-                        obs = simulator.get_sensor_observations()
+                        obs, cam_pose = scene.get_observation(pts, ang)
                         rgb = obs["color_sensor"]
                         depth = obs["depth_sensor"]
                         semantic_obs = obs["semantic_sensor"]
+
+                        cam_pose_normal = pose_habitat_to_normal(cam_pose)
+                        cam_pose_tsdf = pose_normal_to_tsdf(cam_pose_normal)
 
                         # construct an frequency count map of each semantic id to a unique id
                         obs_file_name = f"{cnt_step}-view_{view_idx}.png"
@@ -344,11 +284,11 @@ def main(cfg):
                         else:
                             view_frontier_direction = np.asarray([pos_world[0] - pts[0], 0., pos_world[2] - pts[2]])
 
-                            frontier_obs, target_detected = get_frontier_observation_and_detect_target(
-                                agent, simulator, cfg.scene_graph, detection_model,
-                                target_obj_id=target_obj_id, target_obj_class=object_id_to_name[target_obj_id],
-                                view_frontier_direction=view_frontier_direction, init_pts=pts
+                            obs, target_detected = scene.get_frontier_observation_and_detect_target(
+                                pts, view_frontier_direction, detection_model, target_obj_id, object_id_to_name[target_obj_id],
+                                cfg.scene_graph
                             )
+                            frontier_obs = obs["color_sensor"]
                             if target_detected:
                                 frontier.target_detected = True
 
@@ -367,7 +307,7 @@ def main(cfg):
                     max_point_choice = tsdf_planner.get_next_choice(
                         pts=pts_normal,
                         path_points=path_points,
-                        pathfinder=pathfinder,
+                        pathfinder=scene.pathfinder,
                         target_obj_id=target_obj_id,
                         cfg=cfg.planner,
                     )
@@ -379,7 +319,7 @@ def main(cfg):
                         choice=max_point_choice,
                         pts=pts_normal,
                         cfg=cfg.planner,
-                        pathfinder=pathfinder,
+                        pathfinder=scene.pathfinder,
                     )
                     if not update_success:
                         logging.info(f"Question id {question_data['question_id']}-path {path_idx} invalid: set_next_navigation_point failed!")
@@ -388,7 +328,7 @@ def main(cfg):
                     return_values = tsdf_planner.agent_step(
                         pts=pts_normal,
                         angle=angle,
-                        pathfinder=pathfinder,
+                        pathfinder=scene.pathfinder,
                         cfg=cfg.planner,
                         path_points=path_points,
                         save_visualization=cfg.save_visualization,
@@ -527,12 +467,11 @@ def main(cfg):
                     if type(max_point_choice) == SnapShot and target_arrived:
                         target_found = True
                         logging.info(f"Target observation position arrived at step {cnt_step}!")
+
                         # get an observation and break
-                        agent_state.position = pts
-                        agent_state.rotation = rotation
-                        agent.set_state(agent_state)
-                        obs = simulator.get_sensor_observations()
+                        obs, _ = scene.get_observation(pts, angle)
                         rgb = obs["color_sensor"]
+
                         target_obs_save_dir = os.path.join(episode_data_dir, "target_observation")
                         os.makedirs(target_obs_save_dir, exist_ok=True)
                         plt.imsave(os.path.join(target_obs_save_dir, f"{cnt_step}_target_observation.png"), rgb)
@@ -603,10 +542,6 @@ def main(cfg):
         logging.info(f'Scene {scene_id} finish')
 
     logging.info(f'All scenes finish')
-    try:
-        simulator.close()
-    except:
-        pass
 
 
 if __name__ == "__main__":

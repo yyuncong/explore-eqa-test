@@ -15,6 +15,12 @@ import glob
 import matplotlib.pyplot as plt
 import matplotlib.image
 from habitat_sim.utils.common import quat_from_two_vectors, quat_to_angle_axis
+import open_clip
+from ultralytics import YOLO, SAM
+import hydra
+from hydra import initialize, compose
+
+
 from src.habitat import (
     pos_normal_to_habitat,
     pos_habitat_to_normal,
@@ -23,17 +29,93 @@ from src.habitat import (
     get_quaternion,
 )
 from src.geom import get_cam_intr, get_scene_bnds
-from src.tsdf_new import TSDFPlanner, Frontier, SnapShot
+from src.tsdf_new_cg import TSDFPlanner, Frontier, SnapShot
 from src.scene import Scene
 from inference.models import YOLOWorld
 
-
-'''
-This code generate object features online
-'''
+# Local application/library specific imports
+from conceptgraph.utils.optional_rerun_wrapper import (
+    OptionalReRun,
+    orr_log_annotated_image,
+    orr_log_camera,
+    orr_log_depth_image,
+    orr_log_edges,
+    orr_log_objs_pcd_and_bbox,
+    orr_log_rgb_image,
+    orr_log_vlm_image
+)
+from conceptgraph.utils.optional_wandb_wrapper import OptionalWandB
+from conceptgraph.utils.geometry import rotation_matrix_to_quaternion
+from conceptgraph.utils.logging_metrics import DenoisingTracker, MappingTracker
+from conceptgraph.utils.vlm import get_obj_rel_from_image_gpt4v, get_openai_client
+from conceptgraph.utils.ious import mask_subtract_contained
+from conceptgraph.utils.general_utils import (
+    ObjectClasses,
+    find_existing_image_path,
+    get_det_out_path,
+    get_exp_out_path,
+    get_stream_data_out_path,
+    get_vlm_annotated_image_path,
+    handle_rerun_saving,
+    load_saved_detections,
+    load_saved_hydra_json_config,
+    make_vlm_edges_and_captions,
+    measure_time,
+    save_detection_results,
+    save_hydra_config,
+    save_objects_for_frame,
+    save_pointcloud,
+    should_exit_early,
+    vis_render_image
+)
+from conceptgraph.dataset.datasets_common import get_dataset
+from conceptgraph.utils.vis import (
+    OnlineObjectRenderer,
+    save_video_from_frames,
+    vis_result_fast_on_depth,
+    vis_result_for_vlm,
+    vis_result_fast,
+    save_video_detections
+)
+from conceptgraph.slam.slam_classes import MapEdgeMapping, MapObjectList
+from conceptgraph.slam.utils import (
+    filter_gobs,
+    filter_objects,
+    get_bounding_box,
+    init_process_pcd,
+    make_detection_list_from_pcd_and_gobs,
+    denoise_objects,
+    merge_objects,
+    detections_to_obj_pcd_and_bbox,
+    prepare_objects_save_vis,
+    process_cfg,
+    process_edges,
+    process_pcd,
+    processing_needed,
+    resize_gobs
+)
+from conceptgraph.slam.mapping import (
+    compute_spatial_similarities,
+    compute_visual_similarities,
+    aggregate_similarities,
+    match_detections_to_objects,
+    merge_obj_matches
+)
+from conceptgraph.utils.model_utils import compute_clip_features_batched
+from conceptgraph.utils.general_utils import get_vis_out_path, cfg_to_dict, check_run_detections
 
 
 def main(cfg):
+    # use hydra to load concept graph related configs
+    # @hydra.main(version_base=None, config_path=cfg.concept_graph_config_path, config_name=cfg.concept_graph_config_name)
+    # def get_conceptgraph_config(conf):
+    #     conf = process_cfg(conf)
+    #     return conf
+    # cfg_cg = get_conceptgraph_config()
+
+    with initialize(config_path="conceptgraph/hydra_configs", job_name="app"):
+        cfg_cg = compose(config_name=cfg.concept_graph_config_name)
+
     img_height = cfg.img_height
     img_width = cfg.img_width
     cam_intr = get_cam_intr(cfg.hfov, img_height, img_width)
@@ -42,7 +124,7 @@ def main(cfg):
     np.random.seed(cfg.seed)
 
     # load object detection model
-    detection_model = YOLOWorld(model_id=cfg.detection_model_name)
+    detection_model_yoloworld = YOLOWorld(model_id=cfg.detection_model_name)
 
     # Load dataset
     with open(os.path.join(cfg.question_data_path, "generated_questions.json")) as f:
@@ -51,6 +133,29 @@ def main(cfg):
     questions_data = questions_data[int(args.start * len(questions_data)):int(args.end * len(questions_data))]
     all_scene_list = list(set([q["episode_history"] for q in questions_data]))
     logging.info(f"Loaded {len(questions_data)} questions.")
+
+    # we need to make sure to use the same classes as the ones used in the detections
+    detections_exp_cfg = cfg_to_dict(cfg_cg)
+    obj_classes = ObjectClasses(
+        classes_file_path=detections_exp_cfg['classes_file'],
+        bg_classes=detections_exp_cfg['bg_classes'],
+        skip_bg=detections_exp_cfg['skip_bg']
+    )
+
+    print("\n".join(["Running detections..."] * 10))
+
+    ## Initialize the detection models
+    detection_model = measure_time(YOLO)('yolov8l-world.pt')
+    sam_predictor = SAM('mobile_sam.pt')  # SAM('mobile_sam.pt') # UltraLytics SAM
+    # sam_predictor = measure_time(get_sam_predictor)(cfg) # Normal SAM
+    clip_model, _, clip_preprocess = open_clip.create_model_and_transforms(
+        "ViT-B-32", "laion2b_s34b_b79k"
+    )
+    clip_model = clip_model.to(cfg_cg.device)
+    clip_tokenizer = open_clip.get_tokenizer("ViT-B-32")
+
+    # Set the classes for the detection model
+    detection_model.set_classes(obj_classes.get_classes_arr())
 
     total_images_record = []
     top_k_images_record = {5: [], 10: [], 15: [], 20: []}
@@ -65,8 +170,8 @@ def main(cfg):
         all_questions_in_scene = [q for q in questions_data if q["episode_history"] == scene_id]
 
         ##########################################################
-        # if '00732' not in scene_id:
-        #     continue
+        if '00835' not in scene_id:
+            continue
         # if int(scene_id.split("-")[0]) >= 800:
         #     continue
         # rand_q = np.random.randint(0, len(all_questions_in_scene) - 1)
@@ -79,13 +184,18 @@ def main(cfg):
         # all_questions_in_scene = [q for q in all_questions_in_scene if "00109" in q['question_id']]
         ##########################################################
 
+        bbox_data_path = os.path.join(cfg.semantic_bbox_data_path, scene_id + ".json")
+        if not os.path.exists(bbox_data_path):
+            logging.info(f"Scene {scene_id} bbox data not exists")
+            continue
+
         # load scene
         try:
             del scene
         except:
             pass
 
-        scene = Scene(scene_id, cfg)
+        scene = Scene(scene_id, cfg, cfg_cg)
 
         # load semantic object bbox data
         bounding_box_data = json.load(open(os.path.join(cfg.semantic_bbox_data_path, scene_id + ".json"), "r"))
@@ -221,7 +331,7 @@ def main(cfg):
 
                     # observe and update the TSDF
                     for view_idx, ang in enumerate(all_angles):
-                        obs, cam_pose = scene.get_observation(pts, ang)
+                        obs, cam_pose, cam_rot = scene.get_observation(pts, ang)
                         rgb = obs["color_sensor"]
                         depth = obs["depth_sensor"]
                         semantic_obs = obs["semantic_sensor"]
@@ -231,8 +341,8 @@ def main(cfg):
 
                         # construct an frequency count map of each semantic id to a unique id
                         obs_file_name = f"{cnt_step}-view_{view_idx}.png"
-                        object_added = tsdf_planner.update_scene_graph(
-                            detection_model=detection_model,
+                        object_added, annotated_rgb = tsdf_planner.update_scene_graph(
+                            detection_model=detection_model_yoloworld,
                             rgb=rgb[..., :3],
                             semantic_obs=semantic_obs,
                             obj_id_to_name=object_id_to_name,
@@ -240,10 +350,23 @@ def main(cfg):
                             cfg=cfg.scene_graph,
                             file_name=obs_file_name,
                             obs_point=pts,
-                            return_annotated=False
+                            return_annotated=True
                         )
-                        if object_added:
-                            plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), rgb)
+
+                        plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), annotated_rgb)
+
+                        scene.update_scene_graph(
+                            image_rgb=rgb[..., :3], depth=depth, intrinsics=cam_intr, cam_pos=cam_pose,
+                            detection_model=detection_model, sam_predictor=sam_predictor, clip_model=clip_model,
+                            clip_preprocess=clip_preprocess, clip_tokenizer=clip_tokenizer,
+                            obj_classes=obj_classes, img_path=obs_file_name,
+                            frame_idx=cnt_step * total_views + view_idx,
+                            cfg=cfg_cg
+                        )
+
+                        print([(it['class_name'], it['bbox']) for it in scene.objects])
+                        print('')
+                        print([(object_id_to_name[it.object_id], it.bbox_center) for it in tsdf_planner.simple_scene_graph.values()])
 
                         # TSDF fusion
                         tsdf_planner.integrate(
@@ -285,7 +408,7 @@ def main(cfg):
                             view_frontier_direction = np.asarray([pos_world[0] - pts[0], 0., pos_world[2] - pts[2]])
 
                             obs, target_detected = scene.get_frontier_observation_and_detect_target(
-                                pts, view_frontier_direction, detection_model, target_obj_id, object_id_to_name[target_obj_id],
+                                pts, view_frontier_direction, detection_model_yoloworld, target_obj_id, object_id_to_name[target_obj_id],
                                 cfg.scene_graph
                             )
                             frontier_obs = obs["color_sensor"]
@@ -469,7 +592,7 @@ def main(cfg):
                         logging.info(f"Target observation position arrived at step {cnt_step}!")
 
                         # get an observation and break
-                        obs, _ = scene.get_observation(pts, angle)
+                        obs, _, _ = scene.get_observation(pts, angle)
                         rgb = obs["color_sensor"]
 
                         target_obs_save_dir = os.path.join(episode_data_dir, "target_observation")

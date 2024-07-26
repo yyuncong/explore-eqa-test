@@ -13,6 +13,7 @@ from omegaconf import DictConfig
 import omegaconf
 import open3d as o3d
 import torch
+import typing as tp
 
 import torch.nn.functional as F
 
@@ -26,7 +27,7 @@ from conceptgraph.utils.ious import compute_3d_iou, compute_3d_iou_accurate_batc
 tracker = MappingTracker()
 
 
-def to_scalar(d: np.ndarray | torch.Tensor | float) -> int | float:
+def to_scalar(d: tp.Union[np.ndarray, torch.Tensor, float]) -> tp.Union[int, float]:
     '''
     Convert the d to a scalar
     '''
@@ -291,7 +292,7 @@ def merge_obj2_into_obj1(obj1, obj2, downsample_voxel_size, dbscan_remove_noise,
     tracker.track_merge(obj1, obj2)
     
     # Attributes to be explicitly handled
-    extend_attributes = ['image_idx', 'mask_idx', 'color_path', 'class_id', 'mask', 'xyxy', 'conf', 'contain_number', 'captions']
+    extend_attributes = ['image_idx', 'mask_idx', 'color_path', 'class_id', 'mask', 'xyxy', 'conf', 'contain_number']
     add_attributes = ['num_detections', 'num_obj_in_class']
     skip_attributes = ['id', 'class_name', 'is_background', 'new_counter', 'curr_obj_num', 'inst_color']  # 'inst_color' just keeps obj1's
     custom_handled = ['pcd', 'bbox', 'clip_ft', 'text_ft', 'n_points']
@@ -315,11 +316,11 @@ def merge_obj2_into_obj1(obj1, obj2, downsample_voxel_size, dbscan_remove_noise,
         if attr in obj1 and attr in obj2:
             obj1[attr] += obj2[attr]
 
-    # Handling 'caption'
-    if 'caption' in obj1 and 'caption' in obj2:
-        # n_obj1_det = obj1['num_detections']
-        for key, value in obj2['caption'].items():
-            obj1['caption'][key + n_obj1_det] = value
+    # # Handling 'caption'
+    # if 'caption' in obj1 and 'caption' in obj2:
+    #     # n_obj1_det = obj1['num_detections']
+    #     for key, value in obj2['caption'].items():
+    #         obj1['caption'][key + n_obj1_det] = value
 
     # merge pcd and bbox
     obj1['pcd'] += obj2['pcd']
@@ -886,8 +887,8 @@ def filter_gobs(
         else:
             raise NotImplementedError(f"Unhandled type {type(gobs[attribute])}")
         
-    filtered_captions = filter_captions(gobs['captions'], gobs['detection_class_labels'])
-    gobs['captions'] = filtered_captions
+    # filtered_captions = filter_captions(gobs['captions'], gobs['detection_class_labels'])
+    # gobs['captions'] = filtered_captions
 
     return gobs
 
@@ -1065,7 +1066,7 @@ def transform_detection_list(
 
 # @profile
 def make_detection_list_from_pcd_and_gobs(
-    obj_pcds_and_bboxes, gobs, color_path, obj_classes, image_idx
+    obj_pcds_and_bboxes, gobs, color_path, obj_classes
 ):
     '''
     This function makes a detection list for the objects
@@ -1089,13 +1090,12 @@ def make_detection_list_from_pcd_and_gobs(
         
         detected_object = {
             'id' : uuid.uuid4(),
-            'image_idx' : [image_idx],                             # idx of the image
-            
-            'mask_idx' : [mask_idx],                         # idx of the mask/detection
+
+            # 'mask_idx' : [mask_idx],                         # idx of the mask/detection
             'color_path' : [color_path],                     # path to the RGB image
             'class_name' : curr_class_name,                         # global class id for this detection
             'class_id' : [curr_class_idx],                         # global class id for this detection
-            'captions' : [gobs['captions'][mask_idx]],           # captions for this detection
+            # 'captions' : [gobs['captions'][mask_idx]],           # captions for this detection
             'num_detections' : 1,                            # number of detections in this object
             'mask': [gobs['mask'][mask_idx]],
             'xyxy': [gobs['xyxy'][mask_idx]],
@@ -1195,16 +1195,26 @@ def batch_mask_depth_to_points_colors(
     N, H, W = masks_tensor.shape
     fx, fy, cx, cy = cam_K[0, 0], cam_K[1, 1], cam_K[0, 2], cam_K[1, 2]
     
-    # Generate grid of pixel coordinates
-    y, x = torch.meshgrid(torch.arange(0, H, device=device), torch.arange(0, W, device=device), indexing='ij')
-    z = depth_tensor.repeat(N, 1, 1) * masks_tensor  # Apply masks to depth
+    # # Generate grid of pixel coordinates
+    # y, x = torch.meshgrid(torch.arange(0, H, device=device), torch.arange(0, W, device=device), indexing='ij')
+    # z = depth_tensor.repeat(N, 1, 1) * masks_tensor  # Apply masks to depth
+    #
+    # valid = (z > 0).float()  # Mask out zeros
+    #
+    # x = (x - cx) * z / fx
+    # y = (y - cy) * z / fy
+    #
+    # points = torch.stack((x, y, z), dim=-1) * valid.unsqueeze(-1)  # Shape: (N, H, W, 3)
 
-    valid = (z > 0).float()  # Mask out zeros
+    _x, _z = torch.meshgrid(torch.arange(0, W, device=device), torch.arange(H - 1, -1, -1, device=device), indexing='xy')
+    y = depth_tensor.repeat(N, 1, 1) * masks_tensor  # Apply masks to depth
 
-    x = (x - cx) * z / fx
-    y = (y - cy) * z / fy
-    
-    points = torch.stack((x, y, z), dim=-1) * valid.unsqueeze(-1)  # Shape: (N, H, W, 3)
+    valid = (y > 0).float()  # Mask out zeros
+
+    x = (_x - cx) * y / fx
+    z = (_z - cy) * y / fy
+    points = torch.stack((x, z, -y), dim=-1) * valid.unsqueeze(-1)  # Shape: (N, H, W, 3)
+
 
     if image_rgb_tensor is not None:
         # Repeat RGB image for each mask and apply masks
@@ -1255,6 +1265,8 @@ def detections_to_obj_pcd_and_bbox(
         list: List of dictionaries containing processed objects. Each dictionary contains a point cloud and a bounding box.
     """
     N, H, W = masks.shape
+    if trans_pose is not None:
+        trans_pose = torch.tensor(trans_pose, device=device, dtype=torch.float)
 
     # Convert inputs to tensors and move to the specified device
     depth_tensor = torch.from_numpy(depth_array).to(device).float()
@@ -1268,14 +1280,14 @@ def detections_to_obj_pcd_and_bbox(
 
     points_tensor, colors_tensor = batch_mask_depth_to_points_colors(
         depth_tensor, masks_tensor, cam_K_tensor, image_rgb_tensor, device
-    )
+    )  # points_tensor: [N, H, W, 3], colors_tensor: [N, H, W, 3]
 
     processed_objects = [None] * N  # Initialize with placeholders
     for i in range(N):
         mask_points = points_tensor[i]
         mask_colors = colors_tensor[i] if colors_tensor is not None else None
 
-        valid_points_mask = mask_points[:, :, 2] > 0
+        valid_points_mask = mask_points[:, :, 2] < 0
         if torch.sum(valid_points_mask) < min_points_threshold:
             continue
 
@@ -1284,15 +1296,20 @@ def detections_to_obj_pcd_and_bbox(
 
         downsampled_points, downsampled_colors = dynamic_downsample(valid_points, colors=valid_colors, target=obj_pcd_max_points)
 
+        if trans_pose is not None:
+            downsampled_points = torch.cat((downsampled_points, torch.ones_like(downsampled_points[:, :1])), dim=1).transpose(0, 1)  # Add ones for homogeneous coordinates, shape: (4, N)
+            downsampled_points = trans_pose @ downsampled_points  # Apply transformation
+            downsampled_points = downsampled_points[:3].transpose(0, 1)  # Remove ones and transpose back to (N, 3)
+
         # Create point cloud
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(downsampled_points.cpu().numpy())
         if downsampled_colors is not None:
             pcd.colors = o3d.utility.Vector3dVector(downsampled_colors.cpu().numpy())
 
-        if trans_pose is not None:
-            pcd.transform(trans_pose)  # Apply transformation directly to the point cloud
-            pass
+        # if trans_pose is not None:
+        #     pcd.transform(trans_pose)  # Apply transformation directly to the point cloud
+        #     pass
 
         bbox = get_bounding_box(spatial_sim_type, pcd)
         if bbox.volume() < 1e-6:

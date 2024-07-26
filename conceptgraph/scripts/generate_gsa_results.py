@@ -26,6 +26,7 @@ import torchvision
 from torch.utils.data import Dataset
 import supervision as sv
 from tqdm import trange
+import typing as tp
 
 from conceptgraph.dataset.datasets_common import get_dataset
 from conceptgraph.utils.vis import vis_result_fast, vis_result_slow_caption
@@ -153,7 +154,7 @@ def get_sam_segmentation_from_xyxy(sam_predictor: SamPredictor, image: np.ndarra
     return np.array(result_masks)
 
 
-def get_sam_predictor(variant: str, device: str | int) -> SamPredictor:
+def get_sam_predictor(variant: str, device: tp.Union[str, int]) -> SamPredictor:
     if variant == "sam":
         sam = sam_model_registry[SAM_ENCODER_VERSION](checkpoint=SAM_CHECKPOINT_PATH)
         sam.to(device)
@@ -238,7 +239,7 @@ def get_sam_segmentation_dense(
         raise NotImplementedError
 
 
-def get_sam_mask_generator(variant:str, device: str | int) -> SamAutomaticMaskGenerator:
+def get_sam_mask_generator(variant:str, device: tp.Union[str, int]) -> SamAutomaticMaskGenerator:
     if variant == "sam":
         sam = sam_model_registry[SAM_ENCODER_VERSION](checkpoint=SAM_CHECKPOINT_PATH)
         sam.to(device)

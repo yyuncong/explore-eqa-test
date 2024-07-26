@@ -11,7 +11,7 @@ def rearrange_objects(
     controller: Controller,
     pickupable_move_ratio: float,
     moveable_move_ratio: float,
-    random_seed: int | None = None,
+    random_seed: int = None,
     reset: bool = False,
 ):
     '''

@@ -353,16 +353,15 @@ def main(cfg):
                             return_annotated=True
                         )
 
-                        plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), annotated_rgb)
-
-                        scene.update_scene_graph(
+                        annotated_rgb = scene.update_scene_graph(
                             image_rgb=rgb[..., :3], depth=depth, intrinsics=cam_intr, cam_pos=cam_pose,
                             detection_model=detection_model, sam_predictor=sam_predictor, clip_model=clip_model,
                             clip_preprocess=clip_preprocess, clip_tokenizer=clip_tokenizer,
-                            obj_classes=obj_classes, img_path=obs_file_name,
+                            obj_classes=obj_classes, pts=pts, img_path=obs_file_name,
                             frame_idx=cnt_step * total_views + view_idx,
-                            cfg=cfg_cg
                         )
+                        if annotated_rgb is not None:
+                            plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), annotated_rgb)
 
                         print([(it['class_name'], it['bbox']) for it in scene.objects])
                         print('')
@@ -408,8 +407,7 @@ def main(cfg):
                             view_frontier_direction = np.asarray([pos_world[0] - pts[0], 0., pos_world[2] - pts[2]])
 
                             obs, target_detected = scene.get_frontier_observation_and_detect_target(
-                                pts, view_frontier_direction, detection_model_yoloworld, target_obj_id, object_id_to_name[target_obj_id],
-                                cfg.scene_graph
+                                pts, view_frontier_direction, detection_model_yoloworld, target_obj_id, object_id_to_name[target_obj_id]
                             )
                             frontier_obs = obs["color_sensor"]
                             if target_detected:

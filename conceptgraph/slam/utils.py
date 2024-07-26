@@ -292,10 +292,10 @@ def merge_obj2_into_obj1(obj1, obj2, downsample_voxel_size, dbscan_remove_noise,
     tracker.track_merge(obj1, obj2)
     
     # Attributes to be explicitly handled
-    extend_attributes = ['image_idx', 'mask_idx', 'color_path', 'class_id', 'mask', 'xyxy', 'conf', 'contain_number']
-    add_attributes = ['num_detections', 'num_obj_in_class']
-    skip_attributes = ['id', 'class_name', 'is_background', 'new_counter', 'curr_obj_num', 'inst_color']  # 'inst_color' just keeps obj1's
-    custom_handled = ['pcd', 'bbox', 'clip_ft', 'text_ft', 'n_points']
+    extend_attributes = ['class_id']
+    add_attributes = ['num_detections']
+    skip_attributes = ['id', 'class_name']  # 'inst_color' just keeps obj1's
+    custom_handled = ['pcd', 'bbox', 'clip_ft']
 
     # Check for unhandled keys and throw an error if there are
     all_handled_keys = set(extend_attributes + add_attributes + skip_attributes + custom_handled)
@@ -326,7 +326,7 @@ def merge_obj2_into_obj1(obj1, obj2, downsample_voxel_size, dbscan_remove_noise,
     obj1['pcd'] += obj2['pcd']
     obj1['pcd'] = process_pcd(obj1['pcd'], downsample_voxel_size, dbscan_remove_noise, dbscan_eps, dbscan_min_points, run_dbscan)
     # update n_points
-    obj1['n_points'] = len(np.asarray(obj1['pcd'].points))
+    # obj1['n_points'] = len(np.asarray(obj1['pcd'].points))
 
     # Update 'bbox'
     obj1['bbox'] = get_bounding_box(spatial_sim_type, obj1['pcd'])
@@ -1066,7 +1066,7 @@ def transform_detection_list(
 
 # @profile
 def make_detection_list_from_pcd_and_gobs(
-    obj_pcds_and_bboxes, gobs, color_path, obj_classes
+    gobs, color_path, obj_classes
 ):
     '''
     This function makes a detection list for the objects
@@ -1076,7 +1076,7 @@ def make_detection_list_from_pcd_and_gobs(
     detection_list = DetectionList()
     # bg_detection_list = DetectionList()
     for mask_idx in range(len(gobs['mask'])):
-        if obj_pcds_and_bboxes[mask_idx] is None: # pointcloud was discarded
+        if gobs['pcd'][mask_idx] is None: # pointcloud was discarded
             continue
 
         curr_class_name = gobs['classes'][gobs['class_id'][mask_idx]]
@@ -1092,28 +1092,28 @@ def make_detection_list_from_pcd_and_gobs(
             'id' : uuid.uuid4(),
 
             # 'mask_idx' : [mask_idx],                         # idx of the mask/detection
-            'color_path' : [color_path],                     # path to the RGB image
+            # 'color_path' : [color_path],                     # path to the RGB image
             'class_name' : curr_class_name,                         # global class id for this detection
             'class_id' : [curr_class_idx],                         # global class id for this detection
             # 'captions' : [gobs['captions'][mask_idx]],           # captions for this detection
             'num_detections' : 1,                            # number of detections in this object
-            'mask': [gobs['mask'][mask_idx]],
-            'xyxy': [gobs['xyxy'][mask_idx]],
-            'conf': [gobs['confidence'][mask_idx]],
-            'n_points': len(obj_pcds_and_bboxes[mask_idx]['pcd'].points),
+            # 'mask': [gobs['mask'][mask_idx]],
+            # 'xyxy': [gobs['xyxy'][mask_idx]],
+            # 'conf': [gobs['confidence'][mask_idx]],
+            # 'n_points': len(obj_pcds_and_bboxes[mask_idx]['pcd'].points),
             # 'pixel_area': [mask.sum()],
-            'contain_number': [None],                          # This will be computed later
-            "inst_color": np.random.rand(3),                 # A random color used for this segment instance
-            'is_background': is_bg_object,
+            # 'contain_number': [None],                          # This will be computed later
+            # "inst_color": np.random.rand(3),                 # A random color used for this segment instance
+            # 'is_background': is_bg_object,
             
             # These are for the entire 3D object
-            'pcd': obj_pcds_and_bboxes[mask_idx]['pcd'],
-            'bbox': obj_pcds_and_bboxes[mask_idx]['bbox'],
+            'pcd': gobs['pcd'][mask_idx],
+            'bbox': gobs['bbox'][mask_idx],
             'clip_ft': to_tensor(gobs['image_feats'][mask_idx]),
             # 'text_ft': to_tensor(gobs['text_feats'][mask_idx]),
-            'num_obj_in_class': num_obj_in_class,
-            'curr_obj_num': tracker.total_object_count,
-            'new_counter' : tracker.brand_new_counter,
+            # 'num_obj_in_class': num_obj_in_class,
+            # 'curr_obj_num': tracker.total_object_count,
+            # 'new_counter' : tracker.brand_new_counter,
         }
         # detected_object['curr_obj_num']
         # print(f"Line 969, detected_object['image_idx']: {detected_object['image_idx']}")

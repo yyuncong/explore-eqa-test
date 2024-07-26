@@ -139,6 +139,9 @@ class Scene:
         # about scene graph
         self.objects = MapObjectList(device=graph_cfg.device)
 
+        self.cfg = cfg
+        self.cfg_cg = graph_cfg
+
     def __del__(self):
         try:
             self.simulator.close()
@@ -227,7 +230,7 @@ class Scene:
     def get_frontier_observation_and_detect_target(
             self,
             pts, view_dir,
-            detection_model, target_obj_id, target_obj_class, cfg,
+            detection_model, target_obj_id, target_obj_class,
             camera_tilt=0.0
     ):
         obs = self.get_frontier_observation(pts, view_dir, camera_tilt)
@@ -237,8 +240,8 @@ class Scene:
         semantic_obs = obs["semantic_sensor"]
 
         detection_model.set_classes([target_obj_class])
-        results = detection_model.infer(rgb[..., :3], confidence=cfg.confidence)
-        detections = sv.Detections.from_inference(results).with_nms(threshold=cfg.nms_threshold)
+        results = detection_model.infer(rgb[..., :3], confidence=self.cfg.scene_graph.confidence)
+        detections = sv.Detections.from_inference(results).with_nms(threshold=self.cfg.scene_graph.nms_threshold)
 
         target_detected = False
         if target_obj_id in np.unique(semantic_obs):
@@ -251,7 +254,7 @@ class Scene:
                 target_x_end, target_y_end = np.argwhere(semantic_obs == target_obj_id).max(axis=0)
                 obj_mask = np.zeros(semantic_obs.shape, dtype=bool)
                 obj_mask[target_x_start:target_x_end, target_y_start:target_y_end] = True
-                if IoU(bbox_mask, obj_mask) > cfg.iou_threshold:
+                if IoU(bbox_mask, obj_mask) > self.cfg.scene_graph.iou_threshold:
                     target_detected = True
                     break
 
@@ -272,16 +275,9 @@ class Scene:
             image_rgb, depth, intrinsics, cam_pos,
             detection_model, sam_predictor, clip_model, clip_preprocess, clip_tokenizer,
             obj_classes,
+            pts,
             img_path, frame_idx,
-            cfg
     ):
-        # Covert to numpy and do some sanity checks
-        # depth_array = depth_tensor.cpu().numpy()
-        # color_np = color_tensor.cpu().numpy()  # (H, W, 3)
-        # image_rgb = (color_np).astype(np.uint8)  # (H, W, 3)
-        # assert image_rgb.max() > 1, "Image is not in range [0, 255]"
-        # TODO: check the input format and range
-
         # Detect objects
         results = detection_model.predict(image_rgb, conf=0.1, verbose=False)
         confidences = results[0].boxes.conf.cpu().numpy()
@@ -316,7 +312,7 @@ class Scene:
         )
 
         image_crops, image_feats, text_feats = compute_clip_features_batched(
-            image_rgb, curr_det, clip_model, clip_preprocess, clip_tokenizer, obj_classes.get_classes_arr(), cfg.device)
+            image_rgb, curr_det, clip_model, clip_preprocess, clip_tokenizer, obj_classes.get_classes_arr(), self.cfg_cg.device)
 
         raw_gobs = {
                 # add new uuid for each detection
@@ -337,18 +333,18 @@ class Scene:
         # filter the observations
         filtered_gobs = filter_gobs(
             resized_gobs, image_rgb,
-            skip_bg=cfg.skip_bg,
+            skip_bg=self.cfg_cg.skip_bg,
             BG_CLASSES=obj_classes.get_bg_classes_arr(),
-            mask_area_threshold=cfg.mask_area_threshold,
-            max_bbox_area_ratio=cfg.max_bbox_area_ratio,
-            mask_conf_threshold=cfg.mask_conf_threshold,
+            mask_area_threshold=self.cfg_cg.mask_area_threshold,
+            max_bbox_area_ratio=self.cfg_cg.max_bbox_area_ratio,
+            mask_conf_threshold=self.cfg_cg.mask_conf_threshold,
         )
 
         gobs = filtered_gobs
 
         if len(gobs['mask']) == 0: # no detections in this frame
             logging.debug("No detections in this frame")
-            return
+            return None
 
         # this helps make sure things like pillows on couches are separate objects
         gobs['mask'] = mask_subtract_contained(gobs['xyxy'], gobs['mask'])
@@ -359,33 +355,57 @@ class Scene:
             cam_K=intrinsics[:3, :3],  # Camera intrinsics
             image_rgb=image_rgb,
             trans_pose=cam_pos,
-            min_points_threshold=cfg.min_points_threshold,
-            spatial_sim_type=cfg.spatial_sim_type,
-            obj_pcd_max_points=cfg.obj_pcd_max_points,
-            device=cfg.device,
+            min_points_threshold=self.cfg_cg.min_points_threshold,
+            spatial_sim_type=self.cfg_cg.spatial_sim_type,
+            obj_pcd_max_points=self.cfg_cg.obj_pcd_max_points,
+            device=self.cfg_cg.device,
         )
 
         for obj in obj_pcds_and_bboxes:
             if obj:
                 obj["pcd"] = init_process_pcd(
                     pcd=obj["pcd"],
-                    downsample_voxel_size=cfg["downsample_voxel_size"],
-                    dbscan_remove_noise=cfg["dbscan_remove_noise"],
-                    dbscan_eps=cfg["dbscan_eps"],
-                    dbscan_min_points=cfg["dbscan_min_points"],
+                    downsample_voxel_size=self.cfg_cg["downsample_voxel_size"],
+                    dbscan_remove_noise=self.cfg_cg["dbscan_remove_noise"],
+                    dbscan_eps=self.cfg_cg["dbscan_eps"],
+                    dbscan_min_points=self.cfg_cg["dbscan_min_points"],
                 )
                 obj["bbox"] = get_bounding_box(
-                    spatial_sim_type=cfg['spatial_sim_type'],
+                    spatial_sim_type=self.cfg_cg['spatial_sim_type'],
                     pcd=obj["pcd"],
                 )
 
+        # add pcds and bboxes to gobs
+        gobs['bbox'] = [obj["bbox"] for obj in obj_pcds_and_bboxes]
+        gobs['pcd'] = [obj["pcd"] for obj in obj_pcds_and_bboxes]
+
+        gobs = self.filter_gobs_with_distance(pts, gobs)
+
+        # create a Detection object for visualization
+        det_visualize = sv.Detections(
+            xyxy=gobs['xyxy'],
+            confidence=gobs['confidence'],
+            class_id=gobs['class_id'],
+        )
+        class_name_visualize = []
+        for i, old_name in enumerate(gobs['detection_class_labels']):
+            class_name_visualize.append(
+                f"{old_name.split(' ')[0]} {gobs['confidence'][i]:.3f}"
+            )
+        det_visualize.data['class_name'] = class_name_visualize
+        annotated_image = image_rgb.copy()
+        BOUNDING_BOX_ANNOTATOR = sv.BoundingBoxAnnotator(thickness=2)
+        LABEL_ANNOTATOR = sv.LabelAnnotator(text_thickness=1, text_scale=0.5, text_color=sv.Color.BLACK)
+        annotated_image = BOUNDING_BOX_ANNOTATOR.annotate(annotated_image, det_visualize)
+        annotated_image = LABEL_ANNOTATOR.annotate(annotated_image, det_visualize)
+
         detection_list = make_detection_list_from_pcd_and_gobs(
-            obj_pcds_and_bboxes, gobs, img_path, obj_classes
+            gobs, img_path, obj_classes
         )
 
         if len(detection_list) == 0:  # no detections, skip
             logging.debug("No detections in this frame")
-            return
+            return annotated_image
 
         # if no objects yet in the map,
         # just add all the objects from the current frame
@@ -393,21 +413,21 @@ class Scene:
         if len(self.objects) == 0:
             logging.debug(f"No objects in the map yet, adding all detections of length {len(detection_list)}")
             self.objects.extend(detection_list)
-            return
+            return annotated_image
 
         ### compute similarities and then merge
         spatial_sim = compute_spatial_similarities(
-            spatial_sim_type=cfg['spatial_sim_type'],
+            spatial_sim_type=self.cfg_cg['spatial_sim_type'],
             detection_list=detection_list,
             objects=self.objects,
-            downsample_voxel_size=cfg['downsample_voxel_size']
+            downsample_voxel_size=self.cfg_cg['downsample_voxel_size']
         )
 
         visual_sim = compute_visual_similarities(detection_list, self.objects)
 
         agg_sim = aggregate_similarities(
-            match_method=cfg['match_method'],
-            phys_bias=cfg['phys_bias'],
+            match_method=self.cfg_cg['match_method'],
+            phys_bias=self.cfg_cg['phys_bias'],
             spatial_sim=spatial_sim,
             visual_sim=visual_sim
         )
@@ -415,7 +435,7 @@ class Scene:
         # Perform matching of detections to existing objects
         match_indices = match_detections_to_objects(
             agg_sim=agg_sim,
-            detection_threshold=cfg['sim_threshold']  # Use the sim_threshold from the configuration
+            detection_threshold=self.cfg_cg['sim_threshold']  # Use the sim_threshold from the configuration
         )
 
         # Now merge the detected objects into the existing objects based on the match indices
@@ -423,14 +443,15 @@ class Scene:
             detection_list=detection_list,
             objects=self.objects,
             match_indices=match_indices,
-            downsample_voxel_size=cfg['downsample_voxel_size'],
-            dbscan_remove_noise=cfg['dbscan_remove_noise'],
-            dbscan_eps=cfg['dbscan_eps'],
-            dbscan_min_points=cfg['dbscan_min_points'],
-            spatial_sim_type=cfg['spatial_sim_type'],
-            device=cfg['device']
+            downsample_voxel_size=self.cfg_cg['downsample_voxel_size'],
+            dbscan_remove_noise=self.cfg_cg['dbscan_remove_noise'],
+            dbscan_eps=self.cfg_cg['dbscan_eps'],
+            dbscan_min_points=self.cfg_cg['dbscan_min_points'],
+            spatial_sim_type=self.cfg_cg['spatial_sim_type'],
+            device=self.cfg_cg['device']
             # Note: Removed 'match_method' and 'phys_bias' as they do not appear in the provided merge function
         )
+
         # fix the class names for objects
         # they should be the most popular name, not the first name
         for idx, obj in enumerate(self.objects):
@@ -441,7 +462,7 @@ class Scene:
             if temp_class_name != most_common_class_name:
                 obj["class_name"] = most_common_class_name
 
-        return
+        return annotated_image
 
         # ### Perform post-processing periodically if told so
         #
@@ -499,6 +520,34 @@ class Scene:
         #     )
 
 
+    def filter_gobs_with_distance(self, pts, gobs):
+        idx_to_keep = []
+        for idx in range(len(gobs["bbox"])):
+            if gobs["bbox"][idx] is None:  # point cloud was discarded
+                continue
+
+            # get the distance between the object and the current observation point
+            if np.linalg.norm(
+                np.asarray(gobs["bbox"][idx].center[0] - pts[0], gobs["bbox"][idx].center[2] - pts[2])
+            ) > self.cfg.scene_graph.obj_include_dist:
+                logging.debug(f"Object {gobs['detection_class_labels'][idx]} is too far away, skipping")
+                continue
+            idx_to_keep.append(idx)
+
+        for attribute in gobs.keys():
+            if isinstance(gobs[attribute], str) or attribute == "classes":  # Captions
+                continue
+            if attribute in ['labels', 'edges', 'text_feats', 'captions']:
+                # Note: this statement was used to also exempt 'detection_class_labels' but that causes a bug. It causes the edges to be misalgined with the objects.
+                continue
+            elif isinstance(gobs[attribute], list):
+                gobs[attribute] = [gobs[attribute][i] for i in idx_to_keep]
+            elif isinstance(gobs[attribute], np.ndarray):
+                gobs[attribute] = gobs[attribute][idx_to_keep]
+            else:
+                raise NotImplementedError(f"Unhandled type {type(gobs[attribute])}")
+
+        return gobs
 
 
 

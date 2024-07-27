@@ -134,14 +134,6 @@ def main(cfg):
     all_scene_list = list(set([q["episode_history"] for q in questions_data]))
     logging.info(f"Loaded {len(questions_data)} questions.")
 
-    # we need to make sure to use the same classes as the ones used in the detections
-    detections_exp_cfg = cfg_to_dict(cfg_cg)
-    obj_classes = ObjectClasses(
-        classes_file_path=detections_exp_cfg['classes_file'],
-        bg_classes=detections_exp_cfg['bg_classes'],
-        skip_bg=detections_exp_cfg['skip_bg']
-    )
-
     ## Initialize the detection models
     detection_model = measure_time(YOLO)('yolov8l-world.pt')
     sam_predictor = SAM('mobile_sam.pt')  # SAM('mobile_sam.pt') # UltraLytics SAM
@@ -151,9 +143,6 @@ def main(cfg):
     )
     clip_model = clip_model.to(cfg_cg.device)
     clip_tokenizer = open_clip.get_tokenizer("ViT-B-32")
-
-    # Set the classes for the detection model
-    detection_model.set_classes(obj_classes.get_classes_arr())
 
     total_images_record = []
     top_k_images_record = {5: [], 10: [], 15: [], 20: []}
@@ -194,6 +183,8 @@ def main(cfg):
             pass
 
         scene = Scene(scene_id, cfg, cfg_cg)
+        # Set the classes for the detection model
+        detection_model.set_classes(scene.obj_classes.get_classes_arr())
 
         # load semantic object bbox data
         bounding_box_data = json.load(open(os.path.join(cfg.semantic_bbox_data_path, scene_id + ".json"), "r"))
@@ -287,6 +278,9 @@ def main(cfg):
                 pts_pixs = np.empty((0, 2))
                 pts_pixs = np.vstack((pts_pixs, tsdf_planner.habitat2voxel(start_position)[:2]))
 
+                # clear up the previous detected frontiers and objects
+                scene.clear_up_detections()
+
                 logging.info(f'\n\nQuestion id {question_data["question_id"]}-path {path_idx} initialization successful!')
 
                 metadata = {}
@@ -303,6 +297,7 @@ def main(cfg):
                 previous_choice_path = None
                 max_explore_dist = travel_dist * cfg.max_step_dist_ratio
                 max_step = int(travel_dist * cfg.max_step_ratio)
+                target_obj_id_det_list = []  # record all the detected target object ids, and use the most frequent one as the final target object id
                 explore_dist = 0.0
                 cnt_step = -1
                 while explore_dist < max_explore_dist and cnt_step < max_step:
@@ -351,22 +346,19 @@ def main(cfg):
                             return_annotated=True
                         )
 
-                        annotated_rgb = scene.update_scene_graph(
+                        annotated_rgb, object_added, target_obj_id_det = scene.update_scene_graph(
                             image_rgb=rgb[..., :3], depth=depth, intrinsics=cam_intr, cam_pos=cam_pose,
                             detection_model=detection_model, sam_predictor=sam_predictor, clip_model=clip_model,
                             clip_preprocess=clip_preprocess, clip_tokenizer=clip_tokenizer,
-                            obj_classes=obj_classes, pts=pts, pts_voxel=tsdf_planner.habitat2voxel(pts),
+                            pts=pts, pts_voxel=tsdf_planner.habitat2voxel(pts),
                             img_path=obs_file_name,
                             frame_idx=cnt_step * total_views + view_idx,
+                            target_obj_mask=semantic_obs == target_obj_id,
                         )
-                        if annotated_rgb is not None:
+                        if object_added:
                             plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), annotated_rgb)
-                        else:
-                            plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), rgb)
-
-                        # print([(it['class_name'], it['bbox']) for it in scene.objects])
-                        # print('')
-                        # print([(object_id_to_name[it.object_id], it.bbox_center) for it in tsdf_planner.simple_scene_graph.values()])
+                        if target_obj_id_det is not None:
+                            target_obj_id_det_list.append(target_obj_id_det)
 
                         # TSDF fusion
                         tsdf_planner.integrate(
@@ -385,6 +377,7 @@ def main(cfg):
 
                     tsdf_planner.update_snapshots(min_num_obj_threshold=cfg.min_num_obj_threshold)
                     scene.update_snapshots(min_num_obj_threshold=cfg.min_num_obj_threshold)
+                    logging.info(f"Step {cnt_step} {len(scene.objects)} objects, {len(scene.snapshots)} snapshots")
 
                     update_success = tsdf_planner.update_frontier_map(pts=pts_normal, cfg=cfg.planner)
                     if not update_success:
@@ -426,6 +419,8 @@ def main(cfg):
                     # reset target point to allow the model to choose again
                     tsdf_planner.max_point = None
                     tsdf_planner.target_point = None
+
+                    print(f'!!!!!!! {target_obj_id_det_list}')
 
                     max_point_choice = tsdf_planner.get_next_choice(
                         pts=pts_normal,

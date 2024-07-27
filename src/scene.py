@@ -10,7 +10,7 @@ import supervision as sv
 import logging
 from collections import Counter
 from scipy.spatial.transform import Rotation
-from typing import List, Optional, Tuple, Dict
+from typing import List, Optional, Tuple, Dict, Union
 from dataclasses import dataclass, field
 
 from habitat_sim.utils.common import quat_to_coeffs, quat_from_angle_axis, quat_from_two_vectors
@@ -25,6 +25,7 @@ from src.habitat import (
     get_frontier_observation_and_detect_target
 )
 from src.geom import get_cam_intr, IoU
+from src.tsdf_new_cg import SnapShot
 
 # Local application/library specific imports
 from conceptgraph.utils.optional_rerun_wrapper import (
@@ -100,19 +101,6 @@ from conceptgraph.utils.model_utils import compute_clip_features_batched
 from conceptgraph.utils.general_utils import get_vis_out_path, cfg_to_dict, check_run_detections
 
 
-@dataclass
-class SnapShot:
-    image: str
-    color: Tuple[float, float, float]
-    obs_point: np.ndarray  # integer position in voxel grid
-    full_obj_list: Dict[int, float] = field(default_factory=dict)  # object id to confidence
-    selected_obj_list: List[int] = field(default_factory=list)
-    position: np.ndarray = None
-
-    def __eq__(self, other):
-        raise NotImplementedError("Cannot compare SnapShot objects.")
-
-
 class Scene:
     def __init__(
             self,
@@ -149,6 +137,14 @@ class Scene:
         self.pathfinder = self.simulator.pathfinder
         self.pathfinder.seed(cfg.seed)
         self.pathfinder.load_nav_mesh(navmesh_path)
+
+        # load object classes
+        self.obj_classes = ObjectClasses(
+            classes_file_path=scene_semantic_annotation_path,
+            bg_classes=self.cfg_cg['bg_classes'],
+            skip_bg=self.cfg_cg['skip_bg']
+        )
+
         logging.info(f"Load scene {scene_id} successfully")
 
         # set agent
@@ -168,6 +164,11 @@ class Scene:
             self.simulator.close()
         except:
             pass
+
+    def clear_up_detections(self):
+        self.objects = MapObjectDict()
+        self.object_id_counter = 0
+        self.snapshots = {}
 
     def get_observation(self, pts, angle):
         agent_state = habitat_sim.AgentState()
@@ -261,14 +262,15 @@ class Scene:
 
     def update_scene_graph(
             self,
-            image_rgb, depth, intrinsics, cam_pos,
+            image_rgb: np.ndarray, depth: np.ndarray, intrinsics, cam_pos,
             detection_model, sam_predictor, clip_model, clip_preprocess, clip_tokenizer,
-            obj_classes,
             pts, pts_voxel,
             img_path, frame_idx,
-    ):
+            target_obj_mask=None  # the boolean mask of target object generated from the semantic sensor. If given, return the object id of the target object
+    ) -> Tuple[np.ndarray, bool, Optional[int]]:
+        # return annotated image; whether any object is added to scene graph in this frame; the object id of the target object (if detected)
 
-
+        obj_classes = self.obj_classes
         # Detect objects
         results = detection_model.predict(image_rgb, conf=0.1, verbose=False)
         confidences = results[0].boxes.conf.cpu().numpy()
@@ -296,6 +298,10 @@ class Scene:
             mask=masks_np,
         )
 
+        if len(curr_det) == 0:  # no detections, skip
+            logging.debug("No detections in this frame")
+            return image_rgb, False, None
+
         # filter the detection by removing overlapping detections
         curr_det, labels = filter_detections(
             image=image_rgb,
@@ -304,6 +310,9 @@ class Scene:
             given_labels=detection_class_labels,
             iou_threshold=self.cfg_cg.object_detection_iou_threshold,
         )
+        if curr_det is None:
+            logging.debug("No detections left after filter_detections")
+            return image_rgb, False, None
 
         image_crops, image_feats, text_feats = compute_clip_features_batched(
             image_rgb, curr_det, clip_model, clip_preprocess, clip_tokenizer, obj_classes.get_classes_arr(), self.cfg_cg.device)
@@ -319,7 +328,6 @@ class Scene:
                 "image_feats": image_feats,
                 "text_feats": text_feats,
                 "detection_class_labels": detection_class_labels,
-                "labels": labels,
             }
 
         # resize the observation if needed
@@ -337,8 +345,8 @@ class Scene:
         gobs = filtered_gobs
 
         if len(gobs['mask']) == 0: # no detections in this frame
-            logging.debug("No detections in this frame")
-            return None
+            logging.debug("No detections left after filter_gobs")
+            return image_rgb, False, None
 
         # this helps make sure things like pillows on couches are separate objects
         gobs['mask'] = mask_subtract_contained(gobs['xyxy'], gobs['mask'])
@@ -368,11 +376,16 @@ class Scene:
                     spatial_sim_type=self.cfg_cg['spatial_sim_type'],
                     pcd=obj["pcd"],
                 )
+        # if the list is all None, then skip
+        if all([obj is None for obj in obj_pcds_and_bboxes]):
+            logging.debug("All objects are None in obj_pcds_and_bboxes")
+            return image_rgb, False, None
 
         # add pcds and bboxes to gobs
-        gobs['bbox'] = [obj["bbox"] for obj in obj_pcds_and_bboxes]
-        gobs['pcd'] = [obj["pcd"] for obj in obj_pcds_and_bboxes]
+        gobs['bbox'] = [obj["bbox"] if obj is not None else None for obj in obj_pcds_and_bboxes]
+        gobs['pcd'] = [obj["pcd"] if obj is not None else None for obj in obj_pcds_and_bboxes]
 
+        # filter out objects that are far away
         gobs = self.filter_gobs_with_distance(pts, gobs)
 
         detection_list = self.make_detection_list_from_pcd_and_gobs(
@@ -380,8 +393,28 @@ class Scene:
         )
 
         if len(detection_list) == 0:  # no detections, skip
-            logging.debug("No detections in this frame")
-            return None
+            logging.debug("No detections left after make_detection_list_from_pcd_and_gobs")
+            return image_rgb, False, None
+
+        # compare the detections with the target object mask to see whether the target object is detected
+        target_obj_id = None
+        if target_obj_mask is not None and np.sum(target_obj_mask) / (target_obj_mask.shape[0] * target_obj_mask.shape[1]) > 0.0001:
+            assert len(detection_list) == len(gobs['mask']), f"Error in update_scene_graph: {len(detection_list)} != {len(gobs['mask'])}"  # sanity check
+
+            # loop through the detected objects to find the highest IoU with the target object
+            max_iou = -1
+            max_iou_obj_id = None
+            for idx, obj_id in enumerate(detection_list.keys()):
+                detected_mask = gobs['mask'][idx]
+                iou_score = IoU(detected_mask, target_obj_mask)
+                if iou_score > max_iou:
+                    max_iou = iou_score
+                    max_iou_obj_id = obj_id
+            print(f'!!!!!! {max_iou}')
+            if max_iou > self.cfg.scene_graph.target_obj_iou_threshold:
+                target_obj_id = max_iou_obj_id
+                logging.info(f"Target object {target_obj_id} {detection_list[target_obj_id]['class_name']} detected with IoU {max_iou} in {img_path}!!!")
+
 
         # if there exists object detected in this frame, create a snapshot
         snapshot = SnapShot(
@@ -407,7 +440,7 @@ class Scene:
 
             self.snapshots[img_path] = snapshot
 
-            return None
+            return image_rgb, True, target_obj_id
 
         ### compute similarities and then merge
         spatial_sim = compute_spatial_similarities(
@@ -435,11 +468,12 @@ class Scene:
         )
 
         # Now merge the detected objects into the existing objects based on the match indices
-        visualize_captions = self.merge_obj_matches(
+        visualize_captions, target_obj_id = self.merge_obj_matches(
             detection_list=detection_list,
             match_indices=match_indices,
             obj_classes=obj_classes,
-            snapshot=snapshot
+            snapshot=snapshot,
+            target_obj_id=target_obj_id
         )
 
         # add the snapshot into the snapshot list
@@ -458,7 +492,7 @@ class Scene:
         annotated_image = BOUNDING_BOX_ANNOTATOR.annotate(annotated_image, det_visualize)
         annotated_image = LABEL_ANNOTATOR.annotate(annotated_image, det_visualize)
 
-        return annotated_image
+        return annotated_image, True, target_obj_id
 
         # ### Perform post-processing periodically if told so
         #
@@ -550,8 +584,9 @@ class Scene:
         detection_list: DetectionDict,
         match_indices: List[Tuple[int, Optional[int]]],
         obj_classes: ObjectClasses,
-        snapshot: SnapShot
-    ):
+        snapshot: SnapShot,
+        target_obj_id: Optional[int] = None  # if given, then track whether the target object is merged into a previous object (so the id would change)
+    ) -> Tuple[List[str], Optional[int]]:
         visualize_captions = []
         for idx, (detected_obj_id, existing_obj_match_id) in enumerate(match_indices):
             if existing_obj_match_id is None:
@@ -598,7 +633,11 @@ class Scene:
                     f"{self.objects[existing_obj_match_id]['class_name']} {self.objects[existing_obj_match_id]['conf']:.3f} {merged_obj['num_detections']}"
                 )
 
-        return visualize_captions
+                # if current object is the target object, and it is merged into an existing object, then change the target object id to the existing object id
+                if target_obj_id == detected_obj_id:
+                    target_obj_id = existing_obj_match_id
+
+        return visualize_captions, target_obj_id
 
     def make_detection_list_from_pcd_and_gobs(
             self, gobs, image_path, obj_classes

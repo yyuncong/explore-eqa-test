@@ -384,6 +384,9 @@ def filter_detections(
         if keep:
             filtered_detections.append(current_det)
 
+    if len(filtered_detections) == 0:
+        return None, None
+
     # Unzip the filtered results
     confidences, class_ids, xyxy, masks, indices = zip(*filtered_detections)
     filtered_labels = [given_labels[i] for i in indices]
@@ -602,11 +605,14 @@ class ObjectClasses:
         self.classes_file_path = Path(classes_file_path)
         self.bg_classes = bg_classes
         self.skip_bg = skip_bg
-        self.classes, self.class_to_color = self._load_or_create_colors()
+        self.classes = self._load_or_create_colors()
 
     def _load_or_create_colors(self):
         with open(self.classes_file_path, "r") as f:
-            all_classes = [cls.strip() for cls in f.readlines()]
+            all_lines = [cls.strip() for cls in f.readlines()][1:]
+            all_classes = [line.split(',')[2].replace("\"", "") for line in all_lines]
+            all_classes = list(set(all_classes))
+            all_classes = [cls for cls in all_classes if cls != "unknown"]
         
         # Filter classes based on the skip_bg parameter
         if self.skip_bg:
@@ -614,18 +620,7 @@ class ObjectClasses:
         else:
             classes = all_classes
 
-        colors_file_path = self.classes_file_path.parent / f"{self.classes_file_path.stem}_colors.json"
-        if colors_file_path.exists():
-            with open(colors_file_path, "r") as f:
-                class_to_color = json.load(f)
-            # Ensure color map only includes relevant classes
-            class_to_color = {cls: class_to_color[cls] for cls in classes if cls in class_to_color}
-        else:
-            class_to_color = {class_name: list(np.random.rand(3).tolist()) for class_name in classes}
-            with open(colors_file_path, "w") as f:
-                json.dump(class_to_color, f)
-
-        return classes, class_to_color
+        return classes
 
     def get_classes_arr(self):
         """
@@ -638,34 +633,6 @@ class ObjectClasses:
         Returns the list of background class names, if configured to do so.
         """
         return self.bg_classes
-
-    def get_class_color(self, key):
-        """
-        Retrieves the color associated with a given class name or index.
-        
-        Args:
-            key (int or str): The index or name of the class.
-        
-        Returns:
-            list: The color (RGB values) associated with the class.
-        """
-        if isinstance(key, int):
-            if key < 0 or key >= len(self.classes):
-                raise IndexError("Class index out of range.")
-            class_name = self.classes[key]
-        elif isinstance(key, str):
-            class_name = key
-            if class_name not in self.classes:
-                raise ValueError(f"{class_name} is not a valid class name.")
-        else:
-            raise ValueError("Key must be an integer index or a string class name.")
-        return self.class_to_color.get(class_name, [0, 0, 0])  # Default color for undefined classes
-
-    def get_class_color_dict_by_index(self):
-        """
-        Returns a dictionary of class colors, just like self.class_to_color, but indexed by class index.
-        """
-        return {str(i): self.get_class_color(i) for i in range(len(self.classes))}
     
 def save_obj_json(exp_suffix, exp_out_path, objects):
     """

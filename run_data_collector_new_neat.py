@@ -142,8 +142,6 @@ def main(cfg):
         skip_bg=detections_exp_cfg['skip_bg']
     )
 
-    print("\n".join(["Running detections..."] * 10))
-
     ## Initialize the detection models
     detection_model = measure_time(YOLO)('yolov8l-world.pt')
     sam_predictor = SAM('mobile_sam.pt')  # SAM('mobile_sam.pt') # UltraLytics SAM
@@ -362,10 +360,12 @@ def main(cfg):
                         )
                         if annotated_rgb is not None:
                             plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), annotated_rgb)
+                        else:
+                            plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), rgb)
 
-                        print([(it['class_name'], it['bbox']) for it in scene.objects])
-                        print('')
-                        print([(object_id_to_name[it.object_id], it.bbox_center) for it in tsdf_planner.simple_scene_graph.values()])
+                        # print([(it['class_name'], it['bbox']) for it in scene.objects])
+                        # print('')
+                        # print([(object_id_to_name[it.object_id], it.bbox_center) for it in tsdf_planner.simple_scene_graph.values()])
 
                         # TSDF fusion
                         tsdf_planner.integrate(
@@ -695,6 +695,7 @@ if __name__ == "__main__":
             logging.StreamHandler(),
         ],
     )
+
 
     cfg.path_id_offset = args.path_id_offset
     if args.seed is not None:

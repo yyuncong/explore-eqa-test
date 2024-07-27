@@ -353,7 +353,7 @@ def filter_detections(
         # check mask size and remove if too small
         mask_size = np.count_nonzero(current_det[3])
         if mask_size < small_mask_size:
-            print(f"Removing {classes.get_classes_arr()[curr_class_id]} because the mask size is too small.")
+            logging.debug(f"Removing {classes.get_classes_arr()[curr_class_id]} because the mask size is too small.")
             keep = False
 
         for other in filtered_detections:
@@ -361,7 +361,7 @@ def filter_detections(
             
             if mask_iou(curr_mask, other_mask) > iou_threshold:
                 keep = False
-                print(f"Removing {classes.get_classes_arr()[curr_class_id]} because it has an IoU of {mask_iou(curr_mask, other_mask)} with object {classes.get_classes_arr()[other_class_id]}.")
+                logging.debug(f"Removing {classes.get_classes_arr()[curr_class_id]} because it has an IoU of {mask_iou(curr_mask, other_mask)} with object {classes.get_classes_arr()[other_class_id]}.")
                 break
             
             
@@ -378,7 +378,7 @@ def filter_detections(
                     break
         # print(given_labels[idx])
         if classes.get_classes_arr()[curr_class_id] in classes.bg_classes:
-            print(f"Removing {classes.get_classes_arr()[curr_class_id]} because it is a background class, specifically {classes.bg_classes}.")
+            logging.debug(f"Removing {classes.get_classes_arr()[curr_class_id]} because it is a background class, specifically {classes.bg_classes}.")
             keep = False
 
         if keep:
@@ -485,7 +485,7 @@ def measure_time(func):
         result = func(*args, **kwargs)  # Call the function with any arguments it was called with
         end_time = time.time()
         elapsed_time = end_time - start_time
-        print(f"Done! Execution time of {func.__name__} function: {elapsed_time:.2f} seconds")
+        logging.info(f"Done! Execution time of {func.__name__} function: {elapsed_time:.2f} seconds")
         return result  # Return the result of the function call
     return wrapper
 

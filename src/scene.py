@@ -10,6 +10,7 @@ import supervision as sv
 import logging
 from collections import Counter
 from scipy.spatial.transform import Rotation
+from typing import List, Optional
 
 from habitat_sim.utils.common import quat_to_coeffs, quat_from_angle_axis, quat_from_two_vectors
 from src.habitat import (
@@ -57,7 +58,8 @@ from conceptgraph.utils.general_utils import (
     save_objects_for_frame,
     save_pointcloud,
     should_exit_early,
-    vis_render_image
+    vis_render_image,
+    filter_detections
 )
 from conceptgraph.dataset.datasets_common import get_dataset
 from conceptgraph.utils.vis import (
@@ -68,7 +70,7 @@ from conceptgraph.utils.vis import (
     vis_result_fast,
     save_video_detections
 )
-from conceptgraph.slam.slam_classes import MapEdgeMapping, MapObjectList
+from conceptgraph.slam.slam_classes import MapEdgeMapping, MapObjectList, DetectionList
 from conceptgraph.slam.utils import (
     filter_gobs,
     filter_objects,
@@ -83,7 +85,8 @@ from conceptgraph.slam.utils import (
     process_edges,
     process_pcd,
     processing_needed,
-    resize_gobs
+    resize_gobs,
+    merge_obj2_into_obj1
 )
 from conceptgraph.slam.mapping import (
     compute_spatial_similarities,
@@ -305,10 +308,19 @@ class Scene:
             mask=masks_np,
         )
 
-        # Make the edges
-        labels, _, _, _ = make_vlm_edges_and_captions(
-            image_rgb, curr_det, obj_classes, detection_class_labels,
-            None, None, False, None
+        # # Make the edges
+        # labels, _, _, _ = make_vlm_edges_and_captions(
+        #     image_rgb, curr_det, obj_classes, detection_class_labels,
+        #     None, None, False, None
+        # )
+
+        # filter the detection by removing overlapping detections
+        curr_det, labels = filter_detections(
+            image=image_rgb,
+            detections=curr_det,
+            classes=obj_classes,
+            given_labels=detection_class_labels,
+            iou_threshold=self.cfg_cg.object_detection_iou_threshold,
         )
 
         image_crops, image_feats, text_feats = compute_clip_features_batched(
@@ -381,31 +393,13 @@ class Scene:
 
         gobs = self.filter_gobs_with_distance(pts, gobs)
 
-        # create a Detection object for visualization
-        det_visualize = sv.Detections(
-            xyxy=gobs['xyxy'],
-            confidence=gobs['confidence'],
-            class_id=gobs['class_id'],
-        )
-        class_name_visualize = []
-        for i, old_name in enumerate(gobs['detection_class_labels']):
-            class_name_visualize.append(
-                f"{old_name.split(' ')[0]} {gobs['confidence'][i]:.3f}"
-            )
-        det_visualize.data['class_name'] = class_name_visualize
-        annotated_image = image_rgb.copy()
-        BOUNDING_BOX_ANNOTATOR = sv.BoundingBoxAnnotator(thickness=2)
-        LABEL_ANNOTATOR = sv.LabelAnnotator(text_thickness=1, text_scale=0.5, text_color=sv.Color.BLACK)
-        annotated_image = BOUNDING_BOX_ANNOTATOR.annotate(annotated_image, det_visualize)
-        annotated_image = LABEL_ANNOTATOR.annotate(annotated_image, det_visualize)
-
         detection_list = make_detection_list_from_pcd_and_gobs(
             gobs, img_path, obj_classes
         )
 
         if len(detection_list) == 0:  # no detections, skip
             logging.debug("No detections in this frame")
-            return annotated_image
+            return None
 
         # if no objects yet in the map,
         # just add all the objects from the current frame
@@ -413,7 +407,7 @@ class Scene:
         if len(self.objects) == 0:
             logging.debug(f"No objects in the map yet, adding all detections of length {len(detection_list)}")
             self.objects.extend(detection_list)
-            return annotated_image
+            return None
 
         ### compute similarities and then merge
         spatial_sim = compute_spatial_similarities(
@@ -439,28 +433,34 @@ class Scene:
         )
 
         # Now merge the detected objects into the existing objects based on the match indices
-        self.objects = merge_obj_matches(
+        visualize_captions = self.merge_obj_matches(
             detection_list=detection_list,
-            objects=self.objects,
             match_indices=match_indices,
-            downsample_voxel_size=self.cfg_cg['downsample_voxel_size'],
-            dbscan_remove_noise=self.cfg_cg['dbscan_remove_noise'],
-            dbscan_eps=self.cfg_cg['dbscan_eps'],
-            dbscan_min_points=self.cfg_cg['dbscan_min_points'],
-            spatial_sim_type=self.cfg_cg['spatial_sim_type'],
-            device=self.cfg_cg['device']
-            # Note: Removed 'match_method' and 'phys_bias' as they do not appear in the provided merge function
+            obj_classes=obj_classes
         )
 
         # fix the class names for objects
         # they should be the most popular name, not the first name
-        for idx, obj in enumerate(self.objects):
-            temp_class_name = obj["class_name"]
-            curr_obj_class_id_counter = Counter(obj['class_id'])
-            most_common_class_id = curr_obj_class_id_counter.most_common(1)[0][0]
-            most_common_class_name = obj_classes.get_classes_arr()[most_common_class_id]
-            if temp_class_name != most_common_class_name:
-                obj["class_name"] = most_common_class_name
+        # for idx, obj in enumerate(self.objects):
+        #     temp_class_name = obj["class_name"]
+        #     curr_obj_class_id_counter = Counter(obj['class_id'])
+        #     most_common_class_id = curr_obj_class_id_counter.most_common(1)[0][0]
+        #     most_common_class_name = obj_classes.get_classes_arr()[most_common_class_id]
+        #     if temp_class_name != most_common_class_name:
+        #         obj["class_name"] = most_common_class_name
+
+        # create a Detection object for visualization
+        det_visualize = sv.Detections(
+            xyxy=gobs['xyxy'],
+            confidence=gobs['confidence'],
+            class_id=gobs['class_id'],
+        )
+        det_visualize.data['class_name'] = visualize_captions
+        annotated_image = image_rgb.copy()
+        BOUNDING_BOX_ANNOTATOR = sv.BoundingBoxAnnotator(thickness=1)
+        LABEL_ANNOTATOR = sv.LabelAnnotator(text_thickness=1, text_scale=0.25, text_color=sv.Color.BLACK)
+        annotated_image = BOUNDING_BOX_ANNOTATOR.annotate(annotated_image, det_visualize)
+        annotated_image = LABEL_ANNOTATOR.annotate(annotated_image, det_visualize)
 
         return annotated_image
 
@@ -548,6 +548,46 @@ class Scene:
                 raise NotImplementedError(f"Unhandled type {type(gobs[attribute])}")
 
         return gobs
+
+    def merge_obj_matches(
+        self,
+        detection_list: DetectionList,
+        match_indices: List[Optional[int]],
+        obj_classes: ObjectClasses,
+    ):
+        visualize_captions = []
+        for detected_obj_idx, existing_obj_match_idx in enumerate(match_indices):
+            if existing_obj_match_idx is None:
+                self.objects.append(detection_list[detected_obj_idx])
+                visualize_captions.append(
+                    f"{detection_list[detected_obj_idx]['class_name']} {detection_list[detected_obj_idx]['conf'][0]:.3f} N"
+                )
+            else:
+                detected_obj = detection_list[detected_obj_idx]
+                matched_obj = self.objects[existing_obj_match_idx]
+                merged_obj = merge_obj2_into_obj1(
+                    obj1=matched_obj,
+                    obj2=detected_obj,
+                    downsample_voxel_size=self.cfg_cg['downsample_voxel_size'],
+                    dbscan_remove_noise=self.cfg_cg['dbscan_remove_noise'],
+                    dbscan_eps=self.cfg_cg['dbscan_eps'],
+                    dbscan_min_points=self.cfg_cg['dbscan_min_points'],
+                    spatial_sim_type=self.cfg_cg['spatial_sim_type'],
+                    device=self.cfg_cg['device'],
+                    run_dbscan=False,
+                )
+                # fix the class name by adopting the most popular class name
+                class_id_counter = Counter(merged_obj['class_id'])
+                most_common_class_id = class_id_counter.most_common(1)[0][0]
+                most_common_class_name = obj_classes.get_classes_arr()[most_common_class_id]
+                merged_obj['class_name'] = most_common_class_name
+
+                self.objects[existing_obj_match_idx] = merged_obj
+                visualize_captions.append(
+                    f"{detection_list[detected_obj_idx]['class_name']} {detection_list[detected_obj_idx]['conf'][0]:.3f} M {merged_obj['num_detections']}"
+                )
+
+        return visualize_captions
 
 
 

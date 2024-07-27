@@ -295,7 +295,7 @@ def merge_obj2_into_obj1(obj1, obj2, downsample_voxel_size, dbscan_remove_noise,
     extend_attributes = ['class_id']
     add_attributes = ['num_detections']
     skip_attributes = ['id', 'class_name']  # 'inst_color' just keeps obj1's
-    custom_handled = ['pcd', 'bbox', 'clip_ft']
+    custom_handled = ['pcd', 'bbox', 'clip_ft', 'conf']
 
     # Check for unhandled keys and throw an error if there are
     all_handled_keys = set(extend_attributes + add_attributes + skip_attributes + custom_handled)
@@ -335,6 +335,9 @@ def merge_obj2_into_obj1(obj1, obj2, downsample_voxel_size, dbscan_remove_noise,
     # Merge and normalize 'clip_ft'
     obj1['clip_ft'] = (obj1['clip_ft'] * n_obj1_det + obj2['clip_ft'] * n_obj2_det) / (n_obj1_det + n_obj2_det)
     obj1['clip_ft'] = F.normalize(obj1['clip_ft'], dim=0)
+
+    # Update confidence by taking the maximum
+    obj1['conf'] = max(obj1['conf'], obj2['conf'])
 
     # merge text_ft
     # obj2['text_ft'] = to_tensor(obj2['text_ft'], device)
@@ -1099,7 +1102,7 @@ def make_detection_list_from_pcd_and_gobs(
             'num_detections' : 1,                            # number of detections in this object
             # 'mask': [gobs['mask'][mask_idx]],
             # 'xyxy': [gobs['xyxy'][mask_idx]],
-            # 'conf': [gobs['confidence'][mask_idx]],
+            'conf': [gobs['confidence'][mask_idx]],
             # 'n_points': len(obj_pcds_and_bboxes[mask_idx]['pcd'].points),
             # 'pixel_area': [mask.sum()],
             # 'contain_number': [None],                          # This will be computed later

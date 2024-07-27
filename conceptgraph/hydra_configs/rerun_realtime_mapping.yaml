@@ -53,3 +53,6 @@ save_rerun: !!bool True
   #   params:
   #     downsample_voxel_size: 0.025, 0.01, 0.001, 0.001
   #     obj_pcd_max_points: 5000, 10000, 100000, 100000
+
+# For object detection
+object_detection_iou_threshold: 0.9

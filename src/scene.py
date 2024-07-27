@@ -10,7 +10,8 @@ import supervision as sv
 import logging
 from collections import Counter
 from scipy.spatial.transform import Rotation
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict
+from dataclasses import dataclass, field
 
 from habitat_sim.utils.common import quat_to_coeffs, quat_from_angle_axis, quat_from_two_vectors
 from src.habitat import (
@@ -99,6 +100,19 @@ from conceptgraph.utils.model_utils import compute_clip_features_batched
 from conceptgraph.utils.general_utils import get_vis_out_path, cfg_to_dict, check_run_detections
 
 
+@dataclass
+class SnapShot:
+    image: str
+    color: Tuple[float, float, float]
+    obs_point: np.ndarray  # integer position in voxel grid
+    full_obj_list: Dict[int, float] = field(default_factory=dict)  # object id to confidence
+    selected_obj_list: List[int] = field(default_factory=list)
+    position: np.ndarray = None
+
+    def __eq__(self, other):
+        raise NotImplementedError("Cannot compare SnapShot objects.")
+
+
 class Scene:
     def __init__(
             self,
@@ -106,6 +120,9 @@ class Scene:
             cfg,
             graph_cfg,
     ):
+        self.cfg = cfg
+        self.cfg_cg = graph_cfg
+
         # about the loading the scene
         split = "train" if int(scene_id.split("-")[0]) < 800 else "val"
         scene_mesh_path = os.path.join(cfg.scene_data_path, split, scene_id, scene_id.split("-")[1] + ".basis.glb")
@@ -140,11 +157,11 @@ class Scene:
         self.cam_intrinsic = get_cam_intr(cfg.img_width, cfg.img_height, cfg.hfov)
 
         # about scene graph
-        self.objects = MapObjectDict()
+        self.objects: MapObjectDict[int, Dict] = MapObjectDict()  # object_id -> object item
         self.object_id_counter = 0
 
-        self.cfg = cfg
-        self.cfg_cg = graph_cfg
+        self.snapshots: Dict[str, SnapShot] = {}  # image_path -> snapshot
+
 
     def __del__(self):
         try:
@@ -247,9 +264,11 @@ class Scene:
             image_rgb, depth, intrinsics, cam_pos,
             detection_model, sam_predictor, clip_model, clip_preprocess, clip_tokenizer,
             obj_classes,
-            pts,
+            pts, pts_voxel,
             img_path, frame_idx,
     ):
+
+
         # Detect objects
         results = detection_model.predict(image_rgb, conf=0.1, verbose=False)
         confidences = results[0].boxes.conf.cpu().numpy()
@@ -276,12 +295,6 @@ class Scene:
             class_id=detection_class_ids,
             mask=masks_np,
         )
-
-        # # Make the edges
-        # labels, _, _, _ = make_vlm_edges_and_captions(
-        #     image_rgb, curr_det, obj_classes, detection_class_labels,
-        #     None, None, False, None
-        # )
 
         # filter the detection by removing overlapping detections
         curr_det, labels = filter_detections(
@@ -370,12 +383,30 @@ class Scene:
             logging.debug("No detections in this frame")
             return None
 
+        # if there exists object detected in this frame, create a snapshot
+        snapshot = SnapShot(
+            image=img_path,
+            color=(random.random(), random.random(), random.random()),
+            obs_point=pts_voxel,
+        )
+        # add all detected objects into the snapshot
+        snapshot.full_obj_list = {
+            obj_id: detection_list[obj_id]['conf']
+            for obj_id in detection_list.keys()
+        }
+
         # if no objects yet in the map,
         # just add all the objects from the current frame
         # then continue, no need to match or merge
         if len(self.objects) == 0:
             logging.debug(f"No objects in the map yet, adding all detections of length {len(detection_list)}")
             self.objects.update(detection_list)
+
+            # in this case, all objects are selected into this snapshot
+            snapshot.selected_obj_list = list(detection_list.keys())
+
+            self.snapshots[img_path] = snapshot
+
             return None
 
         ### compute similarities and then merge
@@ -407,8 +438,12 @@ class Scene:
         visualize_captions = self.merge_obj_matches(
             detection_list=detection_list,
             match_indices=match_indices,
-            obj_classes=obj_classes
+            obj_classes=obj_classes,
+            snapshot=snapshot
         )
+
+        # add the snapshot into the snapshot list
+        self.snapshots[img_path] = snapshot
 
         # create a Detection object for visualization
         det_visualize = sv.Detections(
@@ -515,17 +550,32 @@ class Scene:
         detection_list: DetectionDict,
         match_indices: List[Tuple[int, Optional[int]]],
         obj_classes: ObjectClasses,
+        snapshot: SnapShot
     ):
         visualize_captions = []
         for idx, (detected_obj_id, existing_obj_match_id) in enumerate(match_indices):
             if existing_obj_match_id is None:
                 self.objects[detected_obj_id] = detection_list[detected_obj_id]
                 visualize_captions.append(
-                    f"{self.objects[detected_obj_id]['class_name']} {self.objects[detected_obj_id]['conf'][0]:.3f} N"
+                    f"{self.objects[detected_obj_id]['class_name']} {self.objects[detected_obj_id]['conf']:.3f} N"
                 )
+
+                # add the object into the selected object list of the snapshot, since there's no previous observation of it
+                snapshot.selected_obj_list.append(detected_obj_id)
             else:
                 detected_obj = detection_list[detected_obj_id]
                 matched_obj = self.objects[existing_obj_match_id]
+
+                # check the confidence to see whether to select the object into the snapshot
+                if detected_obj['conf'] > matched_obj['conf']:
+                    old_snapshot_filename = matched_obj['image']
+                    # replace the snapshot the old object belongs to
+                    matched_obj['image'] = detected_obj['image']
+                    # remove the object id in the old snapshot and add it to the new snapshot
+                    self.snapshots[old_snapshot_filename].selected_obj_list.remove(existing_obj_match_id)
+                    snapshot.selected_obj_list.append(existing_obj_match_id)
+                    # replacement of the confidence is done in merge_obj2_into_obj1
+
                 merged_obj = merge_obj2_into_obj1(
                     obj1=matched_obj,
                     obj2=detected_obj,
@@ -545,13 +595,13 @@ class Scene:
 
                 self.objects[existing_obj_match_id] = merged_obj
                 visualize_captions.append(
-                    f"{self.objects[existing_obj_match_id]['class_name']} {self.objects[existing_obj_match_id]['conf'][0]:.3f} {merged_obj['num_detections']}"
+                    f"{self.objects[existing_obj_match_id]['class_name']} {self.objects[existing_obj_match_id]['conf']:.3f} {merged_obj['num_detections']}"
                 )
 
         return visualize_captions
 
     def make_detection_list_from_pcd_and_gobs(
-            self, gobs, color_path, obj_classes
+            self, gobs, image_path, obj_classes
     ) -> DetectionDict:
         detection_list = DetectionDict()
         for mask_idx in range(len(gobs['mask'])):
@@ -567,12 +617,15 @@ class Scene:
                 'class_name': curr_class_name,  # global class id for this detection
                 'class_id': [curr_class_idx],  # global class id for this detection
                 'num_detections': 1,  # number of detections in this object
-                'conf': [gobs['confidence'][mask_idx]],
+                'conf': gobs['confidence'][mask_idx],
 
                 # These are for the entire 3D object
                 'pcd': gobs['pcd'][mask_idx],
                 'bbox': gobs['bbox'][mask_idx],
                 'clip_ft': to_tensor(gobs['image_feats'][mask_idx]),
+
+                # the snapshot name it belongs to
+                'image': image_path,
             }
 
             detection_list[self.object_id_counter] = detected_object
@@ -580,7 +633,52 @@ class Scene:
 
         return detection_list
 
+    def cleanup_empty_snapshots(self):
+        # remove the snapshots that have no selected objects
+        filtered_snapshots = {}
+        for file_name, snapshot in self.snapshots.items():
+            if len(snapshot.selected_obj_list) > 0:
+                filtered_snapshots[file_name] = snapshot
+        self.snapshots = filtered_snapshots
 
+        # for debug
+        for file_name, snapshot in self.snapshots.items():
+            for obj_id in snapshot.selected_obj_list:
+                assert self.objects[obj_id]['image'] == file_name, f"Error in update_snapshots: {obj_id}: {self.objects[obj_id]['image']} != {file_name}"
+
+    def update_snapshots(
+        self,
+        min_num_obj_threshold=1
+    ):
+        self.cleanup_empty_snapshots()
+
+        for min_num_objs in range(1, min_num_obj_threshold + 1):
+            for file_name, snapshot in self.snapshots.items():
+                if len(snapshot.selected_obj_list) == min_num_objs:
+                    # clean up this snapshot by moving its selected objects to other snapshots with have also observed them
+                    # find the other snapshot that has the highest confidence for the object
+                    remaining_ojb_ids = []
+                    for obj_id in snapshot.selected_obj_list:
+                        max_confidence = 0
+                        max_confidence_file_name = None
+                        for other_file_name, other_snapshot in self.snapshots.items():
+                            if other_file_name == file_name:
+                                continue
+                            if obj_id in other_snapshot.full_obj_list.keys() and other_snapshot.full_obj_list[obj_id] > max_confidence:
+                                max_confidence = other_snapshot.full_obj_list[obj_id]
+                                max_confidence_file_name = other_file_name
+
+                        # if there exists a snapshot that the object can be added to
+                        if max_confidence_file_name is not None:
+                            # move the object to that snapshot
+                            self.objects[obj_id]['image'] = max_confidence_file_name
+                            self.objects[obj_id]['conf'] = max_confidence
+                            self.snapshots[max_confidence_file_name].selected_obj_list.append(obj_id)
+                        else:
+                            # otherwise, keep the object in this snapshot
+                            remaining_ojb_ids.append(obj_id)
+                    snapshot.selected_obj_list = remaining_ojb_ids
+            self.cleanup_empty_snapshots()
 
 
 

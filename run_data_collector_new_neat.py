@@ -355,7 +355,8 @@ def main(cfg):
                             image_rgb=rgb[..., :3], depth=depth, intrinsics=cam_intr, cam_pos=cam_pose,
                             detection_model=detection_model, sam_predictor=sam_predictor, clip_model=clip_model,
                             clip_preprocess=clip_preprocess, clip_tokenizer=clip_tokenizer,
-                            obj_classes=obj_classes, pts=pts, img_path=obs_file_name,
+                            obj_classes=obj_classes, pts=pts, pts_voxel=tsdf_planner.habitat2voxel(pts),
+                            img_path=obs_file_name,
                             frame_idx=cnt_step * total_views + view_idx,
                         )
                         if annotated_rgb is not None:
@@ -383,6 +384,7 @@ def main(cfg):
                             plt.imsave(os.path.join(egocentric_save_dir, f"{cnt_step}_view_{view_idx}.png"), rgb)
 
                     tsdf_planner.update_snapshots(min_num_obj_threshold=cfg.min_num_obj_threshold)
+                    scene.update_snapshots(min_num_obj_threshold=cfg.min_num_obj_threshold)
 
                     update_success = tsdf_planner.update_frontier_map(pts=pts_normal, cfg=cfg.planner)
                     if not update_success:
@@ -477,6 +479,14 @@ def main(cfg):
                     #     step_dict["scene_graph_file2objs"][obj.image].append(
                     #         f"{obj_id}: {object_id_to_name[obj_id]}"
                     #     )
+                    # tempt
+                    step_dict["scene_graph_file2objs"] = {}
+                    for obj_id, obj in scene.objects.items():
+                        if obj['image'] not in step_dict["scene_graph_file2objs"]:
+                            step_dict["scene_graph_file2objs"][obj['image']] = []
+                        step_dict["scene_graph_file2objs"][obj['image']].append(
+                            f"{obj_id}: {obj['class_name']}"
+                        )
 
 
                     # sanity check
@@ -489,6 +499,16 @@ def main(cfg):
                         exist_count = 0
                         for ss in step_dict["snapshots"]:
                             if obj_id in ss["obj_ids"]:
+                                exist_count += 1
+                        assert exist_count == 1, f"{exist_count} != 1 for obj_id {obj_id}, {object_id_to_name[obj_id]}"
+                    total_objs_count = 0
+                    for snapshot in scene.snapshots.values():
+                        total_objs_count += len(snapshot.selected_obj_list)
+                    assert len(scene.objects) == total_objs_count, f"{len(scene.objects)} != {total_objs_count}"
+                    for obj_id in scene.objects.keys():
+                        exist_count = 0
+                        for ss in scene.snapshots.values():
+                            if obj_id in ss.selected_obj_list:
                                 exist_count += 1
                         assert exist_count == 1, f"{exist_count} != 1 for obj_id {obj_id}, {object_id_to_name[obj_id]}"
 

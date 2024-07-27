@@ -33,14 +33,6 @@ class Frontier:
 
 
 @dataclass
-class Object:
-    """Object class for semantic objects."""
-
-    position: np.ndarray  # integer position in voxel grid
-    object_id: int
-
-
-@dataclass
 class SceneGraphItem:
     object_id: int
     bbox_center: np.ndarray

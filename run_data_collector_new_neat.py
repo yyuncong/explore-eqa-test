@@ -329,7 +329,7 @@ def main(cfg):
 
                     # observe and update the TSDF
                     for view_idx, ang in enumerate(all_angles):
-                        obs, cam_pose, cam_rot = scene.get_observation(pts, ang)
+                        obs, cam_pose = scene.get_observation(pts, ang)
                         rgb = obs["color_sensor"]
                         depth = obs["depth_sensor"]
                         semantic_obs = obs["semantic_sensor"]
@@ -590,7 +590,7 @@ def main(cfg):
                         logging.info(f"Target observation position arrived at step {cnt_step}!")
 
                         # get an observation and break
-                        obs, _, _ = scene.get_observation(pts, angle)
+                        obs, _ = scene.get_observation(pts, angle)
                         rgb = obs["color_sensor"]
 
                         target_obs_save_dir = os.path.join(episode_data_dir, "target_observation")

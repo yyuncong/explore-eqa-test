@@ -2,9 +2,9 @@ from conceptgraph.utils.logging_metrics import MappingTracker
 import torch
 import torch.nn.functional as F
 
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
-from conceptgraph.slam.slam_classes import MapObjectList, DetectionList
+from conceptgraph.slam.slam_classes import MapObjectDict, DetectionDict, MapObjectList, DetectionList
 from conceptgraph.utils.general_utils import Timer
 from conceptgraph.utils.ious import (
     compute_iou_batch, 
@@ -23,7 +23,7 @@ owandb = OptionalWandB()
 tracker = MappingTracker()
 
 
-def compute_spatial_similarities(spatial_sim_type: str, detection_list: DetectionList, objects: MapObjectList, downsample_voxel_size) -> torch.Tensor:
+def compute_spatial_similarities(spatial_sim_type: str, detection_list: DetectionDict, objects: MapObjectDict, downsample_voxel_size) -> torch.Tensor:
     det_bboxes = detection_list.get_stacked_values_torch('bbox')
     obj_bboxes = objects.get_stacked_values_torch('bbox')
 
@@ -43,7 +43,7 @@ def compute_spatial_similarities(spatial_sim_type: str, detection_list: Detectio
     
     return spatial_sim
 
-def compute_visual_similarities(detection_list: DetectionList, objects: MapObjectList) -> torch.Tensor:
+def compute_visual_similarities(detection_list: DetectionDict, objects: MapObjectDict) -> torch.Tensor:
     '''
     Compute the visual similarities between the detections and the objects
     
@@ -81,8 +81,10 @@ def aggregate_similarities(match_method: str, phys_bias: float, spatial_sim: tor
     return sims
 
 def match_detections_to_objects(
-    agg_sim: torch.Tensor, detection_threshold: float = float('-inf')
-) -> List[Optional[int]]:
+    agg_sim: torch.Tensor,
+    existing_obj_ids: List[int], detected_obj_ids: List[int],
+    detection_threshold: float = float('-inf'),
+) -> List[Tuple[int, Optional[int]]]:
     """
     Matches detections to objects based on similarity, returning match indices or None for unmatched.
 
@@ -97,9 +99,14 @@ def match_detections_to_objects(
     for detected_obj_idx in range(agg_sim.shape[0]):
         max_sim_value = agg_sim[detected_obj_idx].max()
         if max_sim_value <= detection_threshold:
-            match_indices.append(None)
+            match_indices.append(
+                (detected_obj_ids[detected_obj_idx], None)
+            )
         else:
-            match_indices.append(agg_sim[detected_obj_idx].argmax().item())
+            # match_indices.append(agg_sim[detected_obj_idx].argmax().item())
+            match_indices.append(
+                (detected_obj_ids[detected_obj_idx], existing_obj_ids[agg_sim[detected_obj_idx].argmax().item()])
+            )
 
     return match_indices
 

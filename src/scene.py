@@ -10,7 +10,7 @@ import supervision as sv
 import logging
 from collections import Counter
 from scipy.spatial.transform import Rotation
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from habitat_sim.utils.common import quat_to_coeffs, quat_from_angle_axis, quat_from_two_vectors
 from src.habitat import (
@@ -70,7 +70,7 @@ from conceptgraph.utils.vis import (
     vis_result_fast,
     save_video_detections
 )
-from conceptgraph.slam.slam_classes import MapEdgeMapping, MapObjectList, DetectionList
+from conceptgraph.slam.slam_classes import MapObjectDict, DetectionDict, to_tensor
 from conceptgraph.slam.utils import (
     filter_gobs,
     filter_objects,
@@ -140,7 +140,8 @@ class Scene:
         self.cam_intrinsic = get_cam_intr(cfg.img_width, cfg.img_height, cfg.hfov)
 
         # about scene graph
-        self.objects = MapObjectList(device=graph_cfg.device)
+        self.objects = MapObjectDict()
+        self.object_id_counter = 0
 
         self.cfg = cfg
         self.cfg_cg = graph_cfg
@@ -167,39 +168,7 @@ class Scene:
         cam_pose[:3, :3] = quaternion.as_rotation_matrix(quaternion_0)
         cam_pose[:3, 3] = translation_0
 
-
-
-        rotation = Rotation.from_quat(as_float_array(quaternion_0))
-        # depth_map = obs["depth_sensor"]
-        # # Depth to agent coordinate
-        # _max = 100
-        # _min = 0
-        # valid_mask = (depth_map > _min) & (depth_map < _max)
-        # depth_map = np.clip(depth_map, _min, _max)
-        #
-        # w, h = 720, 720
-        # focal_length = 207.84609690826534
-        # _x, _z = np.meshgrid(np.arange(w), np.arange(h - 1, -1, -1))
-        # x = (_x - (w - 1) / 2.) * depth_map / focal_length
-        # y = depth_map
-        # z = (_z - (h - 1) / 2.) * depth_map / focal_length
-        # _points = np.stack([x, z, y], axis=-1).reshape(-1, 3)
-        # # Rotate points
-        # _points = rotation.inv().apply(_points)
-        # # Agent to world coordinate
-        # _points[:, 0] += translation_0[0]
-        # _points[:, 1] += translation_0[1]
-        # _points[:, 2] = translation_0[2] - _points[:, 2]  # reverse axis
-
-
-
-
-
-
-
-
-
-        return obs, cam_pose, rotation
+        return obs, cam_pose
 
     def get_frontier_observation(self, pts, view_dir, camera_tilt=0.0):
         agent_state = habitat_sim.AgentState()
@@ -393,7 +362,7 @@ class Scene:
 
         gobs = self.filter_gobs_with_distance(pts, gobs)
 
-        detection_list = make_detection_list_from_pcd_and_gobs(
+        detection_list = self.make_detection_list_from_pcd_and_gobs(
             gobs, img_path, obj_classes
         )
 
@@ -406,7 +375,7 @@ class Scene:
         # then continue, no need to match or merge
         if len(self.objects) == 0:
             logging.debug(f"No objects in the map yet, adding all detections of length {len(detection_list)}")
-            self.objects.extend(detection_list)
+            self.objects.update(detection_list)
             return None
 
         ### compute similarities and then merge
@@ -429,7 +398,9 @@ class Scene:
         # Perform matching of detections to existing objects
         match_indices = match_detections_to_objects(
             agg_sim=agg_sim,
-            detection_threshold=self.cfg_cg['sim_threshold']  # Use the sim_threshold from the configuration
+            detection_threshold=self.cfg_cg['sim_threshold'],  # Use the sim_threshold from the configuration
+            existing_obj_ids=list(self.objects.keys()),
+            detected_obj_ids=list(detection_list.keys())
         )
 
         # Now merge the detected objects into the existing objects based on the match indices
@@ -438,16 +409,6 @@ class Scene:
             match_indices=match_indices,
             obj_classes=obj_classes
         )
-
-        # fix the class names for objects
-        # they should be the most popular name, not the first name
-        # for idx, obj in enumerate(self.objects):
-        #     temp_class_name = obj["class_name"]
-        #     curr_obj_class_id_counter = Counter(obj['class_id'])
-        #     most_common_class_id = curr_obj_class_id_counter.most_common(1)[0][0]
-        #     most_common_class_name = obj_classes.get_classes_arr()[most_common_class_id]
-        #     if temp_class_name != most_common_class_name:
-        #         obj["class_name"] = most_common_class_name
 
         # create a Detection object for visualization
         det_visualize = sv.Detections(
@@ -551,20 +512,20 @@ class Scene:
 
     def merge_obj_matches(
         self,
-        detection_list: DetectionList,
-        match_indices: List[Optional[int]],
+        detection_list: DetectionDict,
+        match_indices: List[Tuple[int, Optional[int]]],
         obj_classes: ObjectClasses,
     ):
         visualize_captions = []
-        for detected_obj_idx, existing_obj_match_idx in enumerate(match_indices):
-            if existing_obj_match_idx is None:
-                self.objects.append(detection_list[detected_obj_idx])
+        for idx, (detected_obj_id, existing_obj_match_id) in enumerate(match_indices):
+            if existing_obj_match_id is None:
+                self.objects[detected_obj_id] = detection_list[detected_obj_id]
                 visualize_captions.append(
-                    f"{detection_list[detected_obj_idx]['class_name']} {detection_list[detected_obj_idx]['conf'][0]:.3f} N"
+                    f"{self.objects[detected_obj_id]['class_name']} {self.objects[detected_obj_id]['conf'][0]:.3f} N"
                 )
             else:
-                detected_obj = detection_list[detected_obj_idx]
-                matched_obj = self.objects[existing_obj_match_idx]
+                detected_obj = detection_list[detected_obj_id]
+                matched_obj = self.objects[existing_obj_match_id]
                 merged_obj = merge_obj2_into_obj1(
                     obj1=matched_obj,
                     obj2=detected_obj,
@@ -582,12 +543,42 @@ class Scene:
                 most_common_class_name = obj_classes.get_classes_arr()[most_common_class_id]
                 merged_obj['class_name'] = most_common_class_name
 
-                self.objects[existing_obj_match_idx] = merged_obj
+                self.objects[existing_obj_match_id] = merged_obj
                 visualize_captions.append(
-                    f"{detection_list[detected_obj_idx]['class_name']} {detection_list[detected_obj_idx]['conf'][0]:.3f} M {merged_obj['num_detections']}"
+                    f"{self.objects[existing_obj_match_id]['class_name']} {self.objects[existing_obj_match_id]['conf'][0]:.3f} {merged_obj['num_detections']}"
                 )
 
         return visualize_captions
+
+    def make_detection_list_from_pcd_and_gobs(
+            self, gobs, color_path, obj_classes
+    ) -> DetectionDict:
+        detection_list = DetectionDict()
+        for mask_idx in range(len(gobs['mask'])):
+            if gobs['pcd'][mask_idx] is None:  # point cloud was discarded
+                continue
+
+            curr_class_name = gobs['classes'][gobs['class_id'][mask_idx]]
+            curr_class_idx = obj_classes.get_classes_arr().index(curr_class_name)
+
+            detected_object = {
+                'id': self.object_id_counter,  # unique id for this object
+
+                'class_name': curr_class_name,  # global class id for this detection
+                'class_id': [curr_class_idx],  # global class id for this detection
+                'num_detections': 1,  # number of detections in this object
+                'conf': [gobs['confidence'][mask_idx]],
+
+                # These are for the entire 3D object
+                'pcd': gobs['pcd'][mask_idx],
+                'bbox': gobs['bbox'][mask_idx],
+                'clip_ft': to_tensor(gobs['image_feats'][mask_idx]),
+            }
+
+            detection_list[self.object_id_counter] = detected_object
+            self.object_id_counter += 1
+
+        return detection_list
 
 
 

@@ -20,7 +20,7 @@ import torch.nn.functional as F
 import faiss
 import uuid
 
-from conceptgraph.slam.slam_classes import MapEdgeMapping, MapObjectList, DetectionList, to_tensor
+from conceptgraph.slam.slam_classes import MapEdgeMapping, MapObjectList, DetectionList, to_tensor, MapObjectDict
 
 from conceptgraph.utils.ious import compute_3d_iou, compute_3d_iou_accurate_batch, compute_iou_batch
 
@@ -463,7 +463,7 @@ def compute_overlap_matrix_2set(objects_map: MapObjectList, objects_new: Detecti
     return overlap_matrix
 
 # @profile
-def compute_overlap_matrix_general(objects_a: MapObjectList, objects_b = None, downsample_voxel_size = None) -> np.ndarray:
+def compute_overlap_matrix_general(objects_a: MapObjectDict, objects_b = None, downsample_voxel_size = None) -> np.ndarray:
     """
     Compute the overlap matrix between two sets of objects represented by their point clouds. This function can also perform self-comparison when `objects_b` is not provided. The overlap is quantified based on the proximity of points from one object to the nearest points of another, within a threshold specified by `downsample_voxel_size`.
 
@@ -525,14 +525,14 @@ def compute_overlap_matrix_general(objects_a: MapObjectList, objects_b = None, d
     overlap_matrix = np.zeros((len_a, len_b))
 
     # Convert the point clouds into numpy arrays and then into FAISS indices for efficient search
-    points_a = [np.asarray(obj['pcd'].points, dtype=np.float32) for obj in objects_a] # m arrays
+    points_a = [np.asarray(obj['pcd'].points, dtype=np.float32) for obj in objects_a.values()] # m arrays
     indices_a = [faiss.IndexFlatL2(points_a_arr.shape[1]) for points_a_arr in points_a] # m indices
 
     # Add the points from the numpy arrays to the corresponding FAISS indices
     for idx_a, points_a_arr in zip(indices_a, points_a):
         idx_a.add(points_a_arr)
 
-    points_b = [np.asarray(obj['pcd'].points, dtype=np.float32) for obj in objects_b] # n arrays
+    points_b = [np.asarray(obj['pcd'].points, dtype=np.float32) for obj in objects_b.values()] # n arrays
 
     bbox_a = objects_a.get_stacked_values_torch('bbox')
     bbox_b = objects_b.get_stacked_values_torch('bbox')
@@ -1084,11 +1084,6 @@ def make_detection_list_from_pcd_and_gobs(
 
         curr_class_name = gobs['classes'][gobs['class_id'][mask_idx]]
         curr_class_idx = obj_classes.get_classes_arr().index(curr_class_name)
-        
-        is_bg_object = bool(curr_class_name in obj_classes.get_bg_classes_arr())
-        
-        # print(f"Line 937, tracker.total_object_count INCREMENTED: {tracker.total_object_count }")
-        num_obj_in_class = tracker.curr_class_count[curr_class_name]
         
         
         detected_object = {

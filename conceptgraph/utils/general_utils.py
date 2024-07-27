@@ -338,23 +338,30 @@ def filter_detections(
     if top_x_detections is not None:
         detections_combined = detections_combined[:top_x_detections]
 
+    # Calculate the total number of pixels as a threshold for small masks
+    total_pixels = image.shape[0] * image.shape[1]
+    small_mask_size = total_pixels * min_mask_size_ratio
+
     # Further filter based on proximity
     filtered_detections = []
     for idx, current_det in enumerate(detections_combined):
-        _, curr_class_id, curr_xyxy, curr_mask, _ = current_det
+        conf, curr_class_id, curr_xyxy, curr_mask, _ = current_det
         curr_center = ((curr_xyxy[0] + curr_xyxy[2]) / 2, (curr_xyxy[1] + curr_xyxy[3]) / 2)
         curr_area = (curr_xyxy[2] - curr_xyxy[0]) * (curr_xyxy[3] - curr_xyxy[1])
         keep = True
-        
-            # Calculate the total number of pixels as a threshold for small masks
-        total_pixels = image.shape[0] * image.shape[1]
-        small_mask_size = total_pixels * min_mask_size_ratio
 
         # check mask size and remove if too small
         mask_size = np.count_nonzero(current_det[3])
         if mask_size < small_mask_size:
             logging.debug(f"Removing {classes.get_classes_arr()[curr_class_id]} because the mask size is too small.")
             keep = False
+            continue
+
+        # Check confidence threshold
+        if conf < confidence_threshold:
+            logging.debug(f"Removing {classes.get_classes_arr()[curr_class_id]} because it has a confidence of {conf} < {confidence_threshold}.")
+            keep = False
+            continue
 
         for other in filtered_detections:
             _, other_class_id, other_xyxy, other_mask, _ = other
@@ -380,6 +387,7 @@ def filter_detections(
         if classes.get_classes_arr()[curr_class_id] in classes.bg_classes:
             logging.debug(f"Removing {classes.get_classes_arr()[curr_class_id]} because it is a background class, specifically {classes.bg_classes}.")
             keep = False
+            continue
 
         if keep:
             filtered_detections.append(current_det)

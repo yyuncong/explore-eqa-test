@@ -583,7 +583,7 @@ def merge_overlap_objects(
     merge_overlap_thresh: float,
     merge_visual_sim_thresh: float,
     merge_text_sim_thresh: float,
-    objects: MapObjectList,
+    objects: MapObjectDict,
     overlap_matrix: np.ndarray,
     downsample_voxel_size: float,
     dbscan_remove_noise: bool,
@@ -591,7 +591,6 @@ def merge_overlap_objects(
     dbscan_min_points: int,
     spatial_sim_type: str,
     device: str,
-    map_edges = None,
 ):
     x, y = overlap_matrix.nonzero()
     overlap_ratio = overlap_matrix[x, y]
@@ -602,18 +601,16 @@ def merge_overlap_objects(
     y = y[sort]
     overlap_ratio = overlap_ratio[sort]
     
-    merge_operations = []  # to track merge operations
-    kept_objects = np.ones(
-        len(objects), dtype=bool
-    )  # Initialize all objects as 'kept' initially
-    
-    index_updates = list(range(len(objects)))  # Initialize index updates with the same indices
+    obj_id_list = list(objects.keys())
 
     for i, j, ratio in zip(x, y, overlap_ratio):
         if ratio > merge_overlap_thresh:
+            # change index to object ids
+            obj_i = obj_id_list[i]
+            obj_j = obj_id_list[j]
             visual_sim = F.cosine_similarity(
-                to_tensor(objects[i]["clip_ft"]),
-                to_tensor(objects[j]["clip_ft"]),
+                to_tensor(objects[obj_i]["clip_ft"]),
+                to_tensor(objects[obj_j]["clip_ft"]),
                 dim=0,
             )
             # text_sim = F.cosine_similarity(
@@ -623,11 +620,11 @@ def merge_overlap_objects(
             # )
             text_sim = visual_sim
             if (visual_sim > merge_visual_sim_thresh) and (text_sim > merge_text_sim_thresh):
-                if kept_objects[j]:  # Check if the target object has not been merged into another
+                if obj_i in objects and obj_j in objects:  # Check if the two objects still exist and have not been merged
                     # Merge object i into object j
-                    objects[j] = merge_obj2_into_obj1(
-                        objects[j],
-                        objects[i],
+                    objects[obj_j] = merge_obj2_into_obj1(
+                        objects[obj_j],
+                        objects[obj_i],
                         downsample_voxel_size,
                         dbscan_remove_noise,
                         dbscan_eps,
@@ -636,26 +633,12 @@ def merge_overlap_objects(
                         device,
                         run_dbscan=True,
                     )
-                    kept_objects[i] = False  # Mark object i as 'merged'
-                    merge_operations.append((i, j))  # Record this merge for edge updates 
-                    index_updates[i] = None  # Update index as merged
+                    # Remove object i from the list of objects
+                    objects.pop(obj_i)
         else:
             break  # Stop processing if the current overlap ratio is below the threshold
-        
-    # Update remaining indices in index_updates
-    current_index = 0
-    for original_index, is_kept in enumerate(kept_objects):
-        if is_kept:
-            index_updates[original_index] = current_index
-            current_index += 1
-        else:
-            index_updates[original_index] = None
 
-    # Create a new list of objects excluding those that were merged
-    new_objects = [obj for obj, keep in zip(objects, kept_objects) if keep]
-    objects = MapObjectList(new_objects)
-
-    return objects, index_updates
+    return objects
 
 # @profile
 def denoise_objects(
@@ -665,82 +648,75 @@ def denoise_objects(
     dbscan_min_points: int,
     spatial_sim_type: str,
     device: str,
-    objects: MapObjectList,
+    objects: MapObjectDict,
 ):
-    tracker = DenoisingTracker()  # Get the singleton instance of DenoisingTracker
     logging.debug(f"Starting denoising with {len(objects)} objects")
-    for i in range(len(objects)):
-        og_object_pcd = objects[i]["pcd"]
+    for obj_id in objects.keys():
+        og_object_pcd = objects[obj_id]["pcd"]
         
         if len(og_object_pcd.points) <= 1: # no need to denoise
-            objects[i]["pcd"] = og_object_pcd
+            objects[obj_id]["pcd"] = og_object_pcd
         else:
             # Adjust the call to process_pcd with explicit parameters
-            objects[i]["pcd"] = process_pcd(
-                objects[i]["pcd"],
+            objects[obj_id]["pcd"] = process_pcd(
+                objects[obj_id]["pcd"],
                 downsample_voxel_size,
                 dbscan_remove_noise,
                 dbscan_eps,
                 dbscan_min_points,
                 run_dbscan=True,
             )
-            if len(objects[i]["pcd"].points) < 4:
-                objects[i]["pcd"] = og_object_pcd
+            if len(objects[obj_id]["pcd"].points) < 4:
+                objects[obj_id]["pcd"] = og_object_pcd
 
         # Adjust the call to get_bounding_box with explicit parameters
-        objects[i]["bbox"] = get_bounding_box(spatial_sim_type, objects[i]["pcd"])
-        objects[i]["bbox"].color = [0, 1, 0]
-        logging.debug(f"Finished denoising object {i} out of {len(objects)}")
-        # Use the tracker's method
-        tracker.track_denoising(objects[i]["id"], len(og_object_pcd.points), len(objects[i]["pcd"].points))
-        
-        # track_denoising(objects[i]["id"], len(og_object_pcd.points), len(objects[i]["pcd"].points))
-        logging.debug(f"before denoising: {len(og_object_pcd.points)}, after denoising: {len(objects[i]['pcd'].points)}")
+        objects[obj_id]["bbox"] = get_bounding_box(spatial_sim_type, objects[obj_id]["pcd"])
+        objects[obj_id]["bbox"].color = [0, 1, 0]
+        logging.debug(f"Finished denoising object {obj_id} out of {len(objects)}")
+        logging.debug(f"before denoising: {len(og_object_pcd.points)}, after denoising: {len(objects[obj_id]['pcd'].points)}")
+
     logging.debug(f"Finished denoising with {len(objects)} objects")
     return objects
 
 # @profile
 def filter_objects(
     obj_min_points: int, 
-    obj_min_detections: int, 
-    objects: MapObjectList, 
-    map_edges: MapEdgeMapping = None
+    obj_min_detections: int,
+    min_distance: float,  # only do filtering on objects that are at least this far apart
+    objects: MapObjectDict,
+    pts: np.ndarray
 ):
     print("Before filtering:", len(objects))
-    objects_to_keep = []
-    new_index_map = {}  # Maps old indices to new indices if edges are provided
+    objects_to_keep = MapObjectDict()
 
     # Identify which objects to keep
-    for index, obj in enumerate(objects):
-        if len(obj["pcd"].points) >= obj_min_points and obj["num_detections"] >= obj_min_detections:
-            objects_to_keep.append(obj)
-            if map_edges is not None:
-                new_index_map[index] = len(objects_to_keep) - 1
+    for obj_id, obj in objects.items():
+        if np.linalg.norm(
+            np.asarray(obj['bbox'].center[0] - pts[0], obj['bbox'].center[2] - pts[2])
+        ) > min_distance:
+            if len(obj["pcd"].points) >= obj_min_points and obj["num_detections"] >= obj_min_detections:
+                objects_to_keep[obj_id] = obj
+            else:
+                logging.debug(f"Filtered object {obj_id} {obj['class_name']} in {obj['image']}")
+        else:
+            objects_to_keep[obj_id] = obj
 
-    # Create a new MapObjectList from the kept objects
-    new_objects = MapObjectList(objects_to_keep)
-    print("After filtering:", len(new_objects))
+    print("After filtering:", len(objects_to_keep))
 
-    # Update edges if provided
-    if map_edges and new_index_map:
-        map_edges.update_indices(new_index_map, new_objects)
-
-    return new_objects
+    return objects_to_keep
 
 # @profile
 def merge_objects(
     merge_overlap_thresh: float,
     merge_visual_sim_thresh: float,
     merge_text_sim_thresh: float,
-    objects: MapObjectList,
+    objects: MapObjectDict,
     downsample_voxel_size: float,
     dbscan_remove_noise: bool,
     dbscan_eps: float,
     dbscan_min_points: int,
     spatial_sim_type: str,
     device: str,
-    do_edges: bool = False,
-    map_edges = None,
 ):
     if len(objects) == 0:
         return objects
@@ -756,7 +732,7 @@ def merge_objects(
     print("Before merging:", len(objects))
     # old_objects = copy.deepcopy(objects)
     # Pass all necessary configuration parameters to merge_overlap_objects
-    objects, index_updates = merge_overlap_objects(
+    objects = merge_overlap_objects(
         merge_overlap_thresh=merge_overlap_thresh,
         merge_visual_sim_thresh=merge_visual_sim_thresh,
         merge_text_sim_thresh=merge_text_sim_thresh,
@@ -768,40 +744,10 @@ def merge_objects(
         dbscan_min_points=dbscan_min_points,
         spatial_sim_type=spatial_sim_type,
         device=device,
-        map_edges=map_edges,
     )
-    
-    # print(f"MERGE OPERATIONS: \n{merge_operations}")
-    
-    # print("MERGE OPERATIONS: ")
-    # for oper in merge_operations:
-    #     obj_1_curr_num = old_objects[oper[0]]['curr_obj_num']
-    #     obj_2_curr_num = old_objects[oper[1]]['curr_obj_num']
-    #     print(f"Merge {obj_1_curr_num} into {obj_2_curr_num}")
-    
-    # k=1
-    # for i, j in zip(list(range(len(old_objects))), index_updates):
-    #     print(i,j)
-    
-    # if map_edges is not None:
-    if do_edges:
-        map_edges.merge_update_indices(index_updates)
-        map_edges.update_objects_list(objects)
-        print("After merging:", len(objects))
+    print("After merging:", len(objects))
 
-    # if map_edges is not None:
-    #     # Apply each recorded merge operation to the edges
-    #     for source_idx, dest_idx in merge_operations:
-    #         map_edges.merge_objects_edges(source_idx, dest_idx)
-    #     map_edges.update_objects_list(objects)
-    #     print("After merging:", len(objects))
-        
-        # now update all the edge indices using the index_updates, how?
-
-    if do_edges:
-        return objects, map_edges
-    else:
-        return objects
+    return objects
     
 def filter_captions(captions, detection_class_labels):
     # Create a dictionary to map id to the index in the captions list

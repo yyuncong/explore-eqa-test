@@ -27,9 +27,9 @@ obj_pcd_max_points: 5000
 debug_render: !!bool False
 vis_render: !!bool False
 
-denoise_interval: 5           # Run DBSCAN every k frame. This operation is heavy
-filter_interval: 5            # Filter objects that have too few associations or are too small
-merge_interval: 5             # Merge objects based on geometric and semantic similarity
+denoise_interval: 12           # Run DBSCAN every k frame. This operation is heavy
+filter_interval: 12            # Filter objects that have too few associations or are too small
+merge_interval: 12             # Merge objects based on geometric and semantic similarity
 run_denoise_final_frame: !!bool True
 run_filter_final_frame: !!bool True
 run_merge_final_frame: !!bool True
@@ -40,7 +40,7 @@ dbscan_min_points: 10
 
 # Selection criteria of the fused object point cloud
 obj_min_points: 0
-obj_min_detections: 1
+obj_min_detections: 2
 
 # For merge_overlap_objects() function
 use_rerun: !!bool True
@@ -56,3 +56,5 @@ save_rerun: !!bool True
 
 # For object detection
 object_detection_iou_threshold: 0.9
+min_mask_size_ratio: 0.001
+object_detection_confidence_threshold: 0.4

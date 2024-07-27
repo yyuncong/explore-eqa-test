@@ -95,7 +95,6 @@ from conceptgraph.slam.mapping import (
     compute_visual_similarities,
     aggregate_similarities,
     match_detections_to_objects,
-    merge_obj_matches
 )
 from conceptgraph.utils.model_utils import compute_clip_features_batched
 from conceptgraph.utils.general_utils import get_vis_out_path, cfg_to_dict, check_run_detections
@@ -309,6 +308,8 @@ class Scene:
             classes=obj_classes,
             given_labels=detection_class_labels,
             iou_threshold=self.cfg_cg.object_detection_iou_threshold,
+            min_mask_size_ratio=self.cfg_cg.min_mask_size_ratio,
+            confidence_threshold=self.cfg_cg.object_detection_confidence_threshold,
         )
         if curr_det is None:
             logging.debug("No detections left after filter_detections")
@@ -494,61 +495,6 @@ class Scene:
 
         return annotated_image, True, target_obj_id
 
-        # ### Perform post-processing periodically if told so
-        #
-        # # Denoising
-        # if processing_needed(
-        #         cfg["denoise_interval"],
-        #         cfg["run_denoise_final_frame"],
-        #         frame_idx,
-        #         is_final_frame=False,
-        # ):
-        #     self.objects = measure_time(denoise_objects)(
-        #         downsample_voxel_size=cfg['downsample_voxel_size'],
-        #         dbscan_remove_noise=cfg['dbscan_remove_noise'],
-        #         dbscan_eps=cfg['dbscan_eps'],
-        #         dbscan_min_points=cfg['dbscan_min_points'],
-        #         spatial_sim_type=cfg['spatial_sim_type'],
-        #         device=cfg['device'],
-        #         objects=self.objects
-        #     )
-        #
-        # # Filtering
-        # if processing_needed(
-        #         cfg["filter_interval"],
-        #         cfg["run_filter_final_frame"],
-        #         frame_idx,
-        #         is_final_frame=False,
-        # ):
-        #     self.objects = filter_objects(
-        #         obj_min_points=cfg['obj_min_points'],
-        #         obj_min_detections=cfg['obj_min_detections'],
-        #         objects=self.objects,
-        #         map_edges=None
-        #     )
-        #
-        # # Merging
-        # if processing_needed(
-        #         cfg["merge_interval"],
-        #         cfg["run_merge_final_frame"],
-        #         frame_idx,
-        #         is_final_frame=False,
-        # ):
-        #     self.objects = measure_time(merge_objects)(
-        #         merge_overlap_thresh=cfg["merge_overlap_thresh"],
-        #         merge_visual_sim_thresh=cfg["merge_visual_sim_thresh"],
-        #         merge_text_sim_thresh=cfg["merge_text_sim_thresh"],
-        #         objects=self.objects,
-        #         downsample_voxel_size=cfg["downsample_voxel_size"],
-        #         dbscan_remove_noise=cfg["dbscan_remove_noise"],
-        #         dbscan_eps=cfg["dbscan_eps"],
-        #         dbscan_min_points=cfg["dbscan_min_points"],
-        #         spatial_sim_type=cfg["spatial_sim_type"],
-        #         device=cfg["device"],
-        #         do_edges=False,  # false for now, otherwise use cfg["make_edges"],
-        #         map_edges=None
-        #     )
-
 
     def filter_gobs_with_distance(self, pts, gobs):
         idx_to_keep = []
@@ -719,8 +665,67 @@ class Scene:
                     snapshot.selected_obj_list = remaining_ojb_ids
             self.cleanup_empty_snapshots()
 
+    def periodic_cleanup_objects(self, frame_idx, pts):
+        ### Perform post-processing periodically if told so
 
+        # Denoising
+        if processing_needed(
+                self.cfg_cg["denoise_interval"],
+                self.cfg_cg["run_denoise_final_frame"],
+                frame_idx,
+                is_final_frame=False,
+        ):
+            self.objects = measure_time(denoise_objects)(
+                downsample_voxel_size=self.cfg_cg['downsample_voxel_size'],
+                dbscan_remove_noise=self.cfg_cg['dbscan_remove_noise'],
+                dbscan_eps=self.cfg_cg['dbscan_eps'],
+                dbscan_min_points=self.cfg_cg['dbscan_min_points'],
+                spatial_sim_type=self.cfg_cg['spatial_sim_type'],
+                device=self.cfg_cg['device'],
+                objects=self.objects
+            )
 
+        # Filtering
+        if processing_needed(
+                self.cfg_cg["filter_interval"],
+                self.cfg_cg["run_filter_final_frame"],
+                frame_idx,
+                is_final_frame=False,
+        ):
+            self.objects = filter_objects(
+                obj_min_points=self.cfg_cg['obj_min_points'],
+                obj_min_detections=self.cfg_cg['obj_min_detections'],
+                min_distance=self.cfg.scene_graph.obj_include_dist + 1.0,
+                objects=self.objects,
+                pts=pts,
+            )
+
+        # temporarily we do not merge close objects, since handling which snapshot the merged object belongs to is a bit tricky
+
+        # Merging
+        # if processing_needed(
+        #         self.cfg_cg["merge_interval"],
+        #         self.cfg_cg["run_merge_final_frame"],
+        #         frame_idx,
+        #         is_final_frame=False,
+        # ):
+        #     self.objects = measure_time(merge_objects)(
+        #         merge_overlap_thresh=self.cfg_cg["merge_overlap_thresh"],
+        #         merge_visual_sim_thresh=self.cfg_cg["merge_visual_sim_thresh"],
+        #         merge_text_sim_thresh=self.cfg_cg["merge_text_sim_thresh"],
+        #         objects=self.objects,
+        #         downsample_voxel_size=self.cfg_cg["downsample_voxel_size"],
+        #         dbscan_remove_noise=self.cfg_cg["dbscan_remove_noise"],
+        #         dbscan_eps=self.cfg_cg["dbscan_eps"],
+        #         dbscan_min_points=self.cfg_cg["dbscan_min_points"],
+        #         spatial_sim_type=self.cfg_cg["spatial_sim_type"],
+        #         device=self.cfg_cg["device"],
+        #     )
+
+        # update the object list in snapshots, since some objects may have been removed
+        for ss in self.snapshots.values():
+            ss.selected_obj_list = [obj_id for obj_id in ss.selected_obj_list if obj_id in self.objects.keys()]
+            ss.full_obj_list = {obj_id: self.objects[obj_id]['conf'] for obj_id in ss.full_obj_list.keys() if obj_id in self.objects.keys()}
 
 
 

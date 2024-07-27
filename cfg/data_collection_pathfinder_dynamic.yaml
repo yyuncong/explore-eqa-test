@@ -5,10 +5,9 @@ output_parent_dir: results
 question_data_path: "generated_questions"
 scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
 scene_data_path: "/home/hanyang/code/3d_project/explore-eqa/data/versioned_data/hm3d-0.2/hm3d"
-semantic_bbox_data_path: "/home/hanyang/code/3d_project/explore-eqa/data/hm3d_obj_bbox_merged"
 dataset_output_dir: "exploration_data"
 detection_model_name: "yolo_world/s"
-concept_graph_config_path: "/home/hanyang/code/3d_project/explore-eqa-test/conceptgraph/hydra_configs"
+concept_graph_config_path: "conceptgraph/hydra_configs"
 concept_graph_config_name: "rerun_realtime_mapping"
 
 # Sampling navigation point
@@ -52,7 +51,7 @@ planner:
   unoccupied_T: 2.0
   eps: 1
   max_dist_from_cur_phase_1: 1  # when the target object is not found, explore the frontiers with this step length
-  max_dist_from_cur_phase_2: 0.4  # when the target object is found, go to the target object with this step length
+  max_dist_from_cur_phase_2: 0.5  # when the target object is found, go to the target object with this step length
   max_unexplored_check_frontier: 3
   max_unoccupied_check_frontier: 1
   final_observe_distance: 1.5  # in phase 2, find a place that is this far from the target object to observe it

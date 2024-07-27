@@ -17,7 +17,6 @@ import matplotlib.image
 from habitat_sim.utils.common import quat_from_two_vectors, quat_to_angle_axis
 import open_clip
 from ultralytics import YOLO, SAM
-import hydra
 from hydra import initialize, compose
 
 
@@ -33,76 +32,7 @@ from src.tsdf_new_cg import TSDFPlanner, Frontier, SnapShot
 from src.scene import Scene
 from inference.models import YOLOWorld
 
-# Local application/library specific imports
-from conceptgraph.utils.optional_rerun_wrapper import (
-    OptionalReRun,
-    orr_log_annotated_image,
-    orr_log_camera,
-    orr_log_depth_image,
-    orr_log_edges,
-    orr_log_objs_pcd_and_bbox,
-    orr_log_rgb_image,
-    orr_log_vlm_image
-)
-from conceptgraph.utils.optional_wandb_wrapper import OptionalWandB
-from conceptgraph.utils.geometry import rotation_matrix_to_quaternion
-from conceptgraph.utils.logging_metrics import DenoisingTracker, MappingTracker
-from conceptgraph.utils.vlm import get_obj_rel_from_image_gpt4v, get_openai_client
-from conceptgraph.utils.ious import mask_subtract_contained
-from conceptgraph.utils.general_utils import (
-    ObjectClasses,
-    find_existing_image_path,
-    get_det_out_path,
-    get_exp_out_path,
-    get_stream_data_out_path,
-    get_vlm_annotated_image_path,
-    handle_rerun_saving,
-    load_saved_detections,
-    load_saved_hydra_json_config,
-    make_vlm_edges_and_captions,
-    measure_time,
-    save_detection_results,
-    save_hydra_config,
-    save_objects_for_frame,
-    save_pointcloud,
-    should_exit_early,
-    vis_render_image
-)
-from conceptgraph.dataset.datasets_common import get_dataset
-from conceptgraph.utils.vis import (
-    OnlineObjectRenderer,
-    save_video_from_frames,
-    vis_result_fast_on_depth,
-    vis_result_for_vlm,
-    vis_result_fast,
-    save_video_detections
-)
-from conceptgraph.slam.slam_classes import MapEdgeMapping, MapObjectList
-from conceptgraph.slam.utils import (
-    filter_gobs,
-    filter_objects,
-    get_bounding_box,
-    init_process_pcd,
-    make_detection_list_from_pcd_and_gobs,
-    denoise_objects,
-    merge_objects,
-    detections_to_obj_pcd_and_bbox,
-    prepare_objects_save_vis,
-    process_cfg,
-    process_edges,
-    process_pcd,
-    processing_needed,
-    resize_gobs
-)
-from conceptgraph.slam.mapping import (
-    compute_spatial_similarities,
-    compute_visual_similarities,
-    aggregate_similarities,
-    match_detections_to_objects,
-    merge_obj_matches
-)
-from conceptgraph.utils.model_utils import compute_clip_features_batched
-from conceptgraph.utils.general_utils import get_vis_out_path, cfg_to_dict, check_run_detections
+from conceptgraph.utils.general_utils import measure_time
 
 
 def main(cfg):
@@ -145,9 +75,6 @@ def main(cfg):
     clip_tokenizer = open_clip.get_tokenizer("ViT-B-32")
 
     total_images_record = []
-    top_k_images_record = {5: [], 10: [], 15: [], 20: []}
-    top_k_correct_count = {5: 0, 10: 0, 15: 0, 20: 0}
-
 
     # for each scene, answer each question
     question_ind = 0
@@ -157,8 +84,8 @@ def main(cfg):
         all_questions_in_scene = [q for q in questions_data if q["episode_history"] == scene_id]
 
         ##########################################################
-        if '00835' not in scene_id:
-            continue
+        # if '00835' not in scene_id:
+        #     continue
         # if int(scene_id.split("-")[0]) >= 800:
         #     continue
         # rand_q = np.random.randint(0, len(all_questions_in_scene) - 1)
@@ -171,11 +98,6 @@ def main(cfg):
         # all_questions_in_scene = [q for q in all_questions_in_scene if "00109" in q['question_id']]
         ##########################################################
 
-        bbox_data_path = os.path.join(cfg.semantic_bbox_data_path, scene_id + ".json")
-        if not os.path.exists(bbox_data_path):
-            logging.info(f"Scene {scene_id} bbox data not exists")
-            continue
-
         # load scene
         try:
             del scene
@@ -186,17 +108,13 @@ def main(cfg):
         # Set the classes for the detection model
         detection_model.set_classes(scene.obj_classes.get_classes_arr())
 
-        # load semantic object bbox data
-        bounding_box_data = json.load(open(os.path.join(cfg.semantic_bbox_data_path, scene_id + ".json"), "r"))
-        object_id_to_bbox = {int(item['id']): {'bbox': item['bbox'], 'class': item['class_name']} for item in bounding_box_data}
-        object_id_to_name = {int(item['id']): item['class_name'] for item in bounding_box_data}
-
         for question_data in all_questions_in_scene:
             # for each question, generate several paths, starting from different starting points
             for path_idx in range(cfg.path_id_offset, cfg.path_id_offset + cfg.paths_per_question):
                 question_ind += 1
 
                 target_obj_id = question_data['object_id']
+                target_obj_name = question_data['class']
                 target_position = question_data['position']
                 target_rotation = question_data['rotation']
                 episode_data_dir = os.path.join(str(cfg.dataset_output_dir), f"{question_data['question_id']}_path_{path_idx}")
@@ -311,7 +229,8 @@ def main(cfg):
                     logging.info(f"\n== step: {cnt_step}")
 
                     # for each position, get the views from different angles
-                    if target_obj_id in tsdf_planner.simple_scene_graph.keys():
+                    if len(target_obj_id_det_list) > 0:
+                        # if the target object is detected
                         angle_increment = cfg.extra_view_angle_deg_phase_2 * np.pi / 180
                         total_views = 1 + cfg.extra_view_phase_2
                     else:
@@ -334,18 +253,6 @@ def main(cfg):
 
                         # construct an frequency count map of each semantic id to a unique id
                         obs_file_name = f"{cnt_step}-view_{view_idx}.png"
-                        object_added, annotated_rgb = tsdf_planner.update_scene_graph(
-                            detection_model=detection_model_yoloworld,
-                            rgb=rgb[..., :3],
-                            semantic_obs=semantic_obs,
-                            obj_id_to_name=object_id_to_name,
-                            obj_id_to_bbox=object_id_to_bbox,
-                            cfg=cfg.scene_graph,
-                            file_name=obs_file_name,
-                            obs_point=pts,
-                            return_annotated=True
-                        )
-
                         annotated_rgb, object_added, target_obj_id_det = scene.update_scene_graph(
                             image_rgb=rgb[..., :3], depth=depth, intrinsics=cam_intr, cam_pos=cam_pose,
                             detection_model=detection_model, sam_predictor=sam_predictor, clip_model=clip_model,
@@ -359,6 +266,9 @@ def main(cfg):
                             plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), annotated_rgb)
                         if target_obj_id_det is not None:
                             target_obj_id_det_list.append(target_obj_id_det)
+
+                        # clean up or merge redundant objects periodically
+                        scene.periodic_cleanup_objects(frame_idx=cnt_step * total_views + view_idx, pts=pts)
 
                         # TSDF fusion
                         tsdf_planner.integrate(
@@ -375,7 +285,6 @@ def main(cfg):
                         if cfg.save_egocentric_view:
                             plt.imsave(os.path.join(egocentric_save_dir, f"{cnt_step}_view_{view_idx}.png"), rgb)
 
-                    tsdf_planner.update_snapshots(min_num_obj_threshold=cfg.min_num_obj_threshold)
                     scene.update_snapshots(min_num_obj_threshold=cfg.min_num_obj_threshold)
                     logging.info(f"Step {cnt_step} {len(scene.objects)} objects, {len(scene.snapshots)} snapshots")
 
@@ -402,7 +311,7 @@ def main(cfg):
                             view_frontier_direction = np.asarray([pos_world[0] - pts[0], 0., pos_world[2] - pts[2]])
 
                             obs, target_detected = scene.get_frontier_observation_and_detect_target(
-                                pts, view_frontier_direction, detection_model_yoloworld, target_obj_id, object_id_to_name[target_obj_id]
+                                pts, view_frontier_direction, detection_model_yoloworld, target_obj_id, target_obj_name
                             )
                             frontier_obs = obs["color_sensor"]
                             if target_detected:
@@ -422,11 +331,20 @@ def main(cfg):
 
                     print(f'!!!!!!! {target_obj_id_det_list}')
 
+                    # use the most common id in the list as the target object id
+                    if len(target_obj_id_det_list) > 0:
+                        target_obj_id_det = max(set(target_obj_id_det_list), key=target_obj_id_det_list.count)
+                        logging.info(f"Target object {target_obj_id_det} {scene.objects[target_obj_id_det]['class_name']} used for selecting snapshot!")
+                    else:
+                        target_obj_id_det = -1
+
                     max_point_choice = tsdf_planner.get_next_choice(
                         pts=pts_normal,
+                        objects=scene.objects,
+                        snapshots=scene.snapshots,
                         path_points=path_points,
                         pathfinder=scene.pathfinder,
-                        target_obj_id=target_obj_id,
+                        target_obj_id=target_obj_id_det,
                         cfg=cfg.planner,
                     )
                     if max_point_choice is None:
@@ -436,6 +354,7 @@ def main(cfg):
                     update_success = tsdf_planner.set_next_navigation_point(
                         choice=max_point_choice,
                         pts=pts_normal,
+                        objects=scene.objects,
                         cfg=cfg.planner,
                         pathfinder=scene.pathfinder,
                     )
@@ -446,6 +365,8 @@ def main(cfg):
                     return_values = tsdf_planner.agent_step(
                         pts=pts_normal,
                         angle=angle,
+                        objects=scene.objects,
+                        snapshots=scene.snapshots,
                         pathfinder=scene.pathfinder,
                         cfg=cfg.planner,
                         path_points=path_points,
@@ -458,7 +379,7 @@ def main(cfg):
 
                     # save snapshots
                     step_dict["snapshots"] = []
-                    for snapshot in tsdf_planner.snapshots.values():
+                    for snapshot in scene.snapshots.values():
                         step_dict["snapshots"].append(
                             {
                                 "img_id": snapshot.image,
@@ -466,14 +387,6 @@ def main(cfg):
                              }
                         )
 
-                    # # tempt
-                    # step_dict["scene_graph_file2objs"] = {}
-                    # for obj_id, obj in tsdf_planner.simple_scene_graph.items():
-                    #     if obj.image not in step_dict["scene_graph_file2objs"]:
-                    #         step_dict["scene_graph_file2objs"][obj.image] = []
-                    #     step_dict["scene_graph_file2objs"][obj.image].append(
-                    #         f"{obj_id}: {object_id_to_name[obj_id]}"
-                    #     )
                     # tempt
                     step_dict["scene_graph_file2objs"] = {}
                     for obj_id, obj in scene.objects.items():
@@ -483,19 +396,8 @@ def main(cfg):
                             f"{obj_id}: {obj['class_name']}"
                         )
 
-
                     # sanity check
-                    assert len(step_dict["snapshots"]) == len(tsdf_planner.snapshots), f"{len(step_dict['snapshots'])} != {len(tsdf_planner.snapshots)}"
-                    total_objs_count = 0
-                    for snapshot in tsdf_planner.snapshots.values():
-                        total_objs_count += len(snapshot.selected_obj_list)
-                    assert len(tsdf_planner.simple_scene_graph) == total_objs_count, f"{len(tsdf_planner.simple_scene_graph)} != {total_objs_count}"
-                    for obj_id in tsdf_planner.simple_scene_graph.keys():
-                        exist_count = 0
-                        for ss in step_dict["snapshots"]:
-                            if obj_id in ss["obj_ids"]:
-                                exist_count += 1
-                        assert exist_count == 1, f"{exist_count} != 1 for obj_id {obj_id}, {object_id_to_name[obj_id]}"
+                    assert len(step_dict["snapshots"]) == len(scene.snapshots), f"{len(step_dict['snapshots'])} != {len(scene.snapshots)}"
                     total_objs_count = 0
                     for snapshot in scene.snapshots.values():
                         total_objs_count += len(snapshot.selected_obj_list)
@@ -505,7 +407,7 @@ def main(cfg):
                         for ss in scene.snapshots.values():
                             if obj_id in ss.selected_obj_list:
                                 exist_count += 1
-                        assert exist_count == 1, f"{exist_count} != 1 for obj_id {obj_id}, {object_id_to_name[obj_id]}"
+                        assert exist_count == 1, f"{exist_count} != 1 for obj_id {obj_id}, {scene.objects[obj_id]['class_name']}"
 
                     # save the ground truth choice
                     if type(max_point_choice) == SnapShot:
@@ -634,10 +536,10 @@ def main(cfg):
 
                 # print the stats of total number of images
                 img_dict = {}
-                for obj_id, obj in tsdf_planner.simple_scene_graph.items():
-                    if obj.image not in img_dict:
-                        img_dict[obj.image] = []
-                    img_dict[obj.image].append(obj.object_id)
+                for obj_id, obj in scene.objects.items():
+                    if obj['image'] not in img_dict:
+                        img_dict[obj['image']] = []
+                    img_dict[obj['image']].append(obj['id'])
                 total_images = len(img_dict.keys())
                 total_images_record.append(total_images)
                 logging.info('\n')
@@ -645,28 +547,6 @@ def main(cfg):
                 logging.info(f"{question_data['question_id']}-path {path_idx} total images: {total_images}")
                 logging.info(f"Average total images: {np.mean(total_images_record):.2f} +- {np.std(total_images_record):.2f}")
                 logging.info(f"Max total images: {np.max(total_images_record)}, Min total images: {np.min(total_images_record)}")
-
-                filter_rank_all = json.load(open('data/selected_candidates.json', 'r'))
-                filter_rank = filter_rank_all[question_data['question'] + '_' + scene_id]
-                for top_k in [5, 10, 15, 20]:
-                    top_k_classes = filter_rank[:top_k]
-                    if object_id_to_name[target_obj_id] in top_k_classes:
-                        top_k_correct_count[top_k] += 1
-
-                    total_images = 0
-                    for obj_list in img_dict.values():
-                        for obj_id in obj_list:
-                            if object_id_to_name[obj_id] in top_k_classes:
-                                total_images += 1
-                                break
-                    top_k_images_record[top_k].append(total_images)
-                    logging.info('\n')
-                    logging.info(top_k_images_record[top_k])
-                    logging.info(f"{question_data['question_id']}-path {path_idx} top {top_k} images: {total_images}")
-                    logging.info(f"Average top {top_k} images: {np.mean(top_k_images_record[top_k]):.2f} +- {np.std(top_k_images_record[top_k]):.2f}")
-                    logging.info(f"Max top {top_k} images: {np.max(top_k_images_record[top_k])}, Min top {top_k} images: {np.min(top_k_images_record[top_k])}")
-                    logging.info(f"Top {top_k} correct count: {top_k_correct_count[top_k]}/{question_ind}")
-
 
 
 
@@ -703,14 +583,13 @@ if __name__ == "__main__":
         os.makedirs(cfg.dataset_output_dir, exist_ok=True)
     logging_path = os.path.join(cfg.output_dir, "log.log")
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG,
         format="%(message)s",
         handlers=[
             logging.FileHandler(logging_path, mode="w"),
             logging.StreamHandler(),
         ],
     )
-
 
     cfg.path_id_offset = args.path_id_offset
     if args.seed is not None:

@@ -12,6 +12,7 @@ import supervision as sv
 from .geom import *
 from .habitat import pos_normal_to_habitat, pos_habitat_to_normal
 from .tsdf_new_base import TSDFPlannerBase
+from conceptgraph.slam.slam_classes import MapObjectDict
 
 
 @dataclass
@@ -78,8 +79,6 @@ class TSDFPlanner(TSDFPlannerBase):
         self.max_point: [Frontier, SnapShot] = None  # the frontier/snapshot the agent chooses
         self.target_point: [np.ndarray] = None  # the corresponding navigable location of max_point. The agent goes to this point to observe the max_point
 
-        self.simple_scene_graph: Dict[int, SceneGraphItem] = {}  # obj_id to object
-        self.snapshots: Dict[str, SnapShot] = {}  # filename to snapshot
         self.frontiers: List[Frontier] = []
 
         # about frontier allocation
@@ -95,172 +94,6 @@ class TSDFPlanner(TSDFPlannerBase):
         self.occupied_map_camera = None
 
         self.frontiers_weight = np.empty(0)
-
-    def update_scene_graph(
-            self,
-            detection_model,
-            rgb,
-            semantic_obs,
-            obj_id_to_name,
-            obj_id_to_bbox,
-            cfg,
-            file_name,
-            obs_point,  # position in habitat space
-            return_annotated=False
-    ):
-        object_added = False
-
-        unique_obj_ids = np.unique(semantic_obs)
-        class_to_obj_id = {}
-        for obj_id in unique_obj_ids:
-            if obj_id == 0 or obj_id not in obj_id_to_name.keys() or obj_id_to_name[obj_id] in ['wall', 'floor', 'ceiling']:
-                continue
-            if obj_id_to_name[obj_id] not in class_to_obj_id.keys():
-                class_to_obj_id[obj_id_to_name[obj_id]] = [obj_id]
-            else:
-                class_to_obj_id[obj_id_to_name[obj_id]].append(obj_id)
-        all_classes = list(class_to_obj_id.keys())
-
-        if len(all_classes) == 0:
-            if return_annotated:
-                return object_added, rgb
-            else:
-                return object_added
-
-        detection_model.set_classes(all_classes)
-
-        results = detection_model.infer(rgb, confidence=cfg.confidence)
-        detections = sv.Detections.from_inference(results).with_nms(threshold=cfg.nms_threshold)
-
-        snapshot = SnapShot(
-            image=file_name,
-            color=(random.random(), random.random(), random.random()),
-            obs_point=self.habitat2voxel(obs_point)
-        )
-
-        adopted_indices = []
-        for i in range(len(detections)):
-            class_name = all_classes[detections.class_id[i]]
-            x_start, y_start, x_end, y_end = detections.xyxy[i].astype(int)
-            bbox_mask = np.zeros(semantic_obs.shape, dtype=bool)
-            bbox_mask[y_start:y_end, x_start:x_end] = True
-            confidence = float(detections.confidence[i])
-            for obj_id in class_to_obj_id[class_name]:
-
-                if obj_id not in obj_id_to_bbox.keys():
-                    continue
-
-                obj_x_start, obj_y_start = np.argwhere(semantic_obs == obj_id).min(axis=0)
-                obj_x_end, obj_y_end = np.argwhere(semantic_obs == obj_id).max(axis=0)
-                obj_mask = np.zeros(semantic_obs.shape, dtype=bool)
-                obj_mask[obj_x_start:obj_x_end, obj_y_start:obj_y_end] = True
-                if IoU(bbox_mask, obj_mask) > cfg.iou_threshold:
-                    # get the center of the bounding box to check whether it is close to the agent
-                    bbox = obj_id_to_bbox[obj_id]["bbox"]
-                    bbox = np.asarray(bbox)
-                    bbox_center = np.mean(bbox, axis=0)
-                    # change to x, z, y for habitat
-                    bbox_center = bbox_center[[0, 2, 1]]
-
-                    # if the object is faraway, then just not add to the scene graph
-                    if np.linalg.norm(np.asarray([bbox_center[0] - obs_point[0], bbox_center[2] - obs_point[2]])) > cfg.obj_include_dist:
-                        continue
-
-                    # this object is counted as detected
-                    snapshot.full_obj_list[obj_id] = confidence
-                    # add to the scene graph if it is not in the scene graph
-                    if obj_id not in self.simple_scene_graph.keys():
-                        # add to simple scene graph
-                        self.simple_scene_graph[obj_id] = SceneGraphItem(
-                            object_id=obj_id,
-                            bbox_center=bbox_center,
-                            confidence=confidence,
-                            image=file_name
-                        )
-                        snapshot.selected_obj_list.append(obj_id)
-                    else:
-                        if confidence > self.simple_scene_graph[obj_id].confidence:
-                            old_snapshot_filename = self.simple_scene_graph[obj_id].image
-                            self.simple_scene_graph[obj_id].confidence = confidence
-                            self.simple_scene_graph[obj_id].image = file_name
-                            # remove the obj id in the old snapshot and add to new snapshot
-                            self.snapshots[old_snapshot_filename].selected_obj_list.remove(obj_id)
-                            snapshot.selected_obj_list.append(obj_id)
-
-                    adopted_indices.append(i)
-                    object_added = True
-                    break
-
-        self.snapshots[file_name] = snapshot
-
-        if return_annotated:
-            if len(adopted_indices) == 0:
-                return object_added, rgb
-
-            # filter out the detections that are not adopted
-            detections = detections[adopted_indices]
-
-            # add confidence to the label
-            new_class_names = []
-            for i in range(len(detections)):
-                new_class_names.append(f"{all_classes[detections.class_id[i]]}_{detections.confidence[i]:.3f}")
-            detections.data['class_name'] = np.asarray(new_class_names)
-
-            annotated_image = rgb.copy()
-            BOUNDING_BOX_ANNOTATOR = sv.BoundingBoxAnnotator(thickness=2)
-            LABEL_ANNOTATOR = sv.LabelAnnotator(text_thickness=1, text_scale=0.5, text_color=sv.Color.BLACK)
-            annotated_image = BOUNDING_BOX_ANNOTATOR.annotate(annotated_image, detections)
-            annotated_image = LABEL_ANNOTATOR.annotate(annotated_image, detections)
-            return object_added, annotated_image
-        else:
-            return object_added
-
-    def cleanup_empty_snapshots(self):
-        # remove the snapshots that have no selected objects
-        filtered_snapshots = {}
-        for file_name, snapshot in self.snapshots.items():
-            if len(snapshot.selected_obj_list) > 0:
-                filtered_snapshots[file_name] = snapshot
-        self.snapshots = filtered_snapshots
-
-        # for debug
-        for file_name, snapshot in self.snapshots.items():
-            for obj_id in snapshot.selected_obj_list:
-                assert self.simple_scene_graph[obj_id].image == file_name, f"Error in update_snapshots: {obj_id}: {self.simple_scene_graph[obj_id].image} != {file_name}"
-
-    def update_snapshots(
-        self,
-        min_num_obj_threshold=1
-    ):
-        self.cleanup_empty_snapshots()
-
-        for min_num_objs in range(1, min_num_obj_threshold + 1):
-            for file_name, snapshot in self.snapshots.items():
-                if len(snapshot.selected_obj_list) == min_num_objs:
-                    # clean up this snapshot by moving its selected objects to other snapshots with have also observed them
-                    # find the other snapshot that has the highest confidence for the object
-                    remaining_ojb_ids = []
-                    for obj_id in snapshot.selected_obj_list:
-                        max_confidence = 0
-                        max_confidence_file_name = None
-                        for other_file_name, other_snapshot in self.snapshots.items():
-                            if other_file_name == file_name:
-                                continue
-                            if obj_id in other_snapshot.full_obj_list.keys() and other_snapshot.full_obj_list[obj_id] > max_confidence:
-                                max_confidence = other_snapshot.full_obj_list[obj_id]
-                                max_confidence_file_name = other_file_name
-
-                        # if there exists a snapshot that the object can be added to
-                        if max_confidence_file_name is not None:
-                            # move the object to that snapshot
-                            self.simple_scene_graph[obj_id].image = max_confidence_file_name
-                            self.simple_scene_graph[obj_id].confidence = max_confidence
-                            self.snapshots[max_confidence_file_name].selected_obj_list.append(obj_id)
-                        else:
-                            # otherwise, keep the object in this snapshot
-                            remaining_ojb_ids.append(obj_id)
-                    snapshot.selected_obj_list = remaining_ojb_ids
-            self.cleanup_empty_snapshots()
 
     def update_frontier_map(
             self,
@@ -462,16 +295,17 @@ class TSDFPlanner(TSDFPlannerBase):
     def get_next_choice(
             self,
             pts,
+            objects: MapObjectDict[int, Dict],
+            snapshots: Dict[str, SnapShot],
             path_points,
             pathfinder,
             target_obj_id,
             cfg
     ) -> Optional[Union[SnapShot, Frontier]]:
-        # determine whether the target object is in scene graph
-        if target_obj_id in self.simple_scene_graph.keys():
+        if target_obj_id in objects.keys():
             # find the snapshot that contains the target object
-            snapshot = self.snapshots[self.simple_scene_graph[target_obj_id].image]
-            logging.info(f"Next choice: Snapshot with file name {snapshot.image} containing object {target_obj_id}")
+            snapshot = snapshots[objects[target_obj_id]['image']]
+            logging.info(f"Next choice: Snapshot with file name {snapshot.image} containing object {objects[target_obj_id]['class_name']}")
 
             # for debug
             assert target_obj_id in snapshot.selected_obj_list, f"Error in get_next_choice: {target_obj_id} not in {snapshot.selected_obj_list}"
@@ -539,6 +373,7 @@ class TSDFPlanner(TSDFPlannerBase):
             self,
             choice: Union[SnapShot, Frontier],
             pts,
+            objects: MapObjectDict[int, Dict],
             cfg,
             pathfinder,
             random_position=False
@@ -551,7 +386,7 @@ class TSDFPlanner(TSDFPlannerBase):
         self.max_point = choice
 
         if type(choice) == SnapShot:
-            obj_centers = [self.simple_scene_graph[obj_id].bbox_center for obj_id in choice.selected_obj_list]
+            obj_centers = [objects[obj_id]['bbox'].center for obj_id in choice.selected_obj_list]
             obj_centers = np.asarray([self.habitat2voxel(center)[:2] for center in obj_centers])
             snapshot_center = np.mean(obj_centers, axis=0)
             choice.position = snapshot_center
@@ -638,6 +473,8 @@ class TSDFPlanner(TSDFPlannerBase):
             self,
             pts,
             angle,
+            objects: MapObjectDict[int, Dict],
+            snapshots: Dict[str, SnapShot],
             pathfinder,
             cfg,
             path_points=None,
@@ -733,9 +570,9 @@ class TSDFPlanner(TSDFPlannerBase):
             # for objs in self.simple_scene_graph.values():
             #     obj_vox = self.habitat2voxel(objs.bbox_center)
             #     ax1.scatter(obj_vox[1], obj_vox[0], c="w", s=30)
-            for snapshot in self.snapshots.values():
+            for snapshot in snapshots.values():
                 for obj_id in snapshot.selected_obj_list:
-                    obj_vox = self.habitat2voxel(self.simple_scene_graph[obj_id].bbox_center)
+                    obj_vox = self.habitat2voxel(objects[obj_id]['bbox'].center)
                     ax1.scatter(obj_vox[1], obj_vox[0], color=snapshot.color, s=30)
             # plot the target point if found
             # if type(self.max_point) == Object:

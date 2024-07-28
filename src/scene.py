@@ -538,12 +538,13 @@ class Scene:
             if existing_obj_match_id is None:
                 self.objects[detected_obj_id] = detection_list[detected_obj_id]
                 visualize_captions.append(
-                    f"{self.objects[detected_obj_id]['class_name']} {self.objects[detected_obj_id]['conf']:.3f} N"
+                    f"{detected_obj_id} {self.objects[detected_obj_id]['class_name']} {self.objects[detected_obj_id]['conf']:.3f} N"
                 )
 
                 # add the object into the selected object list of the snapshot, since there's no previous observation of it
                 snapshot.selected_obj_list.append(detected_obj_id)
             else:
+                # merge detected object into existing object
                 detected_obj = detection_list[detected_obj_id]
                 matched_obj = self.objects[existing_obj_match_id]
 
@@ -555,7 +556,8 @@ class Scene:
                     # remove the object id in the old snapshot and add it to the new snapshot
                     self.snapshots[old_snapshot_filename].selected_obj_list.remove(existing_obj_match_id)
                     snapshot.selected_obj_list.append(existing_obj_match_id)
-                    # replacement of the confidence is done in merge_obj2_into_obj1
+                    # also, update the confidence value in the old snapshot
+                    self.snapshots[old_snapshot_filename].full_obj_list[existing_obj_match_id] = detected_obj['conf']
 
                 merged_obj = merge_obj2_into_obj1(
                     obj1=matched_obj,
@@ -574,9 +576,13 @@ class Scene:
                 most_common_class_name = obj_classes.get_classes_arr()[most_common_class_id]
                 merged_obj['class_name'] = most_common_class_name
 
+                # adjust the full detected list of the current snapshot: remove the detected object and add the merged object
+                snapshot.full_obj_list[existing_obj_match_id] = merged_obj['conf']
+                snapshot.full_obj_list.pop(detected_obj_id)
+
                 self.objects[existing_obj_match_id] = merged_obj
                 visualize_captions.append(
-                    f"{self.objects[existing_obj_match_id]['class_name']} {self.objects[existing_obj_match_id]['conf']:.3f} {merged_obj['num_detections']}"
+                    f"{existing_obj_match_id} {self.objects[existing_obj_match_id]['class_name']} {self.objects[existing_obj_match_id]['conf']:.3f} {merged_obj['num_detections']}"
                 )
 
                 # if current object is the target object, and it is merged into an existing object, then change the target object id to the existing object id
@@ -703,24 +709,24 @@ class Scene:
         # temporarily we do not merge close objects, since handling which snapshot the merged object belongs to is a bit tricky
 
         # Merging
-        # if processing_needed(
-        #         self.cfg_cg["merge_interval"],
-        #         self.cfg_cg["run_merge_final_frame"],
-        #         frame_idx,
-        #         is_final_frame=False,
-        # ):
-        #     self.objects = measure_time(merge_objects)(
-        #         merge_overlap_thresh=self.cfg_cg["merge_overlap_thresh"],
-        #         merge_visual_sim_thresh=self.cfg_cg["merge_visual_sim_thresh"],
-        #         merge_text_sim_thresh=self.cfg_cg["merge_text_sim_thresh"],
-        #         objects=self.objects,
-        #         downsample_voxel_size=self.cfg_cg["downsample_voxel_size"],
-        #         dbscan_remove_noise=self.cfg_cg["dbscan_remove_noise"],
-        #         dbscan_eps=self.cfg_cg["dbscan_eps"],
-        #         dbscan_min_points=self.cfg_cg["dbscan_min_points"],
-        #         spatial_sim_type=self.cfg_cg["spatial_sim_type"],
-        #         device=self.cfg_cg["device"],
-        #     )
+        if processing_needed(
+                self.cfg_cg["merge_interval"],
+                self.cfg_cg["run_merge_final_frame"],
+                frame_idx,
+                is_final_frame=False,
+        ):
+            self.objects = measure_time(merge_objects)(
+                merge_overlap_thresh=self.cfg_cg["merge_overlap_thresh"],
+                merge_visual_sim_thresh=self.cfg_cg["merge_visual_sim_thresh"],
+                merge_text_sim_thresh=self.cfg_cg["merge_text_sim_thresh"],
+                objects=self.objects,
+                downsample_voxel_size=self.cfg_cg["downsample_voxel_size"],
+                dbscan_remove_noise=self.cfg_cg["dbscan_remove_noise"],
+                dbscan_eps=self.cfg_cg["dbscan_eps"],
+                dbscan_min_points=self.cfg_cg["dbscan_min_points"],
+                spatial_sim_type=self.cfg_cg["spatial_sim_type"],
+                device=self.cfg_cg["device"],
+            )
 
         # update the object list in snapshots, since some objects may have been removed
         for ss in self.snapshots.values():

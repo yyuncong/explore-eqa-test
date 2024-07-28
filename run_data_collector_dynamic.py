@@ -84,8 +84,8 @@ def main(cfg):
         all_questions_in_scene = [q for q in questions_data if q["episode_history"] == scene_id]
 
         ##########################################################
-        # if '00835' not in scene_id:
-        #     continue
+        if '00538' not in scene_id:
+            continue
         # if int(scene_id.split("-")[0]) >= 800:
         #     continue
         # rand_q = np.random.randint(0, len(all_questions_in_scene) - 1)
@@ -408,6 +408,13 @@ def main(cfg):
                             if obj_id in ss.selected_obj_list:
                                 exist_count += 1
                         assert exist_count == 1, f"{exist_count} != 1 for obj_id {obj_id}, {scene.objects[obj_id]['class_name']}"
+                    for ss in scene.snapshots.values():
+                        assert len(ss.selected_obj_list) == len(set(ss.selected_obj_list)), f"{ss.selected_obj_list} has duplicates"
+                        assert len(ss.full_obj_list.keys()) == len(set(ss.full_obj_list.keys())), f"{ss.full_obj_list.keys()} has duplicates"
+                        for obj_id in ss.selected_obj_list:
+                            assert obj_id in ss.full_obj_list, f"{obj_id} not in {ss.full_obj_list.keys()}"
+                        for obj_id in ss.full_obj_list.keys():
+                            assert obj_id in scene.objects, f"{obj_id} not in scene objects"
 
                     # save the ground truth choice
                     if type(max_point_choice) == SnapShot:
@@ -583,7 +590,7 @@ if __name__ == "__main__":
         os.makedirs(cfg.dataset_output_dir, exist_ok=True)
     logging_path = os.path.join(cfg.output_dir, "log.log")
     logging.basicConfig(
-        level=logging.DEBUG,
+        level=logging.INFO,
         format="%(message)s",
         handlers=[
             logging.FileHandler(logging_path, mode="w"),

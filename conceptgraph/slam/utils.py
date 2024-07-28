@@ -621,7 +621,10 @@ def merge_overlap_objects(
             text_sim = visual_sim
             if (visual_sim > merge_visual_sim_thresh) and (text_sim > merge_text_sim_thresh):
                 if obj_i in objects and obj_j in objects:  # Check if the two objects still exist and have not been merged
-                    # Merge object i into object j
+                    # merge the object with lower confidence to higher confidence
+                    if objects[obj_j]['conf'] < objects[obj_i]['conf']:
+                        obj_i, obj_j = obj_j, obj_i
+
                     objects[obj_j] = merge_obj2_into_obj1(
                         objects[obj_j],
                         objects[obj_i],
@@ -635,6 +638,7 @@ def merge_overlap_objects(
                     )
                     # Remove object i from the list of objects
                     objects.pop(obj_i)
+
         else:
             break  # Stop processing if the current overlap ratio is below the threshold
 

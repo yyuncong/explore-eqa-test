@@ -72,7 +72,7 @@ def main(cfg):
     question_ind = 0
     success_count = 0
     total_questions = len(questions_data) * cfg.paths_per_question
-    for scene_id in all_scene_list[:30]:
+    for scene_id in all_scene_list:
         all_questions_in_scene = [q for q in questions_data if q["episode_history"] == scene_id]
 
         ##########################################################
@@ -293,7 +293,7 @@ def main(cfg):
 
                         # construct an frequency count map of each semantic id to a unique id
                         obs_file_name = f"{cnt_step}-view_{view_idx}.png"
-                        object_added = tsdf_planner.update_scene_graph(
+                        object_added, annotated_image = tsdf_planner.update_scene_graph(
                             detection_model=detection_model,
                             rgb=rgb[..., :3],
                             semantic_obs=semantic_obs,
@@ -302,7 +302,7 @@ def main(cfg):
                             cfg=cfg.scene_graph,
                             file_name=obs_file_name,
                             obs_point=pts,
-                            return_annotated=False
+                            return_annotated=True
                         )
                         if object_added:
                             plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), rgb)
@@ -342,6 +342,7 @@ def main(cfg):
                             incremental=cfg.incremental,
                         )
                     tsdf_planner.prev_scene_graph_length = len(tsdf_planner.scene_graph_list)
+                    logging.info(f"Step {cnt_step} total objects: {len(tsdf_planner.simple_scene_graph)}, total snapshots: {len(tsdf_planner.snapshots)}")
 
                     update_success = tsdf_planner.update_frontier_map(pts=pts_normal, cfg=cfg.planner)
                     if not update_success:
@@ -425,29 +426,21 @@ def main(cfg):
                         step_dict["snapshots"].append(
                             {
                                 "img_id": snapshot.image,
-                                "obj_ids": [int(obj_id) for obj_id in snapshot.full_obj_list.keys()]
+                                "obj_ids": [int(obj_id) for obj_id in snapshot.cluster]
                              }
                         )
 
                     # # tempt
-                    # step_dict["scene_graph_file2objs"] = {}
-                    # for obj_id, obj in tsdf_planner.simple_scene_graph.items():
-                    #     if obj.image not in step_dict["scene_graph_file2objs"]:
-                    #         step_dict["scene_graph_file2objs"][obj.image] = []
-                    #     step_dict["scene_graph_file2objs"][obj.image].append(
-                    #         f"{obj_id}: {object_id_to_name[obj_id]}"
-                    #     )
-
+                    step_dict["scene_graph_file2objs"] = {}
+                    for obj_id, obj in tsdf_planner.simple_scene_graph.items():
+                        if obj.image not in step_dict["scene_graph_file2objs"]:
+                            step_dict["scene_graph_file2objs"][obj.image] = []
+                        step_dict["scene_graph_file2objs"][obj.image].append(
+                            f"{obj_id}: {object_id_to_name[obj_id]}"
+                        )
 
                     # sanity check
                     assert len(step_dict["snapshots"]) == len(tsdf_planner.snapshots), f"{len(step_dict['snapshots'])} != {len(tsdf_planner.snapshots)}"
-                    # total_objs_count = 0
-                    # total_objs_count = len(
-                    #     set([obj_id for snapshot in tsdf_planner.snapshots.values() for obj_id in snapshot.full_obj_list.keys()])
-                    # )
-                    # # for snapshot in tsdf_planner.snapshots.values():
-                    # #     total_objs_count += len(snapshot.full_obj_list.keys())
-                    # assert len(tsdf_planner.simple_scene_graph) == total_objs_count, f"{len(tsdf_planner.simple_scene_graph)} != {total_objs_count}"
                     total_objs_count = sum(
                         [len(snapshot.cluster) for snapshot in tsdf_planner.snapshots.values()]
                     )
@@ -456,12 +449,19 @@ def main(cfg):
                         [len(set(snapshot.cluster)) for snapshot in tsdf_planner.snapshots.values()]
                     )
                     assert len(tsdf_planner.simple_scene_graph) == total_objs_count, f"{len(tsdf_planner.simple_scene_graph)} != {total_objs_count}"
-                    # for obj_id in tsdf_planner.simple_scene_graph.keys():
-                    #     exist_count = 0
-                    #     for ss in step_dict["snapshots"]:
-                    #         if obj_id in ss["obj_ids"]:
-                    #             exist_count += 1
-                    #     assert exist_count == 1, f"{exist_count} != 1 for obj_id {obj_id}, {object_id_to_name[obj_id]}"
+                    for obj_id in tsdf_planner.simple_scene_graph.keys():
+                        exist_count = 0
+                        for ss in tsdf_planner.snapshots.values():
+                            if obj_id in ss.cluster:
+                                exist_count += 1
+                        assert exist_count == 1, f"{exist_count} != 1 for obj_id {obj_id}, {object_id_to_name[obj_id]}"
+                    for ss in tsdf_planner.snapshots.values():
+                        assert len(ss.cluster) == len(set(ss.cluster)), f"{ss.cluster} has duplicate objects"
+                        assert len(ss.full_obj_list.keys()) == len(set(ss.full_obj_list.keys())), f"{ss.full_obj_list} has duplicate objects"
+                        for obj_id in ss.cluster:
+                            assert obj_id in ss.full_obj_list, f"{obj_id} not in {ss.full_obj_list}"
+                        for obj_id in ss.full_obj_list.keys():
+                            assert obj_id in tsdf_planner.simple_scene_graph, f"{obj_id} not in scene graph"
 
                     # save the ground truth choice
                     if type(max_point_choice) == SnapShot:

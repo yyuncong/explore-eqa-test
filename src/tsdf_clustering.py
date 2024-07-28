@@ -56,7 +56,6 @@ class SnapShot:
     color: Tuple[float, float, float]
     obs_point: np.ndarray  # integer position in voxel grid
     full_obj_list: Dict[int, float] = field(default_factory=dict)  # object id to confidence
-    selected_obj_list: List[int] = field(default_factory=list)
     cluster: List[int] = field(default_factory=list)
     position: np.ndarray = None
 
@@ -132,7 +131,7 @@ class TSDFPlanner(TSDFPlannerBase):
         unique_obj_ids = np.unique(semantic_obs)
         class_to_obj_id = {}
         for obj_id in unique_obj_ids:
-            if obj_id == 0 or obj_id not in obj_id_to_name.keys() or obj_id_to_name[obj_id] in ['wall', 'floor', 'ceiling', 'door frame']:
+            if obj_id == 0 or obj_id not in obj_id_to_name.keys() or obj_id_to_name[obj_id] in ['wall', 'floor', 'ceiling', 'door frame', 'door']:
                 continue
             if obj_id_to_name[obj_id] not in class_to_obj_id.keys():
                 class_to_obj_id[obj_id_to_name[obj_id]] = [obj_id]
@@ -158,6 +157,7 @@ class TSDFPlanner(TSDFPlannerBase):
         )
 
         adopted_indices = []
+        caption_list = []
         for i in range(len(detections)):
             class_name = all_classes[detections.class_id[i]]
             x_start, y_start, x_end, y_end = detections.xyxy[i].astype(int)
@@ -174,6 +174,8 @@ class TSDFPlanner(TSDFPlannerBase):
                 obj_mask = np.zeros(semantic_obs.shape, dtype=bool)
                 obj_mask[obj_x_start:obj_x_end, obj_y_start:obj_y_end] = True
                 if IoU(bbox_mask, obj_mask) > cfg.iou_threshold:
+                    caption = f"{obj_id}_{class_name}_{confidence:.3f}"
+
                     # get the center of the bounding box to check whether it is close to the agent
                     bbox = obj_id_to_bbox[obj_id]["bbox"]
                     bbox = np.asarray(bbox)
@@ -194,11 +196,11 @@ class TSDFPlanner(TSDFPlannerBase):
                             object_id=obj_id,
                             bbox_center=bbox_center,
                             confidence=confidence,
-                            image=file_name
+                            image=None
                         )
                         if obj_id not in self.scene_graph_list:
                             self.scene_graph_list.append(obj_id)
-                        frame.selected_obj_list.append(obj_id)
+                        caption += "_N"
                     # else:
                     #     if confidence > self.simple_scene_graph[obj_id].confidence:
                     #         old_snapshot_filename = self.simple_scene_graph[obj_id].image
@@ -209,6 +211,7 @@ class TSDFPlanner(TSDFPlannerBase):
                     #         frame.selected_obj_list.append(obj_id)
 
                     adopted_indices.append(i)
+                    caption_list.append(caption)
                     object_added = True
                     break
 
@@ -222,14 +225,11 @@ class TSDFPlanner(TSDFPlannerBase):
             detections = detections[adopted_indices]
 
             # add confidence to the label
-            new_class_names = []
-            for i in range(len(detections)):
-                new_class_names.append(f"{all_classes[detections.class_id[i]]}_{detections.confidence[i]:.3f}")
-            detections.data['class_name'] = np.asarray(new_class_names)
+            detections.data['class_name'] = caption_list
 
             annotated_image = rgb.copy()
-            BOUNDING_BOX_ANNOTATOR = sv.BoundingBoxAnnotator(thickness=2)
-            LABEL_ANNOTATOR = sv.LabelAnnotator(text_thickness=1, text_scale=0.5, text_color=sv.Color.BLACK)
+            BOUNDING_BOX_ANNOTATOR = sv.BoundingBoxAnnotator(thickness=1)
+            LABEL_ANNOTATOR = sv.LabelAnnotator(text_thickness=1, text_scale=0.25, text_color=sv.Color.BLACK)
             annotated_image = BOUNDING_BOX_ANNOTATOR.annotate(annotated_image, detections)
             annotated_image = LABEL_ANNOTATOR.annotate(annotated_image, detections)
             return object_added, annotated_image
@@ -243,11 +243,6 @@ class TSDFPlanner(TSDFPlannerBase):
             if len(frame.full_obj_list) > 0:
                 filtered_frames[file_name] = frame
         self.frames = filtered_frames
-
-        # for debug
-        for file_name, frame in self.frames.items():
-            for obj_id in frame.selected_obj_list:
-                assert self.simple_scene_graph[obj_id].image == file_name, f"Error in update_snapshots: {obj_id}: {self.simple_scene_graph[obj_id].image} != {file_name}"
 
     def update_snapshots(
         self,
@@ -304,6 +299,16 @@ class TSDFPlanner(TSDFPlannerBase):
                 else:
                     prev_snapshots[key] = snapshot
             self.snapshots = prev_snapshots
+
+        # update the snapshot belonging of each object
+        for file_name, snapshot in self.snapshots.items():
+            for obj_id in snapshot.cluster:
+                self.simple_scene_graph[obj_id].image = file_name
+
+        # sanity check
+        for obj_id, obj in self.simple_scene_graph.items():
+            assert obj.image is not None, f"{obj_id} has no image"
+
 
     def update_frontier_map(
             self,

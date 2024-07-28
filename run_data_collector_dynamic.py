@@ -467,6 +467,12 @@ def main(cfg):
                         ax5.scatter(pts_pixs[0, 1], pts_pixs[0, 0], c="white", s=50)
                         fig.tight_layout()
                         plt.savefig(os.path.join(visualization_path, "{}_map.png".format(cnt_step)))
+
+                        # # save ax1 as another image
+                        # ax1 = fig.axes[0]
+                        # extent = ax1.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+                        # fig.savefig(os.path.join(visualization_path, f"objects_{cnt_step}.png"), bbox_inches=extent)
+
                         plt.close()
 
                     if cfg.save_frontier_video:

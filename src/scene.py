@@ -556,8 +556,6 @@ class Scene:
                     # remove the object id in the old snapshot and add it to the new snapshot
                     self.snapshots[old_snapshot_filename].selected_obj_list.remove(existing_obj_match_id)
                     snapshot.selected_obj_list.append(existing_obj_match_id)
-                    # also, update the confidence value in the old snapshot
-                    self.snapshots[old_snapshot_filename].full_obj_list[existing_obj_match_id] = detected_obj['conf']
 
                 merged_obj = merge_obj2_into_obj1(
                     obj1=matched_obj,
@@ -577,7 +575,7 @@ class Scene:
                 merged_obj['class_name'] = most_common_class_name
 
                 # adjust the full detected list of the current snapshot: remove the detected object and add the merged object
-                snapshot.full_obj_list[existing_obj_match_id] = merged_obj['conf']
+                snapshot.full_obj_list[existing_obj_match_id] = detected_obj['conf']
                 snapshot.full_obj_list.pop(detected_obj_id)
 
                 self.objects[existing_obj_match_id] = merged_obj

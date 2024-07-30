@@ -5,6 +5,7 @@ from sklearn.cluster import DBSCAN, KMeans
 from scipy import stats
 import torch
 import habitat_sim
+import copy
 from typing import List, Tuple, Optional, Dict, Union
 from dataclasses import dataclass, field
 import supervision as sv
@@ -12,6 +13,7 @@ import supervision as sv
 from .geom import *
 from .habitat import pos_normal_to_habitat, pos_habitat_to_normal
 from .tsdf_new_base import TSDFPlannerBase
+from .hierarchy_clustering import SceneHierarchicalClustering
 
 
 @dataclass
@@ -55,6 +57,7 @@ class SnapShot:
     obs_point: np.ndarray  # integer position in voxel grid
     full_obj_list: Dict[int, float] = field(default_factory=dict)  # object id to confidence
     selected_obj_list: List[int] = field(default_factory=list)
+    cluster: List[int] = field(default_factory=list)
     position: np.ndarray = None
 
     def __eq__(self, other):
@@ -87,8 +90,16 @@ class TSDFPlanner(TSDFPlannerBase):
         self.target_point: [np.ndarray] = None  # the corresponding navigable location of max_point. The agent goes to this point to observe the max_point
 
         self.simple_scene_graph: Dict[int, SceneGraphItem] = {}  # obj_id to object
+        self.scene_graph_list: List[int] = []
+        self.prev_scene_graph_length = 0
         self.snapshots: Dict[str, SnapShot] = {}  # filename to snapshot
+        self.frames: Dict[str, SnapShot] = {}  # filename to frame
         self.frontiers: List[Frontier] = []
+
+        self.clustering = SceneHierarchicalClustering(
+            min_sample_split=0,
+            random_state=66,
+        )
 
         # about frontier allocation
         self.frontier_map = np.zeros(self._vol_dim[:2], dtype=int)
@@ -105,16 +116,16 @@ class TSDFPlanner(TSDFPlannerBase):
         self.frontiers_weight = np.empty(0)
 
     def update_scene_graph(
-            self,
-            detection_model,
-            rgb,
-            semantic_obs,
-            obj_id_to_name,
-            obj_id_to_bbox,
-            cfg,
-            file_name,
-            obs_point,  # position in habitat space
-            return_annotated=False
+        self,
+        detection_model,
+        rgb,
+        semantic_obs,
+        obj_id_to_name,
+        obj_id_to_bbox,
+        cfg,
+        file_name,
+        obs_point,  # position in habitat space
+        return_annotated=False
     ):
         object_added = False
 
@@ -140,7 +151,7 @@ class TSDFPlanner(TSDFPlannerBase):
         results = detection_model.infer(rgb, confidence=cfg.confidence)
         detections = sv.Detections.from_inference(results).with_nms(threshold=cfg.nms_threshold)
 
-        snapshot = SnapShot(
+        frame = SnapShot(
             image=file_name,
             color=(random.random(), random.random(), random.random()),
             obs_point=self.habitat2voxel(obs_point)
@@ -175,7 +186,7 @@ class TSDFPlanner(TSDFPlannerBase):
                         continue
 
                     # this object is counted as detected
-                    snapshot.full_obj_list[obj_id] = confidence
+                    frame.full_obj_list[obj_id] = confidence
                     # add to the scene graph if it is not in the scene graph
                     if obj_id not in self.simple_scene_graph.keys():
                         # add to simple scene graph
@@ -185,21 +196,23 @@ class TSDFPlanner(TSDFPlannerBase):
                             confidence=confidence,
                             image=file_name
                         )
-                        snapshot.selected_obj_list.append(obj_id)
-                    else:
-                        if confidence > self.simple_scene_graph[obj_id].confidence:
-                            old_snapshot_filename = self.simple_scene_graph[obj_id].image
-                            self.simple_scene_graph[obj_id].confidence = confidence
-                            self.simple_scene_graph[obj_id].image = file_name
-                            # remove the obj id in the old snapshot and add to new snapshot
-                            self.snapshots[old_snapshot_filename].selected_obj_list.remove(obj_id)
-                            snapshot.selected_obj_list.append(obj_id)
+                        if obj_id not in self.scene_graph_list:
+                            self.scene_graph_list.append(obj_id)
+                        frame.selected_obj_list.append(obj_id)
+                    # else:
+                    #     if confidence > self.simple_scene_graph[obj_id].confidence:
+                    #         old_snapshot_filename = self.simple_scene_graph[obj_id].image
+                    #         self.simple_scene_graph[obj_id].confidence = confidence
+                    #         self.simple_scene_graph[obj_id].image = file_name
+                    #         # remove the obj id in the old snapshot and add to new snapshot
+                    #         self.snapshots[old_snapshot_filename].selected_obj_list.remove(obj_id)
+                    #         frame.selected_obj_list.append(obj_id)
 
                     adopted_indices.append(i)
                     object_added = True
                     break
 
-        self.snapshots[file_name] = snapshot
+        self.frames[file_name] = frame
 
         if return_annotated:
             if len(adopted_indices) == 0:
@@ -223,52 +236,74 @@ class TSDFPlanner(TSDFPlannerBase):
         else:
             return object_added
 
-    def cleanup_empty_snapshots(self):
+    def cleanup_empty_frames(self):
         # remove the snapshots that have no selected objects
-        filtered_snapshots = {}
-        for file_name, snapshot in self.snapshots.items():
-            if len(snapshot.selected_obj_list) > 0:
-                filtered_snapshots[file_name] = snapshot
-        self.snapshots = filtered_snapshots
+        filtered_frames = {}
+        for file_name, frame in self.frames.items():
+            if len(frame.full_obj_list) > 0:
+                filtered_frames[file_name] = frame
+        self.frames = filtered_frames
 
         # for debug
-        for file_name, snapshot in self.snapshots.items():
-            for obj_id in snapshot.selected_obj_list:
+        for file_name, frame in self.frames.items():
+            for obj_id in frame.selected_obj_list:
                 assert self.simple_scene_graph[obj_id].image == file_name, f"Error in update_snapshots: {obj_id}: {self.simple_scene_graph[obj_id].image} != {file_name}"
 
     def update_snapshots(
         self,
-        min_num_obj_threshold=1
+        obj_id_to_bbox,
+        obj_set,
+        incremental=False,
     ):
-        self.cleanup_empty_snapshots()
+        self.cleanup_empty_frames()
 
-        for min_num_objs in range(1, min_num_obj_threshold + 1):
-            for file_name, snapshot in self.snapshots.items():
-                if len(snapshot.selected_obj_list) == min_num_objs:
-                    # clean up this snapshot by moving its selected objects to other snapshots with have also observed them
-                    # find the other snapshot that has the highest confidence for the object
-                    remaining_ojb_ids = []
-                    for obj_id in snapshot.selected_obj_list:
-                        max_confidence = 0
-                        max_confidence_file_name = None
-                        for other_file_name, other_snapshot in self.snapshots.items():
-                            if other_file_name == file_name:
-                                continue
-                            if obj_id in other_snapshot.full_obj_list.keys() and other_snapshot.full_obj_list[obj_id] > max_confidence:
-                                max_confidence = other_snapshot.full_obj_list[obj_id]
-                                max_confidence_file_name = other_file_name
+        prev_snapshots = copy.deepcopy(self.snapshots)
 
-                        # if there exists a snapshot that the object can be added to
-                        if max_confidence_file_name is not None:
-                            # move the object to that snapshot
-                            self.simple_scene_graph[obj_id].image = max_confidence_file_name
-                            self.simple_scene_graph[obj_id].confidence = max_confidence
-                            self.snapshots[max_confidence_file_name].selected_obj_list.append(obj_id)
-                        else:
-                            # otherwise, keep the object in this snapshot
-                            remaining_ojb_ids.append(obj_id)
-                    snapshot.selected_obj_list = remaining_ojb_ids
-            self.cleanup_empty_snapshots()
+        assert len(self.scene_graph_list[self.prev_scene_graph_length:]) + sum(
+            [len(snapshot.cluster) for snapshot in self.snapshots.values()]
+        ) == len(self.simple_scene_graph), f"{len(self.scene_graph_list[self.prev_scene_graph_length:])} + {sum([len(snapshot.cluster) for snapshot in self.snapshots.values()])} != {len(self.simple_scene_graph)}"
+
+        obj_ids = obj_set
+        if incremental:
+            obj_ids_temp = obj_ids.copy()
+            for key, snapshot in self.snapshots.items():
+                cluster = snapshot.cluster
+                if any([obj_id in obj_ids_temp for obj_id in cluster]):
+                    obj_ids = obj_ids.union(set(cluster))
+                    prev_snapshots.pop(key)
+        obj_ids = list(set(obj_ids))
+
+        obj_centers = np.zeros((len(obj_ids), 2))
+        for i, obj_id in enumerate(obj_ids):
+            bbox = obj_id_to_bbox[obj_id]["bbox"]
+            bbox = np.asarray(bbox)
+            bbox_center = np.mean(bbox, axis=0)
+            # change to x, z, y for habitat
+            bbox_center = bbox_center[[0, 1]]
+            obj_centers[i] = bbox_center
+
+        if len(obj_centers) == 0:
+            return
+
+        if not incremental:
+            self.snapshots = self.clustering.fit(obj_centers, obj_ids, self.frames)
+        else:
+            snapshots = self.clustering.fit(obj_centers, obj_ids, self.frames)
+            assert len(
+                set([obj_id for snapshot in snapshots.values() for obj_id in snapshot.cluster])
+            ) == len(obj_ids), f"{len(set([obj_id for snapshot in snapshots.values() for obj_id in snapshot.cluster]))} != {len(obj_ids)}"
+            assert len(
+                set([obj_id for snapshot in snapshots.values() for obj_id in snapshot.cluster]).union(
+                    set([obj_id for snapshot in prev_snapshots.values() for obj_id in snapshot.cluster])
+                )
+            ) == len(self.scene_graph_list), f"{len(set([obj_id for snapshot in snapshots.values() for obj_id in snapshot.cluster]).union(set([obj_id for snapshot in self.snapshots.values() for obj_id in snapshot.cluster])))} != {len(self.scene_graph_list)}"
+    
+            for key, snapshot in snapshots.items():
+                if key in prev_snapshots.keys():
+                    prev_snapshots[key].cluster += snapshot.cluster
+                else:
+                    prev_snapshots[key] = snapshot
+            self.snapshots = prev_snapshots
 
     def update_frontier_map(
             self,
@@ -477,12 +512,14 @@ class TSDFPlanner(TSDFPlannerBase):
     ) -> Optional[Union[SnapShot, Frontier]]:
         # determine whether the target object is in scene graph
         if target_obj_id in self.simple_scene_graph.keys():
-            # find the snapshot that contains the target object
-            snapshot = self.snapshots[self.simple_scene_graph[target_obj_id].image]
+            for key, snapshot in self.snapshots.items():
+                if target_obj_id in snapshot.cluster:
+                    break
+            snapshot = self.snapshots[key]
             logging.info(f"Next choice: Snapshot with file name {snapshot.image} containing object {target_obj_id}")
 
             # for debug
-            assert target_obj_id in snapshot.selected_obj_list, f"Error in get_next_choice: {target_obj_id} not in {snapshot.selected_obj_list}"
+            # assert target_obj_id in snapshot.selected_obj_list, f"Error in get_next_choice: {target_obj_id} not in {snapshot.selected_obj_list}"
 
             return snapshot
         else:
@@ -559,7 +596,7 @@ class TSDFPlanner(TSDFPlannerBase):
         self.max_point = choice
 
         if type(choice) == SnapShot:
-            obj_centers = [self.simple_scene_graph[obj_id].bbox_center for obj_id in choice.selected_obj_list]
+            obj_centers = [self.simple_scene_graph[obj_id].bbox_center for obj_id in choice.full_obj_list]
             obj_centers = np.asarray([self.habitat2voxel(center)[:2] for center in obj_centers])
             snapshot_center = np.mean(obj_centers, axis=0)
             choice.position = snapshot_center
@@ -742,7 +779,7 @@ class TSDFPlanner(TSDFPlannerBase):
             #     obj_vox = self.habitat2voxel(objs.bbox_center)
             #     ax1.scatter(obj_vox[1], obj_vox[0], c="w", s=30)
             for snapshot in self.snapshots.values():
-                for obj_id in snapshot.selected_obj_list:
+                for obj_id in snapshot.cluster:
                     obj_vox = self.habitat2voxel(self.simple_scene_graph[obj_id].bbox_center)
                     ax1.scatter(obj_vox[1], obj_vox[0], color=snapshot.color, s=30)
             # plot the target point if found

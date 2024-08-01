@@ -500,8 +500,11 @@ def main(cfg):
                         assert type(max_point_choice) == SnapShot, f"{type(max_point_choice)} != SnapShot"
 
                     # Save step data
-                    with open(os.path.join(episode_data_dir, f"{cnt_step:04d}.json"), "w") as f:
-                        json.dump(step_dict, f, indent=4)
+                    if type(max_point_choice) == Frontier and tsdf_planner.frontiers_weight is not None and len(tsdf_planner.frontiers_weight) > 0 and np.max(tsdf_planner.frontiers_weight) < 1:
+                        pass
+                    else:
+                        with open(os.path.join(episode_data_dir, f"{cnt_step:04d}.json"), "w") as f:
+                            json.dump(step_dict, f, indent=4)
 
                     # update the agent's position record
                     pts_pixs = np.vstack((pts_pixs, pts_pix))

@@ -251,7 +251,6 @@ def main(cfg):
                         cam_pose_normal = pose_habitat_to_normal(cam_pose)
                         cam_pose_tsdf = pose_normal_to_tsdf(cam_pose_normal)
 
-                        # construct an frequency count map of each semantic id to a unique id
                         obs_file_name = f"{cnt_step}-view_{view_idx}.png"
                         annotated_rgb, object_added, target_obj_id_det = scene.update_scene_graph(
                             image_rgb=rgb[..., :3], depth=depth, intrinsics=cam_intr, cam_pos=cam_pose,

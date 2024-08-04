@@ -34,7 +34,7 @@ from src.habitat import (
     get_frontier_observation
 )
 from src.geom import get_cam_intr, get_scene_bnds, get_collision_distance
-from src.tsdf_new import TSDFPlanner, Frontier, SnapShot
+from src.tsdf_clustering import TSDFPlanner, Frontier, SnapShot
 from src.eval_utils_snapshot_new import prepare_step_dict, get_item, encode, load_scene_features, rgba2rgb, load_checkpoint, collate_wrapper, construct_selection_prompt
 from src.eval_utils_snapshot_new import SCENE_TOKEN
 from inference.models import YOLOWorld
@@ -375,7 +375,8 @@ def main(cfg):
                     with torch.no_grad():
                         img_feature = encode(model, image_processor, rgb).mean(1)
                     all_snapshot_features[obs_file_name] = img_feature.to("cpu")
-                    plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), rgb)
+                    if cfg.save_visualization or cfg.save_frontier_video:
+                        plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), rgb)
 
                 # TSDF fusion
                 tsdf_planner.integrate(
@@ -389,15 +390,33 @@ def main(cfg):
                     explored_depth=cfg.explored_depth,
                 )
 
-            tsdf_planner.update_snapshots(min_num_obj_threshold=cfg.min_num_obj_threshold)
-            logging.info(f'length updated scene graph {len(tsdf_planner.simple_scene_graph.keys())}')
-            logging.info(f'length updated snapshots {len(tsdf_planner.snapshots.keys())}')
+            if not cfg.incremental:
+                tsdf_planner.update_snapshots(
+                    obj_id_to_bbox=object_id_to_bbox,
+                    obj_set=set(tsdf_planner.scene_graph_list),
+                    incremental=cfg.incremental,
+                )
+            else:
+                # find the object ids that are within 2.5m away from the agent
+                obj_ids = tsdf_planner.scene_graph_list.copy()[
+                    tsdf_planner.prev_scene_graph_length:
+                ]
+                for obj_id, obj in tsdf_planner.simple_scene_graph.items():
+                    if np.linalg.norm(obj.bbox_center - pts) < cfg.scene_graph.obj_include_dist:
+                        obj_ids.append(obj_id)
+                tsdf_planner.update_snapshots(
+                    obj_id_to_bbox=object_id_to_bbox,
+                    obj_set=set(obj_ids),
+                    incremental=cfg.incremental,
+                )
+            tsdf_planner.prev_scene_graph_length = len(tsdf_planner.scene_graph_list)
+            logging.info(f"Step {cnt_step} total objects: {len(tsdf_planner.simple_scene_graph)}, total snapshots: {len(tsdf_planner.snapshots)}")
 
             step_dict["snapshot_features"] = {}
             step_dict["snapshot_objects"] = {}
             for rgb_id, snapshot in tsdf_planner.snapshots.items():
                 step_dict["snapshot_features"][rgb_id] = all_snapshot_features[rgb_id]
-                step_dict["snapshot_objects"][rgb_id] = snapshot.selected_obj_list
+                step_dict["snapshot_objects"][rgb_id] = snapshot.cluster
             # print(step_dict["snapshot_objects"])
             # input()
 
@@ -441,10 +460,11 @@ def main(cfg):
                         max_try_count=0
                     )
 
-                    plt.imsave(
-                        os.path.join(episode_frontier_dir, f"{cnt_step}_{i}.png"),
-                        frontier_obs,
-                    )
+                    if cfg.save_frontier_video or cfg.save_visualization:
+                        plt.imsave(
+                            os.path.join(episode_frontier_dir, f"{cnt_step}_{i}.png"),
+                            frontier_obs,
+                        )
                     processed_rgb = rgba2rgb(frontier_obs)
                     with torch.no_grad():
                         img_feature = encode(model, image_processor, processed_rgb).mean(1)
@@ -548,7 +568,7 @@ def main(cfg):
                         break
                     pred_target_snapshot = list(tsdf_planner.snapshots.values())[int(target_index)]
                     logging.info(
-                        "pred_target_class: " + str(' '.join([object_id_to_name[obj_id] for obj_id in pred_target_snapshot.selected_obj_list]))
+                        "pred_target_class: " + str(' '.join([object_id_to_name[obj_id] for obj_id in pred_target_snapshot.cluster]))
                     )
 
                     logging.info(f"Next choice Snapshot")

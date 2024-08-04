@@ -591,7 +591,7 @@ def main(cfg):
                             break
                         pred_target_snapshot = list(tsdf_planner.snapshots.values())[int(target_index)]
                         logging.info(
-                            "pred_target_class: "+str(' '.join([object_id_to_name[obj_id] for obj_id in pred_target_snapshot.selected_obj_list]))
+                            "pred_target_class: "+str(' '.join([object_id_to_name[obj_id] for obj_id in pred_target_snapshot.cluster]))
                         )
 
                         logging.info(f"Next choice Snapshot")

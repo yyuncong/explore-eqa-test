@@ -34,7 +34,7 @@ from src.habitat import (
     get_frontier_observation
 )
 from src.geom import get_cam_intr, get_scene_bnds, get_collision_distance
-from src.tsdf_new import TSDFPlanner, Frontier, SnapShot
+from src.tsdf_clustering import TSDFPlanner, Frontier, SnapShot
 #from src.eval_utils_snapshot import prepare_step_dict, get_item, encode, load_scene_features, rgba2rgb, load_checkpoint, collate_wrapper, construct_selection_prompt
 from src.eval_utils_snapshot_new import prepare_step_dict, get_item, encode, load_scene_features, rgba2rgb, load_checkpoint, collate_wrapper, construct_selection_prompt
 from src.eval_utils_snapshot_new import SCENE_TOKEN
@@ -358,7 +358,6 @@ def main(cfg):
                 rgb_egocentric_views = []
                 for view_idx, ang in enumerate(all_angles):
                     agent_state.position = pts
-                    # TODO: Check this
                     agent_state.rotation = get_quaternion(ang, 0)
                     agent.set_state(agent_state)
                     pts_normal = pos_habitat_to_normal(pts)
@@ -414,15 +413,33 @@ def main(cfg):
                         explored_depth=cfg.explored_depth,
                     )
 
-                tsdf_planner.update_snapshots(min_num_obj_threshold=cfg.min_num_obj_threshold)
-                logging.info(f'length updated scene graph {len(tsdf_planner.simple_scene_graph.keys())}')
-                logging.info(f'length updated snapshots {len(tsdf_planner.snapshots.keys())}')
+                if not cfg.incremental:
+                    tsdf_planner.update_snapshots(
+                        obj_id_to_bbox=object_id_to_bbox,
+                        obj_set=set(tsdf_planner.scene_graph_list),
+                        incremental=cfg.incremental,
+                    )
+                else:
+                    # find the object ids that are within 2.5m away from the agent
+                    obj_ids = tsdf_planner.scene_graph_list.copy()[
+                        tsdf_planner.prev_scene_graph_length:
+                    ]
+                    for obj_id, obj in tsdf_planner.simple_scene_graph.items():
+                        if np.linalg.norm(obj.bbox_center - pts) < cfg.scene_graph.obj_include_dist:
+                            obj_ids.append(obj_id)
+                    tsdf_planner.update_snapshots(
+                        obj_id_to_bbox=object_id_to_bbox,
+                        obj_set=set(obj_ids),
+                        incremental=cfg.incremental,
+                    )
+                tsdf_planner.prev_scene_graph_length = len(tsdf_planner.scene_graph_list)
+                logging.info(f"Step {cnt_step} total objects: {len(tsdf_planner.simple_scene_graph)}, total snapshots: {len(tsdf_planner.snapshots)}")
 
                 step_dict["snapshot_features"] = {}
                 step_dict["snapshot_objects"] = {}
                 for rgb_id, snapshot in tsdf_planner.snapshots.items():
                     step_dict["snapshot_features"][rgb_id] = all_snapshot_features[rgb_id]
-                    step_dict["snapshot_objects"][rgb_id] = snapshot.selected_obj_list
+                    step_dict["snapshot_objects"][rgb_id] = snapshot.cluster
                 # print(step_dict["snapshot_objects"])
                 # input()
 
@@ -563,7 +580,6 @@ def main(cfg):
                         break
 
                     if target_type == "snapshot":
-                        # TODO: the problem needed to be fixed here
                         if snapshot_id_mapping is not None:
                             if int(target_index) < 0 or int(target_index) >= len(snapshot_id_mapping):
                                 logging.info(f"target index can not match real objects: {target_index}, failed!")
@@ -580,7 +596,6 @@ def main(cfg):
 
                         logging.info(f"Next choice Snapshot")
                         tsdf_planner.frontiers_weight = np.zeros((len(tsdf_planner.frontiers)))
-                        # TODO: where to go if snapshot?
                         max_point_choice = pred_target_snapshot
                     else:
                         target_index = int(target_index)
@@ -606,14 +621,14 @@ def main(cfg):
                         os.system(f"cp {os.path.join(episode_snapshot_dir, max_point_choice.image)} {os.path.join(episode_object_observe_dir, 'target.png')}")
 
                         # check whether the target object is in the selected snapshot
-                        if target_obj_id in max_point_choice.selected_obj_list:
+                        if target_obj_id in max_point_choice.cluster:
                             logging.info(f"{target_obj_id} in Chosen snapshot {max_point_choice.image}! Success!")
                             target_found = True
                         else:
                             logging.info(f"Question id {question_id} choose the wrong snapshot! Failed!")
 
                         # check whether the class of the target object is the same as the class of the selected snapshot
-                        for ss_obj_id in max_point_choice.selected_obj_list:
+                        for ss_obj_id in max_point_choice.cluster:
                             if object_id_to_name[ss_obj_id] == object_id_to_name[target_obj_id]:
                                 same_class_count += 1
                                 break
@@ -721,14 +736,14 @@ def main(cfg):
                     # get some statistics
 
                     # check whether the target object is in the selected snapshot
-                    if target_obj_id in max_point_choice.selected_obj_list:
+                    if target_obj_id in max_point_choice.cluster:
                         logging.info(f"{target_obj_id} in Chosen snapshot {max_point_choice.image}! Success!")
                         target_found = True
                     else:
                         logging.info(f"Question id {question_id} choose the wrong snapshot! Failed!")
 
                     # check whether the class of the target object is the same as the class of the selected snapshot
-                    for ss_obj_id in max_point_choice.selected_obj_list:
+                    for ss_obj_id in max_point_choice.cluster:
                         if object_id_to_name[ss_obj_id] == object_id_to_name[target_obj_id]:
                             same_class_count += 1
                             break

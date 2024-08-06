@@ -608,6 +608,10 @@ def merge_overlap_objects(
             # change index to object ids
             obj_i = obj_id_list[i]
             obj_j = obj_id_list[j]
+            if obj_i not in objects or obj_j not in objects:
+                # this matching has been merged
+                continue
+
             visual_sim = F.cosine_similarity(
                 to_tensor(objects[obj_i]["clip_ft"]),
                 to_tensor(objects[obj_j]["clip_ft"]),

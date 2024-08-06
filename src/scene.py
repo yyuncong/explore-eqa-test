@@ -153,7 +153,7 @@ class Scene:
 
         # about scene graph
         self.objects: MapObjectDict[int, Dict] = MapObjectDict()  # object_id -> object item
-        self.object_id_counter = 0
+        self.object_id_counter = 1
 
         self.snapshots: Dict[str, SnapShot] = {}  # image_path -> snapshot
 
@@ -166,7 +166,7 @@ class Scene:
 
     def clear_up_detections(self):
         self.objects = MapObjectDict()
-        self.object_id_counter = 0
+        self.object_id_counter = 1
         self.snapshots = {}
 
     def get_observation(self, pts, angle):

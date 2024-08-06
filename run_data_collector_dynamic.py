@@ -1,3 +1,6 @@
+import matplotlib.pyplot as plt
+import matplotlib.image
+
 import os
 import random
 os.environ["TRANSFORMERS_VERBOSITY"] = "error"  # disable warning
@@ -12,8 +15,6 @@ np.set_printoptions(precision=3)
 import json
 import logging
 import glob
-import matplotlib.pyplot as plt
-import matplotlib.image
 from habitat_sim.utils.common import quat_from_two_vectors, quat_to_angle_axis
 import open_clip
 from ultralytics import YOLO, SAM
@@ -65,8 +66,8 @@ def main(cfg):
     logging.info(f"Loaded {len(questions_data)} questions.")
 
     ## Initialize the detection models
-    detection_model = measure_time(YOLO)('yolov8l-world.pt')   # yolov8x-world.pt
-    sam_predictor = SAM('mobile_sam.pt')  # SAM('sam_l.pt') # UltraLytics SAM
+    detection_model = measure_time(YOLO)('yolov8x-world.pt')   # yolov8x-world.pt
+    sam_predictor = SAM('sam_l.pt')  # SAM('sam_l.pt') # UltraLytics SAM
     # sam_predictor = measure_time(get_sam_predictor)(cfg) # Normal SAM
     clip_model, _, clip_preprocess = open_clip.create_model_and_transforms(
         "ViT-B-32", "laion2b_s34b_b79k"  # "ViT-H-14", "laion2b_s32b_b79k"
@@ -251,7 +252,6 @@ def main(cfg):
                         cam_pose_normal = pose_habitat_to_normal(cam_pose)
                         cam_pose_tsdf = pose_normal_to_tsdf(cam_pose_normal)
 
-                        # construct an frequency count map of each semantic id to a unique id
                         obs_file_name = f"{cnt_step}-view_{view_idx}.png"
                         annotated_rgb, object_added, target_obj_id_det = scene.update_scene_graph(
                             image_rgb=rgb[..., :3], depth=depth, intrinsics=cam_intr, cam_pos=cam_pose,

@@ -1,3 +1,6 @@
+import matplotlib.pyplot as plt
+import matplotlib.image
+
 import os
 import random
 os.environ["TRANSFORMERS_VERBOSITY"] = "error"  # disable warning
@@ -12,8 +15,6 @@ np.set_printoptions(precision=3)
 import json
 import logging
 import glob
-import matplotlib.pyplot as plt
-import matplotlib.image
 from habitat_sim.utils.common import quat_from_two_vectors, quat_to_angle_axis
 import open_clip
 from ultralytics import YOLO, SAM

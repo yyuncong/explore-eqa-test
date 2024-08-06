@@ -81,8 +81,10 @@ def main(cfg):
 
     # hack for saving runing time
     scene_obs_map = {}
+    scene_num_snapshots_map = {}
 
     max_num_snapshots = 0
+    total_num_snapshots = 0
     for question_idx, question_data in enumerate(questions_list):
         question_id = question_data['question_id']
         question = question_data['question']
@@ -94,6 +96,7 @@ def main(cfg):
         if scene_id in scene_obs_map:
             logging.info(f"Scene {scene_id} already processed")
             os.system(f"cp -r {os.path.join(cfg.output_dir, str(scene_obs_map[scene_id]))} {os.path.join(cfg.output_dir, str(question_id))}")
+            total_num_snapshots += scene_num_snapshots_map[scene_id]
             continue
 
         init_pts = question_data["position"]
@@ -309,10 +312,13 @@ def main(cfg):
                 )
         # hack to save processing time
         scene_obs_map[scene_id] = question_id
+        scene_num_snapshots_map[scene_id] = len(tsdf_planner.snapshots)
         max_num_snapshots = max(max_num_snapshots, len(tsdf_planner.snapshots))
+        total_num_snapshots += len(tsdf_planner.snapshots)
 
     logging.info(f'All scenes finish')
     logging.info(f'Maximum number of snapshots: {max_num_snapshots}')
+    logging.info(f'Averge number of snapshots: {total_num_snapshots / total_questions}')
     try:
         simulator.close()
     except:

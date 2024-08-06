@@ -1,3 +1,5 @@
+import quaternion
+
 import os
 import random
 
@@ -17,7 +19,6 @@ import logging
 import glob
 import math
 import torch
-import quaternion
 import matplotlib.pyplot as plt
 import matplotlib.image
 from PIL import Image, ImageDraw, ImageFont
@@ -44,6 +45,7 @@ from src.eval_utils_snapshot_new import (
     collate_wrapper, 
     construct_selection_prompt,
     merge_patches,
+    load_ds_checkpoint
 )
 from src.eval_utils_snapshot_new import SCENE_TOKEN
 from inference.models import YOLOWorld
@@ -149,7 +151,8 @@ def inference(model, tokenizer, step_dict, cfg):
             4096,
             True,
             filter_outputs,
-            cfg.top_k_categories
+            cfg.top_k_categories,
+            num_visual_tokens
         )
         sample = collate_wrapper([selection_input])
         outputs = infer_selection(model,tokenizer,sample)
@@ -194,7 +197,11 @@ def main(cfg):
         model_path, None, model_name, device_map=None, add_multisensory_token=True
     )
     # model = model.to("cuda")
-    load_checkpoint(model, cfg.model_path)
+    # load_checkpoint(model, cfg.model_path)
+    if not cfg.use_deepspeed:
+        load_checkpoint(model, cfg.model_path)
+    else:
+        load_ds_checkpoint(model, cfg.model_path, exclude_frozen_parameters = True)
     model = model.to("cuda")
     # model = None
     model.eval()
@@ -226,6 +233,10 @@ def main(cfg):
         init_pts = question_data["position"]
         init_quat = quaternion.quaternion(*question_data["rotation"])
         logging.info(f"\n========\nIndex: {question_idx} Scene: {scene_id}")
+
+        if "808" in scene_id:
+            logging.info(f"Question id {question_id} invalid: scene 808!")
+            continue
 
         # load scene
         split = "train" if int(scene_id.split("-")[0]) < 800 else "val"
@@ -392,8 +403,8 @@ def main(cfg):
                         cfg.patch_size
                     )
                     all_snapshot_features[obs_file_name] = img_feature.to("cpu")
-                    if cfg.save_visualization:
-                        plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), rgb)
+                    # if cfg.save_visualization:
+                    plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), rgb)
 
                 # TSDF fusion
                 tsdf_planner.integrate(
@@ -703,6 +714,15 @@ def main(cfg):
             path_length_list[question_id] = explore_dist
             logging.info(f"Question id {question_id} finish with {cnt_step} steps, {explore_dist} length")
         else:
+            # if question_id not in success_list:
+            #     success_list.append(question_id)
+            # path_length_list[question_id] = explore_dist
+            # num_images = len(tsdf_planner.snapshots.keys())
+            # snapshots = list(tsdf_planner.snapshots.keys())
+            # for snapshot in snapshots:
+            #     os.system(
+            #         f"cp {episode_snapshot_dir}/{snapshot} {episode_object_observe_dir}/{snapshot}"
+            #     )
             logging.info(f"Question id {question_id} failed, {explore_dist} length")
         logging.info(f"{question_idx + 1}/{total_questions}: Success rate: {success_count}/{question_idx + 1}")
         logging.info(f"Mean path length for success exploration: {np.mean(list(path_length_list.values()))}")

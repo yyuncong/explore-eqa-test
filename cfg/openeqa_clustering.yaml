@@ -1,16 +1,16 @@
 # General
 seed: 66
-exp_name: vlm_exp_frontiers_reverse_merge
-output_parent_dir: results
+exp_name: clustering_106_reverse_merge_4.0
+output_parent_dir: /work/pi_chuangg_umass_edu/yuncong/results
 question_data_path: "generated_questions"
 scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
-scene_data_path: /home/yuncong/scene_understanding/data/versioned_data/hm3d-0.2/hm3d
-semantic_bbox_data_path: /home/yuncong/scene_understanding/data/hm3d_obj_bbox_merged
-dataset_output_dir: "open_eqa_clustering_reverse"
-detection_model_name: "yolo_world/s"
-questions_list_path: 'data/generated_questions-eval.json'
+scene_data_path: /work/pi_chuangg_umass_edu/yuncong/data/scene_datasets/hm3d/
+semantic_bbox_data_path: '/home/yuncongyang_umass_edu/scene_understanding/hm3d_obj_bbox_merged'
+dataset_output_dir: "open_eqa_clustering"
+detection_model_name: "yolo_world/x"
+questions_list_path: 'data/generated_questions-hm3d-single-floor.json'
 
-scene_pose_path: /home/yuncong/scene_understanding/open-eqa/data/frames/hm3d-v0
+scene_pose_path: /home/yuncongyang_umass_edu/scene_understanding/open-eqa/data/frames/hm3d-v0
 
 incremental: false
 
@@ -80,4 +80,4 @@ scene_graph:
   confidence: 0.003
   nms_threshold: 0.1
   iou_threshold: 0.5
-  obj_include_dist: 2.5
+  obj_include_dist: 4.0

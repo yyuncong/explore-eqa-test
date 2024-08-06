@@ -1,3 +1,4 @@
+import quaternion
 import os
 import random
 
@@ -17,7 +18,7 @@ import logging
 import glob
 import math
 import torch
-import quaternion
+#import quaternion
 import matplotlib.pyplot as plt
 import matplotlib.image
 from PIL import Image, ImageDraw, ImageFont
@@ -45,6 +46,7 @@ from src.eval_utils_snapshot_new import (
     collate_wrapper, 
     construct_selection_prompt,
     merge_patches,
+    load_ds_checkpoint
 )
 from src.eval_utils_snapshot_new import SCENE_TOKEN
 from inference.models import YOLOWorld
@@ -154,7 +156,8 @@ def inference(model, tokenizer, step_dict, cfg):
             4096,
             True,
             filter_outputs,
-            cfg.top_k_categories
+            cfg.top_k_categories,
+            num_visual_tokens
         )
         sample = collate_wrapper([selection_input])
         outputs = infer_selection(model,tokenizer,sample)
@@ -202,7 +205,10 @@ def main(cfg):
         model_path, None, model_name, device_map=None, add_multisensory_token=True
     )
     # model = model.to("cuda")
-    load_checkpoint(model, cfg.model_path)
+    if not cfg.use_deepspeed:
+        load_checkpoint(model, cfg.model_path)
+    else:
+        load_ds_checkpoint(model, cfg.model_path, exclude_frozen_parameters = True)
     #print('finish checkpoint loading')
     model = model.to("cuda")
     # model = None

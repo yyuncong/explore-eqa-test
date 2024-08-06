@@ -29,7 +29,18 @@ from src.habitat import (
 from src.geom import get_cam_intr, get_scene_bnds
 from src.tsdf_new_cg import TSDFPlanner, Frontier, SnapShot
 from src.scene import Scene
-from src.eval_utils_snapshot_new import prepare_step_dict, get_item, encode, load_scene_features, rgba2rgb, load_checkpoint, collate_wrapper, construct_selection_prompt
+from src.eval_utils_snapshot_new import (
+    prepare_step_dict, 
+    get_item, 
+    encode, 
+    load_scene_features, 
+    rgba2rgb, 
+    load_checkpoint, 
+    collate_wrapper, 
+    construct_selection_prompt,
+    merge_patches,
+    load_ds_checkpoint
+)
 from src.eval_utils_snapshot_new import SCENE_TOKEN
 
 from conceptgraph.utils.general_utils import measure_time
@@ -113,6 +124,9 @@ def inference(model, tokenizer, step_dict, cfg):
     #step_dict["use_action_memory"] = cfg.action_memory
     step_dict["top_k_categories"] = cfg.top_k_categories
     step_dict["add_positional_encodings"] = cfg.add_positional_encodings
+
+    num_visual_tokens = (cfg.visual_feature_size // cfg.patch_size) ** 2
+    step_dict["num_visual_tokens"] = num_visual_tokens
     # print("pos", step_dict["add_positional_encodings"])
     # try:
     sample = get_item(
@@ -134,10 +148,11 @@ def inference(model, tokenizer, step_dict, cfg):
             selection_dict.frontier_text,
             selection_dict.frontier_features,
             selection_dict.snapshot_info_dict,
-            2048,
+            4096,
             True,
             filter_outputs,
-            cfg.top_k_categories
+            cfg.top_k_categories,
+            num_visual_tokens
         )
         sample = collate_wrapper([selection_input])
         outputs = infer_selection(model,tokenizer,sample)
@@ -193,7 +208,10 @@ def main(cfg):
         model_path, None, model_name, device_map=None, add_multisensory_token=True
     )
     # model = model.to("cuda")
-    load_checkpoint(model, cfg.model_path)
+    if not cfg.use_deepspeed:
+        load_checkpoint(model, cfg.model_path)
+    else:
+        load_ds_checkpoint(model, cfg.model_path, exclude_frozen_parameters = True)
     #print('finish checkpoint loading')
     model = model.to("cuda")
     # model = None
@@ -354,11 +372,16 @@ def main(cfg):
                             frame_idx=cnt_step * total_views + view_idx,
                             target_obj_mask=semantic_obs == target_obj_id,
                         )
-                        if object_added:
-                            img_feature = encode(model, image_processor, rgb).mean(1)
-                            all_snapshot_features[obs_file_name] = img_feature.to("cpu")
-                            if cfg.save_visualization or cfg.save_frontier_video:
-                                plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), annotated_rgb)
+                    if object_added:
+                        with torch.no_grad():
+                            img_feature = encode(model, image_processor, rgb).mean(0)
+                        img_feature = merge_patches(
+                            img_feature.view(cfg.visual_feature_size, cfg.visual_feature_size, -1), 
+                            cfg.patch_size
+                        )
+                        all_snapshot_features[obs_file_name] = img_feature.to("cpu")
+                        if cfg.save_visualization or cfg.save_frontier_video:
+                            plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), annotated_rgb)
 
                     if target_obj_id_det is not None:
                         target_obj_id_det_list.append(target_obj_id_det)
@@ -432,7 +455,11 @@ def main(cfg):
                             )
                         processed_rgb = rgba2rgb(frontier_obs)
                         with torch.no_grad():
-                            img_feature = encode(model, image_processor, processed_rgb).mean(1)
+                            img_feature = encode(model, image_processor, processed_rgb).mean(0)
+                        img_feature = merge_patches(
+                            img_feature.view(cfg.visual_feature_size, cfg.visual_feature_size, -1), 
+                            cfg.patch_size
+                        )
                         assert img_feature is not None
                         frontier.image = f"{cnt_step}_{i}.png"
                         frontier.feature = img_feature
@@ -481,7 +508,11 @@ def main(cfg):
                         for rgb_view in rgb_egocentric_views:
                             processed_rgb = rgba2rgb(rgb_view)
                             with torch.no_grad():
-                                img_feature = encode(model, image_processor, processed_rgb).mean(1)
+                                img_feature = encode(model, image_processor, processed_rgb).mean(0)
+                            img_feature = merge_patches(
+                                img_feature.view(cfg.visual_feature_size, cfg.visual_feature_size, -1), 
+                                cfg.patch_size
+                            )
                             egocentric_views_features.append(img_feature)
                         egocentric_views_features = torch.cat(egocentric_views_features, dim=0)
                         step_dict["egocentric_view_features"] = egocentric_views_features.to("cpu")

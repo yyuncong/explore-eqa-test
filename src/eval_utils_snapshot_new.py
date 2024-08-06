@@ -114,6 +114,37 @@ def load_checkpoint(model, checkpoint_path):
     checkpoint = torch.load(checkpoint_path, map_location="cpu")
     model.load_state_dict(checkpoint, False)
     del checkpoint
+    
+def load_ds_checkpoint(model, checkpoint_path, exclude_frozen_parameters = False):
+    '''
+    the input checkpointpoint path should be like ckpt_dir/tag/{ckpt files}
+    if lora is used, the lora config should be placed inside the ckpt_dir
+    '''
+    from peft import LoraConfig, get_peft_model
+    import deepspeed
+    from deepspeed.utils.zero_to_fp32 import get_fp32_state_dict_from_zero_checkpoint
+    checkpoint_path = checkpoint_path.split('/')
+    saving_folder, tag = '/'.join(checkpoint_path[:-1]), checkpoint_path[-1]
+    state_dict = get_fp32_state_dict_from_zero_checkpoint(
+        saving_folder,
+        tag,
+        exclude_frozen_parameters = exclude_frozen_parameters
+    )
+    if "lora_config.json" in os.listdir(saving_folder):
+        with open(os.path.join(saving_folder, "lora_config.json"), 'r') as f:
+            lora = json.load(f)
+        # wrap up model with lora
+        lora_config = LoraConfig(
+            r = lora['r'],
+            lora_alpha = lora['lora_alpha'],
+            target_modules = lora['target_modules'],
+            lora_dropout = lora['lora_dropout'],
+            bias = lora['bias'],
+            task_type = lora['task_type']
+        )
+        model = get_peft_model(model, lora_config)
+    model.load_state_dict(state_dict, strict = False)
+    del state_dict
 
 def collate_wrapper(batch):
     max_length = max(b.length for b in batch) + 1

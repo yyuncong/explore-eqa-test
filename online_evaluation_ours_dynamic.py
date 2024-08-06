@@ -1,3 +1,5 @@
+import matplotlib.pyplot as plt
+import matplotlib.image
 import os
 import random
 os.environ["TRANSFORMERS_VERBOSITY"] = "error"  # disable warning
@@ -14,8 +16,6 @@ np.set_printoptions(precision=3)
 import json
 import logging
 import glob
-import matplotlib.pyplot as plt
-import matplotlib.image
 import open_clip
 from ultralytics import YOLO, SAM
 from hydra import initialize, compose

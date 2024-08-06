@@ -65,8 +65,8 @@ def main(cfg):
     logging.info(f"Loaded {len(questions_data)} questions.")
 
     ## Initialize the detection models
-    detection_model = measure_time(YOLO)('yolov8l-world.pt')   # yolov8x-world.pt
-    sam_predictor = SAM('mobile_sam.pt')  # SAM('sam_l.pt') # UltraLytics SAM
+    detection_model = measure_time(YOLO)('yolov8x-world.pt')   # yolov8x-world.pt
+    sam_predictor = SAM('sam_l.pt')  # SAM('sam_l.pt') # UltraLytics SAM
     # sam_predictor = measure_time(get_sam_predictor)(cfg) # Normal SAM
     clip_model, _, clip_preprocess = open_clip.create_model_and_transforms(
         "ViT-B-32", "laion2b_s34b_b79k"  # "ViT-H-14", "laion2b_s32b_b79k"

@@ -1,6 +1,8 @@
+import matplotlib.pyplot as plt
+import matplotlib.image
+import quaternion
 import os
 import random
-
 os.environ["TRANSFORMERS_VERBOSITY"] = "error"  # disable warning
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["HABITAT_SIM_LOG"] = (
@@ -8,36 +10,32 @@ os.environ["HABITAT_SIM_LOG"] = (
 )
 os.environ["MAGNUM_LOG"] = "quiet"
 import numpy as np
+import torch
+import math
 
 np.set_printoptions(precision=3)
-import csv
 import pickle
 import json
 import logging
 import glob
-import math
-import torch
-import quaternion
-import matplotlib.pyplot as plt
-import matplotlib.image
-from PIL import Image, ImageDraw, ImageFont
-from tqdm import tqdm
-import habitat_sim
-from habitat_sim.utils.common import quat_to_coeffs, quat_from_angle_axis, quat_from_two_vectors, quat_to_angle_axis
+import open_clip
+from ultralytics import YOLO, SAM
+from hydra import initialize, compose
+from habitat_sim.utils.common import quat_to_angle_axis
 from src.habitat import (
-    make_semantic_cfg_new,
     pos_normal_to_habitat,
     pos_habitat_to_normal,
     pose_habitat_to_normal,
     pose_normal_to_tsdf,
     get_quaternion,
-    get_frontier_observation
 )
-from src.geom import get_cam_intr, get_scene_bnds, get_collision_distance
-from src.tsdf_new import TSDFPlanner, Frontier, SnapShot
+from src.geom import get_cam_intr, get_scene_bnds
+from src.tsdf_new_cg import TSDFPlanner, Frontier, SnapShot
+from src.scene import Scene
 from src.eval_utils_snapshot_new import prepare_step_dict, get_item, encode, load_scene_features, rgba2rgb, load_checkpoint, collate_wrapper, construct_selection_prompt
 from src.eval_utils_snapshot_new import SCENE_TOKEN
-from inference.models import YOLOWorld
+
+from conceptgraph.utils.general_utils import measure_time
 
 from llava.model.builder import load_pretrained_model
 from llava.mm_utils import get_model_name_from_path
@@ -153,15 +151,15 @@ def inference(model, tokenizer, step_dict, cfg):
 
 
 def main(cfg):
+    with initialize(config_path="conceptgraph/hydra_configs", job_name="app"):
+        cfg_cg = compose(config_name=cfg.concept_graph_config_name)
+
     img_height = cfg.img_height
     img_width = cfg.img_width
     cam_intr = get_cam_intr(cfg.hfov, img_height, img_width)
 
     random.seed(cfg.seed)
     np.random.seed(cfg.seed)
-
-    # load object detection model
-    detection_model = YOLOWorld(model_id=cfg.detection_model_name)
 
     # Load dataset
     questions_list = json.load(open(cfg.questions_list_path, "r"))
@@ -173,7 +171,17 @@ def main(cfg):
     print("number of questions: ", total_questions)
     print("question path: ", cfg.questions_list_path)
 
-    print("load model")
+    ## Initialize the detection models
+    detection_model = measure_time(YOLO)('yolov8l-world.pt')   # yolov8x-world.pt
+    sam_predictor = SAM('mobile_sam.pt')  # SAM('sam_l.pt') # UltraLytics SAM
+    # sam_predictor = measure_time(get_sam_predictor)(cfg) # Normal SAM
+    clip_model, _, clip_preprocess = open_clip.create_model_and_transforms(
+        "ViT-B-32", "laion2b_s34b_b79k"  # "ViT-H-14", "laion2b_s32b_b79k"
+    )
+    clip_model = clip_model.to(cfg_cg.device)
+    clip_tokenizer = open_clip.get_tokenizer("ViT-B-32")
+
+    logging.info(f"Load VLM!")
     # Initialize LLaVA model
     # model_path = "liuhaotian/llava-v1.5-7b"
     model_path = "/work/pi_chuangg_umass_edu/yuncong/llava-v1.5-7b"
@@ -186,7 +194,7 @@ def main(cfg):
     model = model.to("cuda")
     # model = None
     model.eval()
-    print("finish loading model")
+    logging.info(f"Load VLM successful!")
 
     # load success list and path length list
     if os.path.exists(os.path.join(str(cfg.output_dir), "success_list.pkl")):
@@ -216,49 +224,14 @@ def main(cfg):
         logging.info(f"\n========\nIndex: {question_idx} Scene: {scene_id}")
 
         # load scene
-        split = "train" if int(scene_id.split("-")[0]) < 800 else "val"
-        scene_mesh_path = os.path.join(cfg.scene_data_path, split, scene_id, scene_id.split("-")[1] + ".basis.glb")
-        navmesh_path = os.path.join(cfg.scene_data_path, split, scene_id, scene_id.split("-")[1] + ".basis.navmesh")
-        semantic_texture_path = os.path.join(cfg.scene_data_path, split, scene_id, scene_id.split("-")[1] + ".semantic.glb")
-        scene_semantic_annotation_path = os.path.join(cfg.scene_data_path, split, scene_id, scene_id.split("-")[1] + ".semantic.txt")
-        assert os.path.exists(scene_mesh_path) and os.path.exists(navmesh_path), f'{scene_mesh_path}, {navmesh_path}'
-        assert os.path.exists(semantic_texture_path) and os.path.exists(scene_semantic_annotation_path), f'{semantic_texture_path}, {scene_semantic_annotation_path}'
-
         try:
-            del tsdf_planner
-        except:
-            pass
-        try:
-            simulator.close()
+            del scene
         except:
             pass
 
-        sim_settings = {
-            "scene": scene_mesh_path,
-            "default_agent": 0,
-            "sensor_height": cfg.camera_height,
-            "width": img_width,
-            "height": img_height,
-            "hfov": cfg.hfov,
-            "scene_dataset_config_file": cfg.scene_dataset_config_path,
-            "camera_tilt": cfg.camera_tilt_deg * np.pi / 180,
-        }
-        sim_cfg = make_semantic_cfg_new(sim_settings)
-        simulator = habitat_sim.Simulator(sim_cfg)
-        pathfinder = simulator.pathfinder
-        pathfinder.seed(cfg.seed)
-        pathfinder.load_nav_mesh(navmesh_path)
-        agent = simulator.initialize_agent(sim_settings["default_agent"])
-        agent_state = habitat_sim.AgentState()
-        logging.info(f"Load scene {scene_id} successfully")
-
-        bbox_path = os.path.join(cfg.semantic_bbox_data_path, scene_id + ".json")
-        if not os.path.exists(bbox_path):
-            logging.info(f"Question id {scene_id} invalid: no bbox data!")
-            continue
-        bounding_box_data = json.load(open(bbox_path, "r"))
-        object_id_to_bbox = {int(item['id']): {'bbox': item['bbox'], 'class': item['class_name']} for item in bounding_box_data}
-        object_id_to_name = {int(item['id']): item['class_name'] for item in bounding_box_data}
+        scene = Scene(scene_id, cfg, cfg_cg)
+        # Set the classes for the detection model
+        detection_model.set_classes(scene.obj_classes.get_classes_arr())
 
         episode_data_dir = os.path.join(str(cfg.output_dir), str(question_id))
         episode_observations_dir = os.path.join(episode_data_dir, 'observations')
@@ -284,7 +257,7 @@ def main(cfg):
         # initialize the TSDF
         pts_normal = pos_habitat_to_normal(pts)
         floor_height = pts_normal[-1]
-        tsdf_bnds, scene_size = get_scene_bnds(pathfinder, floor_height)
+        tsdf_bnds, scene_size = get_scene_bnds(scene.pathfinder, floor_height)
         num_step = int(math.sqrt(scene_size) * cfg.max_step_room_size_ratio)
         num_step = max(num_step, 50)
         logging.info(
@@ -331,51 +304,41 @@ def main(cfg):
             # observe and update the TSDF
             rgb_egocentric_views = []
             for view_idx, ang in enumerate(all_angles):
-                agent_state.position = pts
-                agent_state.rotation = get_quaternion(ang, 0)
-                agent.set_state(agent_state)
-                pts_normal = pos_habitat_to_normal(pts)
-
-                # Update camera info
-                sensor = agent.get_state().sensor_states["depth_sensor"]
-                quaternion_0 = sensor.rotation
-                translation_0 = sensor.position
-                cam_pose = np.eye(4)
-                cam_pose[:3, :3] = quaternion.as_rotation_matrix(quaternion_0)
-                cam_pose[:3, 3] = translation_0
-                cam_pose_normal = pose_habitat_to_normal(cam_pose)
-                cam_pose_tsdf = pose_normal_to_tsdf(cam_pose_normal)
-
-                # Get observation at current pose - skip black image, meaning robot is outside the floor
-                obs = simulator.get_sensor_observations()
+                obs, cam_pose = scene.get_observation(pts, ang)
                 rgb = obs["color_sensor"]
                 depth = obs["depth_sensor"]
                 semantic_obs = obs["semantic_sensor"]
+
+                cam_pose_normal = pose_habitat_to_normal(cam_pose)
+                cam_pose_tsdf = pose_normal_to_tsdf(cam_pose_normal)
+
+                rgb = rgba2rgb(rgb)
+                rgb_egocentric_views.append(rgb)
+
                 plt.imsave(
                     os.path.join(episode_observations_dir, "{}.png".format(cnt_step)), rgb
                 )
-                rgb = rgba2rgb(rgb)
-                rgb_egocentric_views.append(rgb)
 
                 # collect all view features
                 obs_file_name = f"{cnt_step}-view_{view_idx}.png"
                 with torch.no_grad():
-                    object_added, annotated_rgb = tsdf_planner.update_scene_graph(
-                        detection_model=detection_model,
-                        rgb=rgb[..., :3],
-                        semantic_obs=semantic_obs,
-                        obj_id_to_name=object_id_to_name,
-                        obj_id_to_bbox=object_id_to_bbox,
-                        cfg=cfg.scene_graph,
-                        file_name=obs_file_name,
-                        obs_point=pts,
-                        return_annotated=True
+                    annotated_rgb, object_added, target_obj_id_det = scene.update_scene_graph(
+                        image_rgb=rgb[..., :3], depth=depth, intrinsics=cam_intr, cam_pos=cam_pose,
+                        detection_model=detection_model, sam_predictor=sam_predictor, clip_model=clip_model,
+                        clip_preprocess=clip_preprocess, clip_tokenizer=clip_tokenizer,
+                        pts=pts, pts_voxel=tsdf_planner.habitat2voxel(pts),
+                        img_path=obs_file_name,
+                        frame_idx=cnt_step * total_views + view_idx,
+                        target_obj_mask=None,
                     )
-                if object_added:
-                    with torch.no_grad():
+                    if object_added:
                         img_feature = encode(model, image_processor, rgb).mean(1)
-                    all_snapshot_features[obs_file_name] = img_feature.to("cpu")
-                    plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), rgb)
+                        all_snapshot_features[obs_file_name] = img_feature.to("cpu")
+                        if cfg.save_visualization or cfg.save_frontier_video:
+                            plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), annotated_rgb)
+
+                # clean up or merge redundant objects periodically
+                scene.periodic_cleanup_objects(frame_idx=cnt_step * total_views + view_idx, pts=pts)
 
                 # TSDF fusion
                 tsdf_planner.integrate(
@@ -389,30 +352,30 @@ def main(cfg):
                     explored_depth=cfg.explored_depth,
                 )
 
-            tsdf_planner.update_snapshots(min_num_obj_threshold=cfg.min_num_obj_threshold)
-            logging.info(f'length updated scene graph {len(tsdf_planner.simple_scene_graph.keys())}')
-            logging.info(f'length updated snapshots {len(tsdf_planner.snapshots.keys())}')
+            scene.update_snapshots(min_num_obj_threshold=cfg.min_num_obj_threshold)
+            logging.info(f"Step {cnt_step} {len(scene.objects)} objects, {len(scene.snapshots)} snapshots")
+            # update the mapping of object id to class name, since the objects have been updated
+            object_id_to_name = {obj_id: obj["class_name"] for obj_id, obj in scene.objects.items()}
 
             step_dict["snapshot_features"] = {}
             step_dict["snapshot_objects"] = {}
-            for rgb_id, snapshot in tsdf_planner.snapshots.items():
+            for rgb_id, snapshot in scene.snapshots.items():
                 step_dict["snapshot_features"][rgb_id] = all_snapshot_features[rgb_id]
                 step_dict["snapshot_objects"][rgb_id] = snapshot.selected_obj_list
             # print(step_dict["snapshot_objects"])
             # input()
 
             # record current scene graph
-            step_dict["scene_graph"] = list(tsdf_planner.simple_scene_graph.keys())
+            step_dict["scene_graph"] = list(scene.objects.keys())
             step_dict["scene_graph"] = [int(x) for x in step_dict["scene_graph"]]
             step_dict["obj_map"] = object_id_to_name
             step_dict["position"] = np.array(pts)[None,]
             obj_positions_map = {
-                obj["id"]: 
-                (np.array(obj["bbox"][1]) + np.array(obj["bbox"][0])) / 2
-                for obj in bounding_box_data
+                str(obj_id): obj['bbox'].center
+                for obj_id, obj in scene.objects.items()
             }
             obj_positions_map = {
-                key: value[[0, 2, 1]] - step_dict["position"] for key, value in obj_positions_map.items()
+                key: value - step_dict["position"] for key, value in obj_positions_map.items()
             }
             step_dict["obj_position_map"] = obj_positions_map
 
@@ -433,18 +396,14 @@ def main(cfg):
                 if frontier.image is None:
                     view_frontier_direction = np.asarray([pos_world[0] - pts[0], 0., pos_world[2] - pts[2]])
 
-                    frontier_obs = get_frontier_observation(
-                        agent, simulator, cfg, tsdf_planner,
-                        view_frontier_direction=view_frontier_direction,
-                        init_pts=pts,
-                        camera_tilt=0,
-                        max_try_count=0
-                    )
+                    obs = scene.get_frontier_observation(pts, view_frontier_direction)
+                    frontier_obs = obs["color_sensor"]
 
-                    plt.imsave(
-                        os.path.join(episode_frontier_dir, f"{cnt_step}_{i}.png"),
-                        frontier_obs,
-                    )
+                    if cfg.save_frontier_video or cfg.save_visualization:
+                        plt.imsave(
+                            os.path.join(episode_frontier_dir, f"{cnt_step}_{i}.png"),
+                            frontier_obs,
+                        )
                     processed_rgb = rgba2rgb(frontier_obs)
                     with torch.no_grad():
                         img_feature = encode(model, image_processor, processed_rgb).mean(1)
@@ -543,15 +502,15 @@ def main(cfg):
                             break
                         target_index = snapshot_id_mapping[int(target_index)]
                         logging.info(f"The index of target snapshot {target_index}")
-                    if int(target_index) < 0 or int(target_index) >= len(tsdf_planner.simple_scene_graph):
-                        logging.info(f"Prediction out of range: {target_index}, {len(tsdf_planner.simple_scene_graph)}, failed!")
+                    if int(target_index) < 0 or int(target_index) >= len(scene.objects):
+                        logging.info(f"Prediction out of range: {target_index}, {len(scene.objects)}, failed!")
                         break
-                    pred_target_snapshot = list(tsdf_planner.snapshots.values())[int(target_index)]
+                    pred_target_snapshot = list(scene.snapshots.values())[int(target_index)]
                     logging.info(
                         "pred_target_class: " + str(' '.join([object_id_to_name[obj_id] for obj_id in pred_target_snapshot.selected_obj_list]))
                     )
 
-                    logging.info(f"Next choice Snapshot")
+                    logging.info(f"Next choice Snapshot of {pred_target_snapshot.image}")
                     tsdf_planner.frontiers_weight = np.zeros((len(tsdf_planner.frontiers)))
                     # TODO: where to go if snapshot?
                     max_point_choice = pred_target_snapshot
@@ -576,8 +535,9 @@ def main(cfg):
                 update_success = tsdf_planner.set_next_navigation_point(
                     choice=max_point_choice,
                     pts=pts_normal,
+                    objects=scene.objects,
                     cfg=cfg.planner,
-                    pathfinder=pathfinder,
+                    pathfinder=scene.pathfinder,
                     random_position=False if target_observation_count == 0 else True  # use the best observation point for the first observation, and random for the rest
                 )
                 if not update_success:
@@ -587,7 +547,9 @@ def main(cfg):
             return_values = tsdf_planner.agent_step(
                 pts=pts_normal,
                 angle=angle,
-                pathfinder=pathfinder,
+                objects=scene.objects,
+                snapshots=scene.snapshots,
+                pathfinder=scene.pathfinder,
                 cfg=cfg.planner,
                 path_points=None,
                 save_visualization=cfg.save_visualization,
@@ -596,6 +558,25 @@ def main(cfg):
                 logging.info(f"Question id {question_id} invalid: agent_step failed!")
                 break
             pts_normal, angle, pts_pix, fig, _, target_arrived = return_values
+
+            # sanity check
+            total_objs_count = 0
+            for snapshot in scene.snapshots.values():
+                total_objs_count += len(snapshot.selected_obj_list)
+            assert len(scene.objects) == total_objs_count, f"{len(scene.objects)} != {total_objs_count}"
+            for obj_id in scene.objects.keys():
+                exist_count = 0
+                for ss in scene.snapshots.values():
+                    if obj_id in ss.selected_obj_list:
+                        exist_count += 1
+                assert exist_count == 1, f"{exist_count} != 1 for obj_id {obj_id}, {scene.objects[obj_id]['class_name']}"
+            for ss in scene.snapshots.values():
+                assert len(ss.selected_obj_list) == len(set(ss.selected_obj_list)), f"{ss.selected_obj_list} has duplicates"
+                assert len(ss.full_obj_list.keys()) == len(set(ss.full_obj_list.keys())), f"{ss.full_obj_list.keys()} has duplicates"
+                for obj_id in ss.selected_obj_list:
+                    assert obj_id in ss.full_obj_list, f"{obj_id} not in {ss.full_obj_list.keys()}"
+                for obj_id in ss.full_obj_list.keys():
+                    assert obj_id in scene.objects, f"{obj_id} not in scene objects"
 
             # update the agent's position record
             pts_pixs = np.vstack((pts_pixs, pts_pix))
@@ -647,14 +628,13 @@ def main(cfg):
             rotation = get_quaternion(angle, 0)
             explore_dist += np.linalg.norm(pts_pixs[-1] - pts_pixs[-2]) * tsdf_planner._voxel_size
 
+            logging.info(f"Current position: {pts}, {explore_dist:.3f}")
+
             if type(max_point_choice) == SnapShot and target_arrived:
-                # observe the snapshot at the target point
-                agent_state_obs = habitat_sim.AgentState()
-                agent_state_obs.position = pts
-                agent_state_obs.rotation = rotation
-                agent.set_state(agent_state_obs)
-                obs = simulator.get_sensor_observations()
+                # get an observation and break
+                obs, _ = scene.get_observation(pts, angle)
                 rgb = obs["color_sensor"]
+
                 plt.imsave(
                     os.path.join(episode_object_observe_dir, f"target_{target_observation_count}.png"), rgb
                 )
@@ -700,10 +680,6 @@ def main(cfg):
         pickle.dump(path_length_list, f)
 
     logging.info(f'All scenes finish')
-    try:
-        simulator.close()
-    except:
-        pass
 
 
 if __name__ == "__main__":

@@ -44,10 +44,10 @@ extra_view_phase_1: 4
 extra_view_angle_deg_phase_1: 60
 
 # Snapshot
-min_num_obj_threshold: 1
+min_num_obj_threshold: 2
 
 # Semantic map
-explored_depth: 1.5
+explored_depth: 1.7
 planner:
   unexplored_T: 2.0
   unoccupied_T: 2.0

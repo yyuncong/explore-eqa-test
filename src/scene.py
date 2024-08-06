@@ -699,7 +699,7 @@ class Scene:
             self.objects = filter_objects(
                 obj_min_points=self.cfg_cg['obj_min_points'],
                 obj_min_detections=self.cfg_cg['obj_min_detections'],
-                min_distance=self.cfg.scene_graph.obj_include_dist + 1.0,
+                min_distance=self.cfg.scene_graph.obj_include_dist,
                 objects=self.objects,
                 pts=pts,
             )

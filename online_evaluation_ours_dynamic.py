@@ -389,6 +389,12 @@ def main(cfg):
                     # clean up or merge redundant objects periodically
                     scene.periodic_cleanup_objects(frame_idx=cnt_step * total_views + view_idx, pts=pts)
 
+                    # TODO: not sure whether doing this is correct when solving the problem that target_obj_id_det is merged into another object in periodic_cleanup_objects, resulting in the target_obj_id_det not in the scene.objects
+                    target_obj_id_det_list_filtered = [obj_id for obj_id in target_obj_id_det_list if obj_id in scene.objects]
+                    if len(target_obj_id_det_list_filtered) != len(target_obj_id_det_list):
+                        logging.info(f"!!!!!!!!! {target_obj_id_det_list} -> {target_obj_id_det_list_filtered}")
+                        target_obj_id_det_list = target_obj_id_det_list_filtered
+
                     # TSDF fusion
                     tsdf_planner.integrate(
                         color_im=rgb,
@@ -475,7 +481,7 @@ def main(cfg):
                 # use the most common id in the list as the target object id
                 if len(target_obj_id_det_list) > 0:
                     target_obj_id_estimate = max(set(target_obj_id_det_list), key=target_obj_id_det_list.count)
-                    logging.info(f"Target object {target_obj_id_estimate} {scene.objects[target_obj_id_estimate]['class_name']} used for selecting snapshot!")
+                    logging.info(f"Estimated target object id: {target_obj_id_estimate} {object_id_to_name[target_obj_id_estimate]}")
                 else:
                     target_obj_id_estimate = -1
 

@@ -397,7 +397,7 @@ def main(cfg):
                 step_dict["obj_map"] = object_id_to_name
                 step_dict["position"] = np.array(pts)[None,]
                 obj_positions_map = {
-                    obj_id: obj['bbox'].center
+                    str(obj_id): obj['bbox'].center
                     for obj_id, obj in scene.objects.items()
                 }
                 obj_positions_map = {
@@ -545,7 +545,7 @@ def main(cfg):
                             "pred_target_class: "+str(' '.join([object_id_to_name[obj_id] for obj_id in pred_target_snapshot.selected_obj_list]))
                         )
 
-                        logging.info(f"Next choice Snapshot")
+                        logging.info(f"Next choice Snapshot of {pred_target_snapshot.image}")
                         tsdf_planner.frontiers_weight = np.zeros((len(tsdf_planner.frontiers)))
                         # TODO: where to go if snapshot?
                         max_point_choice = pred_target_snapshot
@@ -581,7 +581,7 @@ def main(cfg):
 
                         # check whether the class of the target object is the same as the class of the selected snapshot
                         for ss_obj_id in max_point_choice.selected_obj_list:
-                            if object_id_to_name[ss_obj_id] == object_id_to_name[target_obj_id_estimate]:
+                            if object_id_to_name[ss_obj_id] == target_obj_class:
                                 same_class_count += 1
                                 break
 
@@ -714,7 +714,7 @@ def main(cfg):
 
                     # check whether the class of the target object is the same as the class of the selected snapshot
                     for ss_obj_id in max_point_choice.selected_obj_list:
-                        if object_id_to_name[ss_obj_id] == object_id_to_name[target_obj_id_estimate]:
+                        if object_id_to_name[ss_obj_id] == target_obj_class:
                             same_class_count += 1
                             break
 

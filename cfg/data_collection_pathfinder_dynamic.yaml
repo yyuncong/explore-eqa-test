@@ -7,8 +7,11 @@ scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
 scene_data_path: "/home/hanyang/code/3d_project/explore-eqa/data/versioned_data/hm3d-0.2/hm3d"
 dataset_output_dir: "exploration_data"
 detection_model_name: "yolo_world/s"
+
 concept_graph_config_path: "conceptgraph/hydra_configs"
 concept_graph_config_name: "rerun_realtime_mapping"
+
+incremental: true
 
 # Sampling navigation point
 min_travel_dist: 5.0

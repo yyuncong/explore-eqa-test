@@ -336,9 +336,7 @@ def merge_obj2_into_obj1(obj1, obj2, downsample_voxel_size, dbscan_remove_noise,
     obj1['clip_ft'] = (obj1['clip_ft'] * n_obj1_det + obj2['clip_ft'] * n_obj2_det) / (n_obj1_det + n_obj2_det)
     obj1['clip_ft'] = F.normalize(obj1['clip_ft'], dim=0)
 
-    # image should be already handled before, so just sanity check
-    if obj1['conf'] < obj2['conf']:
-        assert obj1['image'] == obj2['image'], f"Image mismatch: {obj1['image']} vs {obj2['image']}, conf: {obj1['conf']} vs {obj2['conf']}"
+    # TODO: not sure how to handle image merging yet
 
     # Update confidence by taking the maximum
     obj1['conf'] = max(obj1['conf'], obj2['conf'])
@@ -699,9 +697,7 @@ def filter_objects(
 
     # Identify which objects to keep
     for obj_id, obj in objects.items():
-        if np.linalg.norm(
-            np.asarray(obj['bbox'].center[0] - pts[0], obj['bbox'].center[2] - pts[2])
-        ) > min_distance:
+        if np.linalg.norm(obj['bbox'].center[[0, 2]] - pts[[0, 2]]) > min_distance:
             if len(obj["pcd"].points) >= obj_min_points and obj["num_detections"] >= obj_min_detections:
                 objects_to_keep[obj_id] = obj
             else:

@@ -66,8 +66,8 @@ def main(cfg):
     logging.info(f"Loaded {len(questions_data)} questions.")
 
     ## Initialize the detection models
-    detection_model = measure_time(YOLO)('yolov8x-world.pt')   # yolov8x-world.pt
-    sam_predictor = SAM('sam_l.pt')  # SAM('sam_l.pt') # UltraLytics SAM
+    detection_model = measure_time(YOLO)('yolov8l-world.pt')   # yolov8x-world.pt
+    sam_predictor = SAM('mobile_sam.pt')  # SAM('sam_l.pt') # UltraLytics SAM
     # sam_predictor = measure_time(get_sam_predictor)(cfg) # Normal SAM
     clip_model, _, clip_preprocess = open_clip.create_model_and_transforms(
         "ViT-B-32", "laion2b_s34b_b79k"  # "ViT-H-14", "laion2b_s32b_b79k"
@@ -243,6 +243,7 @@ def main(cfg):
                     all_angles.append(main_angle)
 
                     # observe and update the TSDF
+                    all_added_obj_ids = []
                     for view_idx, ang in enumerate(all_angles):
                         obs, cam_pose = scene.get_observation(pts, ang)
                         rgb = obs["color_sensor"]
@@ -253,7 +254,7 @@ def main(cfg):
                         cam_pose_tsdf = pose_normal_to_tsdf(cam_pose_normal)
 
                         obs_file_name = f"{cnt_step}-view_{view_idx}.png"
-                        annotated_rgb, object_added, target_obj_id_det = scene.update_scene_graph(
+                        annotated_rgb, added_obj_ids, target_obj_id_det = scene.update_scene_graph(
                             image_rgb=rgb[..., :3], depth=depth, intrinsics=cam_intr, cam_pos=cam_pose,
                             detection_model=detection_model, sam_predictor=sam_predictor, clip_model=clip_model,
                             clip_preprocess=clip_preprocess, clip_tokenizer=clip_tokenizer,
@@ -262,10 +263,10 @@ def main(cfg):
                             frame_idx=cnt_step * total_views + view_idx,
                             target_obj_mask=semantic_obs == target_obj_id,
                         )
-                        if object_added:
-                            plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), annotated_rgb)
+                        plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), annotated_rgb)
                         if target_obj_id_det is not None:
                             target_obj_id_det_list.append(target_obj_id_det)
+                        all_added_obj_ids += added_obj_ids
 
                         # clean up or merge redundant objects periodically
                         scene.periodic_cleanup_objects(frame_idx=cnt_step * total_views + view_idx, pts=pts)
@@ -285,7 +286,22 @@ def main(cfg):
                         if cfg.save_egocentric_view:
                             plt.imsave(os.path.join(egocentric_save_dir, f"{cnt_step}_view_{view_idx}.png"), rgb)
 
-                    scene.update_snapshots(min_num_obj_threshold=cfg.min_num_obj_threshold)
+                    if not cfg.incremental:
+                        scene.update_snapshots(
+                            obj_set=set(scene.objects.keys()),
+                            incremental=cfg.incremental,
+                        )
+                    else:
+                        # cluster all the newly added objects
+                        all_added_obj_ids = [obj_id for obj_id in all_added_obj_ids if obj_id in scene.objects]
+                        # as well as the objects nearby
+                        for obj_id, obj in scene.objects.items():
+                            if np.linalg.norm(obj['bbox'].center[[0, 2]] - pts[[0, 2]]) < cfg.scene_graph.obj_include_dist + 0.5:
+                                all_added_obj_ids.append(obj_id)
+                        scene.update_snapshots(
+                            obj_set=set(all_added_obj_ids),
+                            incremental=cfg.incremental,
+                        )
                     logging.info(f"Step {cnt_step} {len(scene.objects)} objects, {len(scene.snapshots)} snapshots")
 
                     update_success = tsdf_planner.update_frontier_map(pts=pts_normal, cfg=cfg.planner)
@@ -383,7 +399,7 @@ def main(cfg):
                         step_dict["snapshots"].append(
                             {
                                 "img_id": snapshot.image,
-                                "obj_ids": [int(obj_id) for obj_id in snapshot.selected_obj_list]
+                                "obj_ids": [int(obj_id) for obj_id in snapshot.cluster]
                              }
                         )
 
@@ -398,20 +414,24 @@ def main(cfg):
 
                     # sanity check
                     assert len(step_dict["snapshots"]) == len(scene.snapshots), f"{len(step_dict['snapshots'])} != {len(scene.snapshots)}"
-                    total_objs_count = 0
-                    for snapshot in scene.snapshots.values():
-                        total_objs_count += len(snapshot.selected_obj_list)
+                    total_objs_count = sum(
+                        [len(snapshot.cluster) for snapshot in scene.snapshots.values()]
+                    )
+                    assert len(scene.objects) == total_objs_count, f"{len(scene.objects)} != {total_objs_count}"
+                    total_objs_count = sum(
+                        [len(set(snapshot.cluster)) for snapshot in scene.snapshots.values()]
+                    )
                     assert len(scene.objects) == total_objs_count, f"{len(scene.objects)} != {total_objs_count}"
                     for obj_id in scene.objects.keys():
                         exist_count = 0
                         for ss in scene.snapshots.values():
-                            if obj_id in ss.selected_obj_list:
+                            if obj_id in ss.cluster:
                                 exist_count += 1
                         assert exist_count == 1, f"{exist_count} != 1 for obj_id {obj_id}, {scene.objects[obj_id]['class_name']}"
                     for ss in scene.snapshots.values():
-                        assert len(ss.selected_obj_list) == len(set(ss.selected_obj_list)), f"{ss.selected_obj_list} has duplicates"
+                        assert len(ss.cluster) == len(set(ss.cluster)), f"{ss.cluster} has duplicates"
                         assert len(ss.full_obj_list.keys()) == len(set(ss.full_obj_list.keys())), f"{ss.full_obj_list.keys()} has duplicates"
-                        for obj_id in ss.selected_obj_list:
+                        for obj_id in ss.cluster:
                             assert obj_id in ss.full_obj_list, f"{obj_id} not in {ss.full_obj_list.keys()}"
                         for obj_id in ss.full_obj_list.keys():
                             assert obj_id in scene.objects, f"{obj_id} not in scene objects"
@@ -453,8 +473,11 @@ def main(cfg):
                         assert type(max_point_choice) == SnapShot, f"{type(max_point_choice)} != SnapShot"
 
                     # Save step data
-                    with open(os.path.join(episode_data_dir, f"{cnt_step:04d}.json"), "w") as f:
-                        json.dump(step_dict, f, indent=4)
+                    if type(max_point_choice) == Frontier and tsdf_planner.frontiers_weight is not None and len(tsdf_planner.frontiers_weight) > 0 and np.max(tsdf_planner.frontiers_weight) < 1:
+                        pass
+                    else:
+                        with open(os.path.join(episode_data_dir, f"{cnt_step:04d}.json"), "w") as f:
+                            json.dump(step_dict, f, indent=4)
 
                     # update the agent's position record
                     pts_pixs = np.vstack((pts_pixs, pts_pix))

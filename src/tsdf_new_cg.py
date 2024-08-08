@@ -47,7 +47,7 @@ class SnapShot:
     color: Tuple[float, float, float]
     obs_point: np.ndarray  # integer position in voxel grid
     full_obj_list: Dict[int, float] = field(default_factory=dict)  # object id to confidence
-    selected_obj_list: List[int] = field(default_factory=list)
+    cluster: List[int] = field(default_factory=list)
     position: np.ndarray = None
 
     def __eq__(self, other):
@@ -308,7 +308,7 @@ class TSDFPlanner(TSDFPlannerBase):
             logging.info(f"Next choice: Snapshot with file name {snapshot.image} containing object {objects[target_obj_id]['class_name']}")
 
             # for debug
-            assert target_obj_id in snapshot.selected_obj_list, f"Error in get_next_choice: {target_obj_id} not in {snapshot.selected_obj_list}"
+            assert target_obj_id in snapshot.cluster, f"Error in get_next_choice: {target_obj_id} not in {snapshot.cluster}"
 
             return snapshot
         else:
@@ -386,7 +386,7 @@ class TSDFPlanner(TSDFPlannerBase):
         self.max_point = choice
 
         if type(choice) == SnapShot:
-            obj_centers = [objects[obj_id]['bbox'].center for obj_id in choice.selected_obj_list]
+            obj_centers = [objects[obj_id]['bbox'].center for obj_id in choice.cluster]
             obj_centers = np.asarray([self.habitat2voxel(center)[:2] for center in obj_centers])
             snapshot_center = np.mean(obj_centers, axis=0)
             choice.position = snapshot_center
@@ -571,7 +571,7 @@ class TSDFPlanner(TSDFPlannerBase):
             #     obj_vox = self.habitat2voxel(objs.bbox_center)
             #     ax1.scatter(obj_vox[1], obj_vox[0], c="w", s=30)
             for snapshot in snapshots.values():
-                for obj_id in snapshot.selected_obj_list:
+                for obj_id in snapshot.cluster:
                     obj_vox = self.habitat2voxel(objects[obj_id]['bbox'].center)
                     ax1.scatter(obj_vox[1], obj_vox[0], color=snapshot.color, s=30)
             # plot the target point if found

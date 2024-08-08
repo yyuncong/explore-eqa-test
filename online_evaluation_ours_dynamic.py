@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import matplotlib.image
+
 import os
 import random
 os.environ["TRANSFORMERS_VERBOSITY"] = "error"  # disable warning
@@ -167,6 +168,7 @@ def inference(model, tokenizer, step_dict, cfg):
         return outputs
 
 def main(cfg):
+    # use hydra to load concept graph related configs
     with initialize(config_path="conceptgraph/hydra_configs", job_name="app"):
         cfg_cg = compose(config_name=cfg.concept_graph_config_name)
 
@@ -349,6 +351,7 @@ def main(cfg):
 
                 # observe and update the TSDF
                 rgb_egocentric_views = []
+                all_added_obj_ids = []
                 for view_idx, ang in enumerate(all_angles):
                     obs, cam_pose = scene.get_observation(pts, ang)
                     rgb = obs["color_sensor"]
@@ -363,7 +366,7 @@ def main(cfg):
 
                     obs_file_name = f"{cnt_step}-view_{view_idx}.png"
                     with torch.no_grad():
-                        annotated_rgb, object_added, target_obj_id_det = scene.update_scene_graph(
+                        annotated_rgb, added_obj_ids, target_obj_id_det = scene.update_scene_graph(
                             image_rgb=rgb[..., :3], depth=depth, intrinsics=cam_intr, cam_pos=cam_pose,
                             detection_model=detection_model, sam_predictor=sam_predictor, clip_model=clip_model,
                             clip_preprocess=clip_preprocess, clip_tokenizer=clip_tokenizer,
@@ -372,9 +375,7 @@ def main(cfg):
                             frame_idx=cnt_step * total_views + view_idx,
                             target_obj_mask=semantic_obs == target_obj_id,
                         )
-                    if object_added:
-                        with torch.no_grad():
-                            img_feature = encode(model, image_processor, rgb).mean(0)
+                        img_feature = encode(model, image_processor, rgb).mean(0)
                         img_feature = merge_patches(
                             img_feature.view(cfg.visual_feature_size, cfg.visual_feature_size, -1), 
                             cfg.patch_size
@@ -382,9 +383,9 @@ def main(cfg):
                         all_snapshot_features[obs_file_name] = img_feature.to("cpu")
                         if cfg.save_visualization or cfg.save_frontier_video:
                             plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), annotated_rgb)
-
-                    if target_obj_id_det is not None:
-                        target_obj_id_det_list.append(target_obj_id_det)
+                        if target_obj_id_det is not None:
+                            target_obj_id_det_list.append(target_obj_id_det)
+                        all_added_obj_ids += added_obj_ids
 
                     # clean up or merge redundant objects periodically
                     scene.periodic_cleanup_objects(frame_idx=cnt_step * total_views + view_idx, pts=pts)
@@ -407,8 +408,15 @@ def main(cfg):
                         explored_depth=cfg.explored_depth,
                     )
 
-                scene.update_snapshots(min_num_obj_threshold=cfg.min_num_obj_threshold)
+                # cluster all the newly added objects
+                all_added_obj_ids = [obj_id for obj_id in all_added_obj_ids if obj_id in scene.objects]
+                # as well as the objects nearby
+                for obj_id, obj in scene.objects.items():
+                    if np.linalg.norm(obj['bbox'].center[[0, 2]] - pts[[0, 2]]) < cfg.scene_graph.obj_include_dist + 0.5:
+                        all_added_obj_ids.append(obj_id)
+                scene.update_snapshots(obj_set=set(all_added_obj_ids))
                 logging.info(f"Step {cnt_step} {len(scene.objects)} objects, {len(scene.snapshots)} snapshots")
+
                 # update the mapping of object id to class name, since the objects have been updated
                 object_id_to_name = {obj_id: obj["class_name"] for obj_id, obj in scene.objects.items()}
 
@@ -416,7 +424,7 @@ def main(cfg):
                 step_dict["snapshot_objects"] = {}
                 for rgb_id, snapshot in scene.snapshots.items():
                     step_dict["snapshot_features"][rgb_id] = all_snapshot_features[rgb_id]
-                    step_dict["snapshot_objects"][rgb_id] = snapshot.selected_obj_list
+                    step_dict["snapshot_objects"][rgb_id] = snapshot.cluster
                 # print(step_dict["snapshot_objects"])
                 # input()
 
@@ -579,7 +587,7 @@ def main(cfg):
                             break
                         pred_target_snapshot = list(scene.snapshots.values())[int(target_index)]
                         logging.info(
-                            "pred_target_class: "+str(' '.join([object_id_to_name[obj_id] for obj_id in pred_target_snapshot.selected_obj_list]))
+                            "pred_target_class: "+str(' '.join([object_id_to_name[obj_id] for obj_id in pred_target_snapshot.cluster]))
                         )
 
                         logging.info(f"Next choice Snapshot of {pred_target_snapshot.image}")
@@ -610,14 +618,14 @@ def main(cfg):
                         os.system(f"cp {os.path.join(episode_snapshot_dir, max_point_choice.image)} {os.path.join(episode_object_observe_dir, 'target.png')}")
 
                         # check whether the target object is in the selected snapshot
-                        if target_obj_id_estimate in max_point_choice.selected_obj_list:
+                        if target_obj_id_estimate in max_point_choice.cluster:
                             logging.info(f"{target_obj_id_estimate} in Chosen snapshot {max_point_choice.image}! Success!")
                             target_found = True
                         else:
                             logging.info(f"Question id {question_id} choose the wrong snapshot! Failed!")
 
                         # check whether the class of the target object is the same as the class of the selected snapshot
-                        for ss_obj_id in max_point_choice.selected_obj_list:
+                        for ss_obj_id in max_point_choice.cluster:
                             if object_id_to_name[ss_obj_id] == target_obj_class:
                                 same_class_count += 1
                                 break
@@ -653,23 +661,35 @@ def main(cfg):
                 pts_normal, angle, pts_pix, fig, _, target_arrived = return_values
 
                 # sanity check
-                total_objs_count = 0
-                for snapshot in scene.snapshots.values():
-                    total_objs_count += len(snapshot.selected_obj_list)
-                assert len(scene.objects) == total_objs_count, f"{len(scene.objects)} != {total_objs_count}"
+                obj_exclude_count = sum([1 if obj['num_detections'] < 2 else 0 for obj in scene.objects.values()])
+                total_objs_count = sum(
+                    [len(snapshot.cluster) for snapshot in scene.snapshots.values()]
+                )
+                assert len(scene.objects) == total_objs_count + obj_exclude_count, f"{len(scene.objects)} != {total_objs_count} + {obj_exclude_count}"
+                total_objs_count = sum(
+                    [len(set(snapshot.cluster)) for snapshot in scene.snapshots.values()]
+                )
+                assert len(scene.objects) == total_objs_count + obj_exclude_count, f"{len(scene.objects)} != {total_objs_count} + {obj_exclude_count}"
                 for obj_id in scene.objects.keys():
                     exist_count = 0
                     for ss in scene.snapshots.values():
-                        if obj_id in ss.selected_obj_list:
+                        if obj_id in ss.cluster:
                             exist_count += 1
-                    assert exist_count == 1, f"{exist_count} != 1 for obj_id {obj_id}, {scene.objects[obj_id]['class_name']}"
+                    if scene.objects[obj_id]['num_detections'] < 2:
+                        assert exist_count == 0, f"{exist_count} != 0 for obj_id {obj_id}, {scene.objects[obj_id]['class_name']}"
+                    else:
+                        assert exist_count == 1, f"{exist_count} != 1 for obj_id {obj_id}, {scene.objects[obj_id]['class_name']}"
                 for ss in scene.snapshots.values():
-                    assert len(ss.selected_obj_list) == len(set(ss.selected_obj_list)), f"{ss.selected_obj_list} has duplicates"
+                    assert len(ss.cluster) == len(set(ss.cluster)), f"{ss.cluster} has duplicates"
                     assert len(ss.full_obj_list.keys()) == len(set(ss.full_obj_list.keys())), f"{ss.full_obj_list.keys()} has duplicates"
-                    for obj_id in ss.selected_obj_list:
+                    for obj_id in ss.cluster:
                         assert obj_id in ss.full_obj_list, f"{obj_id} not in {ss.full_obj_list.keys()}"
                     for obj_id in ss.full_obj_list.keys():
                         assert obj_id in scene.objects, f"{obj_id} not in scene objects"
+                # check whether the snapshots in scene.snapshots and scene.frames are the same
+                for file_name, ss in scene.snapshots.items():
+                    assert ss.cluster == scene.frames[file_name].cluster, f"{ss}\n!=\n{scene.frames[file_name]}"
+                    assert ss.full_obj_list == scene.frames[file_name].full_obj_list, f"{ss}\n==\n{scene.frames[file_name]}"
 
                 # update the agent's position record
                 pts_pixs = np.vstack((pts_pixs, pts_pix))
@@ -743,14 +763,14 @@ def main(cfg):
                     # get some statistics
 
                     # check whether the target object is in the selected snapshot
-                    if target_obj_id_estimate in max_point_choice.selected_obj_list:
+                    if target_obj_id_estimate in max_point_choice.cluster:
                         logging.info(f"{target_obj_id_estimate} in Chosen snapshot {max_point_choice.image}! Success!")
                         target_found = True
                     else:
                         logging.info(f"Question id {question_id} choose the wrong snapshot! Failed!")
 
                     # check whether the class of the target object is the same as the class of the selected snapshot
-                    for ss_obj_id in max_point_choice.selected_obj_list:
+                    for ss_obj_id in max_point_choice.cluster:
                         if object_id_to_name[ss_obj_id] == target_obj_class:
                             same_class_count += 1
                             break

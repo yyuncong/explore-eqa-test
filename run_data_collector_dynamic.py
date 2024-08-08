@@ -38,12 +38,6 @@ from conceptgraph.utils.general_utils import measure_time
 
 def main(cfg):
     # use hydra to load concept graph related configs
-    # @hydra.main(version_base=None, config_path=cfg.concept_graph_config_path, config_name=cfg.concept_graph_config_name)
-    # def get_conceptgraph_config(conf):
-    #     conf = process_cfg(conf)
-    #     return conf
-    # cfg_cg = get_conceptgraph_config()
-
     with initialize(config_path="conceptgraph/hydra_configs", job_name="app"):
         cfg_cg = compose(config_name=cfg.concept_graph_config_name)
 
@@ -85,8 +79,8 @@ def main(cfg):
         all_questions_in_scene = [q for q in questions_data if q["episode_history"] == scene_id]
 
         ##########################################################
-        if '00538' not in scene_id:
-            continue
+        # if '00538' not in scene_id:
+        #     continue
         # if int(scene_id.split("-")[0]) >= 800:
         #     continue
         # rand_q = np.random.randint(0, len(all_questions_in_scene) - 1)
@@ -286,22 +280,13 @@ def main(cfg):
                         if cfg.save_egocentric_view:
                             plt.imsave(os.path.join(egocentric_save_dir, f"{cnt_step}_view_{view_idx}.png"), rgb)
 
-                    if not cfg.incremental:
-                        scene.update_snapshots(
-                            obj_set=set(scene.objects.keys()),
-                            incremental=cfg.incremental,
-                        )
-                    else:
-                        # cluster all the newly added objects
-                        all_added_obj_ids = [obj_id for obj_id in all_added_obj_ids if obj_id in scene.objects]
-                        # as well as the objects nearby
-                        for obj_id, obj in scene.objects.items():
-                            if np.linalg.norm(obj['bbox'].center[[0, 2]] - pts[[0, 2]]) < cfg.scene_graph.obj_include_dist + 0.5:
-                                all_added_obj_ids.append(obj_id)
-                        scene.update_snapshots(
-                            obj_set=set(all_added_obj_ids),
-                            incremental=cfg.incremental,
-                        )
+                    # cluster all the newly added objects
+                    all_added_obj_ids = [obj_id for obj_id in all_added_obj_ids if obj_id in scene.objects]
+                    # as well as the objects nearby
+                    for obj_id, obj in scene.objects.items():
+                        if np.linalg.norm(obj['bbox'].center[[0, 2]] - pts[[0, 2]]) < cfg.scene_graph.obj_include_dist + 0.5:
+                            all_added_obj_ids.append(obj_id)
+                    scene.update_snapshots(obj_set=set(all_added_obj_ids))
                     logging.info(f"Step {cnt_step} {len(scene.objects)} objects, {len(scene.snapshots)} snapshots")
 
                     update_success = tsdf_planner.update_frontier_map(pts=pts_normal, cfg=cfg.planner)
@@ -414,20 +399,24 @@ def main(cfg):
 
                     # sanity check
                     assert len(step_dict["snapshots"]) == len(scene.snapshots), f"{len(step_dict['snapshots'])} != {len(scene.snapshots)}"
+                    obj_exclude_count = sum([1 if obj['num_detections'] < 2 else 0 for obj in scene.objects.values()])
                     total_objs_count = sum(
                         [len(snapshot.cluster) for snapshot in scene.snapshots.values()]
                     )
-                    assert len(scene.objects) == total_objs_count, f"{len(scene.objects)} != {total_objs_count}"
+                    assert len(scene.objects) == total_objs_count + obj_exclude_count, f"{len(scene.objects)} != {total_objs_count} + {obj_exclude_count}"
                     total_objs_count = sum(
                         [len(set(snapshot.cluster)) for snapshot in scene.snapshots.values()]
                     )
-                    assert len(scene.objects) == total_objs_count, f"{len(scene.objects)} != {total_objs_count}"
+                    assert len(scene.objects) == total_objs_count + obj_exclude_count, f"{len(scene.objects)} != {total_objs_count} + {obj_exclude_count}"
                     for obj_id in scene.objects.keys():
                         exist_count = 0
                         for ss in scene.snapshots.values():
                             if obj_id in ss.cluster:
                                 exist_count += 1
-                        assert exist_count == 1, f"{exist_count} != 1 for obj_id {obj_id}, {scene.objects[obj_id]['class_name']}"
+                        if scene.objects[obj_id]['num_detections'] < 2:
+                            assert exist_count == 0, f"{exist_count} != 0 for obj_id {obj_id}, {scene.objects[obj_id]['class_name']}"
+                        else:
+                            assert exist_count == 1, f"{exist_count} != 1 for obj_id {obj_id}, {scene.objects[obj_id]['class_name']}"
                     for ss in scene.snapshots.values():
                         assert len(ss.cluster) == len(set(ss.cluster)), f"{ss.cluster} has duplicates"
                         assert len(ss.full_obj_list.keys()) == len(set(ss.full_obj_list.keys())), f"{ss.full_obj_list.keys()} has duplicates"
@@ -435,6 +424,10 @@ def main(cfg):
                             assert obj_id in ss.full_obj_list, f"{obj_id} not in {ss.full_obj_list.keys()}"
                         for obj_id in ss.full_obj_list.keys():
                             assert obj_id in scene.objects, f"{obj_id} not in scene objects"
+                    # check whether the snapshots in scene.snapshots and scene.frames are the same
+                    for file_name, ss in scene.snapshots.items():
+                        assert ss.cluster == scene.frames[file_name].cluster, f"{ss}\n!=\n{scene.frames[file_name]}"
+                        assert ss.full_obj_list == scene.frames[file_name].full_obj_list, f"{ss}\n==\n{scene.frames[file_name]}"
 
                     # save the ground truth choice
                     if type(max_point_choice) == SnapShot:

@@ -585,25 +585,24 @@ class Scene:
     def update_snapshots(
         self,
         obj_set,
-        incremental=False,
     ):
         self.cleanup_empty_frames_snapshots()
 
-        prev_snapshots = copy.deepcopy(self.snapshots)
-
-        # assert len(obj_set) + sum(
-        #     [len(snapshot.cluster) for snapshot in self.snapshots.values()]
-        # ) == len(self.objects), f"{len(obj_set)} + {sum([len(snapshot.cluster) for snapshot in self.snapshots.values()])} != {len(self.objects)}"
-
         obj_ids = obj_set
-        if incremental:
-            obj_ids_temp = obj_ids.copy()
-            for key, snapshot in self.snapshots.items():
-                cluster = snapshot.cluster
-                if any([obj_id in obj_ids_temp for obj_id in cluster]):
-                    obj_ids = obj_ids.union(set(cluster))
-                    prev_snapshots.pop(key)
+        ss_to_pop = []
+        obj_ids_temp = obj_ids.copy()
+        for filename, snapshot in self.snapshots.items():
+            cluster = snapshot.cluster
+            if any([obj_id in obj_ids_temp for obj_id in cluster]):
+                obj_ids = obj_ids.union(set(cluster))
+                ss_to_pop.append(filename)
+        for filename in ss_to_pop:
+            self.snapshots.pop(filename)
         obj_ids = list(set(obj_ids))
+
+        # find and exclude the objects that have only one observation
+        obj_exclude = [obj_id for obj_id in self.objects.keys() if self.objects[obj_id]['num_detections'] < 2]
+        obj_ids = [obj_id for obj_id in obj_ids if obj_id not in obj_exclude]
 
         obj_centers = np.zeros((len(obj_ids), 2))
         for i, obj_id in enumerate(obj_ids):
@@ -612,25 +611,16 @@ class Scene:
         if len(obj_centers) == 0:
             return
 
-        if not incremental:
-            self.snapshots = self.clustering.fit(obj_centers, obj_ids, self.frames)
-        else:
-            snapshots = self.clustering.fit(obj_centers, obj_ids, self.frames)
-            assert len(
-                set([obj_id for snapshot in snapshots.values() for obj_id in snapshot.cluster])
-            ) == len(obj_ids), f"{len(set([obj_id for snapshot in snapshots.values() for obj_id in snapshot.cluster]))} != {len(obj_ids)}"
-            assert len(
-                set([obj_id for snapshot in snapshots.values() for obj_id in snapshot.cluster]).union(
-                    set([obj_id for snapshot in prev_snapshots.values() for obj_id in snapshot.cluster])
-                )
-            ) == len(self.objects), f"{len(set([obj_id for snapshot in snapshots.values() for obj_id in snapshot.cluster]).union(set([obj_id for snapshot in self.snapshots.values() for obj_id in snapshot.cluster])))} != {len(self.objects)}"
+        new_snapshots = self.clustering.fit(obj_centers, obj_ids, self.frames)
+        assert set([obj_id for snapshot in new_snapshots.values() for obj_id in snapshot.cluster]) == set(obj_ids), f"{set([obj_id for snapshot in new_snapshots.values() for obj_id in snapshot.cluster])} != {set(obj_ids)}"
+        assert (set(obj_ids) & set([obj_id for snapshot in self.snapshots.values() for obj_id in snapshot.cluster])) == set(), f"{set(obj_ids)} & {set([obj_id for snapshot in self.snapshots.values() for obj_id in snapshot.cluster])} != empty"
+        assert (set(obj_ids) | set([obj_id for snapshot in self.snapshots.values() for obj_id in snapshot.cluster]) | set(obj_exclude)) == set(self.objects.keys()), f"{set(obj_ids)} | {set([obj_id for snapshot in self.snapshots.values() for obj_id in snapshot.cluster])} | {set(obj_exclude)} != {set(self.objects.keys())}"
 
-            for key, snapshot in snapshots.items():
-                if key in prev_snapshots.keys():
-                    prev_snapshots[key].cluster += snapshot.cluster
-                else:
-                    prev_snapshots[key] = snapshot
-            self.snapshots = prev_snapshots
+        for key, snapshot in new_snapshots.items():
+            if key in self.snapshots.keys():
+                self.snapshots[key].cluster += snapshot.cluster
+            else:
+                self.snapshots[key] = snapshot
 
         # update the snapshot belonging of each object
         for file_name, snapshot in self.snapshots.items():
@@ -639,7 +629,10 @@ class Scene:
 
         # sanity check
         for obj_id, obj in self.objects.items():
-            assert obj['image'] is not None, f"{obj_id} has no image"
+            if obj['num_detections'] < 2:
+                assert obj['image'] is None, f"{obj_id} has only one detection but has image"
+            else:
+                assert obj['image'] is not None, f"{obj_id} has no image"
 
     def periodic_cleanup_objects(self, frame_idx, pts):
         ### Perform post-processing periodically if told so
@@ -707,14 +700,14 @@ class Scene:
                 frame_to_pop.append(filename)
         for filename in frame_to_pop:
             self.frames.pop(filename)
-        snapshot_to_pop = []
-        for filename, ss in self.snapshots.items():
-            ss.cluster = [obj_id for obj_id in ss.cluster if obj_id in self.objects.keys()]
-            ss.full_obj_list = {obj_id: conf for obj_id, conf in ss.full_obj_list.items() if obj_id in self.objects.keys()}
-            if len(ss.full_obj_list) == 0 or len(ss.cluster) == 0:
-                snapshot_to_pop.append(filename)
-        for filename in snapshot_to_pop:
-            self.snapshots.pop(filename)
+        # snapshot_to_pop = []
+        # for filename, ss in self.snapshots.items():
+        #     ss.cluster = [obj_id for obj_id in ss.cluster if obj_id in self.objects.keys()]
+        #     ss.full_obj_list = {obj_id: conf for obj_id, conf in ss.full_obj_list.items() if obj_id in self.objects.keys()}
+        #     if len(ss.full_obj_list) == 0 or len(ss.cluster) == 0:
+        #         snapshot_to_pop.append(filename)
+        # for filename in snapshot_to_pop:
+        #     self.snapshots.pop(filename)
 
 
 

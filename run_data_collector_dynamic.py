@@ -330,7 +330,7 @@ def main(cfg):
                     tsdf_planner.max_point = None
                     tsdf_planner.target_point = None
 
-                    print(f'!!!!!!! {target_obj_id_det_list}')
+                    logging.info(f"Target object detection list: {target_obj_id_det_list}")
 
                     # use the most common id in the list as the target object id
                     if len(target_obj_id_det_list) > 0:

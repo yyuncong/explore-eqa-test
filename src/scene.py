@@ -370,7 +370,6 @@ class Scene:
                 if iou_score > max_iou:
                     max_iou = iou_score
                     max_iou_obj_id = obj_id
-            print(f'!!!!!! {max_iou}')
             if max_iou > self.cfg.scene_graph.target_obj_iou_threshold:
                 target_obj_id = max_iou_obj_id
                 logging.info(f"Target object {target_obj_id} {detection_list[target_obj_id]['class_name']} detected with IoU {max_iou} in {img_path}!!!")

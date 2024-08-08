@@ -337,8 +337,8 @@ def main(cfg):
                         target_obj_id_det = max(set(target_obj_id_det_list), key=target_obj_id_det_list.count)
                         logging.info(f"Target object {target_obj_id_det} {scene.objects[target_obj_id_det]['class_name']} used for selecting snapshot!")
                         if scene.objects[target_obj_id_det]['num_detections'] < 2:
-                            target_obj_id_det = -1
                             logging.info(f"Target object {target_obj_id_det} {scene.objects[target_obj_id_det]['class_name']} has less than 2 detections, not used for selecting snapshot!")
+                            target_obj_id_det = -1
                     else:
                         target_obj_id_det = -1
 

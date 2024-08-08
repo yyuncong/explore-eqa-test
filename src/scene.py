@@ -599,6 +599,7 @@ class Scene:
         for filename in ss_to_pop:
             self.snapshots.pop(filename)
         obj_ids = list(set(obj_ids))
+        prev_snapshot_objs = [obj_id for snapshot in self.snapshots.values() for obj_id in snapshot.cluster]
 
         # find and exclude the objects that have only one observation
         obj_exclude = [obj_id for obj_id in self.objects.keys() if self.objects[obj_id]['num_detections'] < 2]
@@ -613,8 +614,8 @@ class Scene:
 
         new_snapshots = self.clustering.fit(obj_centers, obj_ids, self.frames)
         assert set([obj_id for snapshot in new_snapshots.values() for obj_id in snapshot.cluster]) == set(obj_ids), f"{set([obj_id for snapshot in new_snapshots.values() for obj_id in snapshot.cluster])} != {set(obj_ids)}"
-        assert (set(obj_ids) & set([obj_id for snapshot in self.snapshots.values() for obj_id in snapshot.cluster])) == set(), f"{set(obj_ids)} & {set([obj_id for snapshot in self.snapshots.values() for obj_id in snapshot.cluster])} != empty"
-        assert (set(obj_ids) | set([obj_id for snapshot in self.snapshots.values() for obj_id in snapshot.cluster]) | set(obj_exclude)) == set(self.objects.keys()), f"{set(obj_ids)} | {set([obj_id for snapshot in self.snapshots.values() for obj_id in snapshot.cluster])} | {set(obj_exclude)} != {set(self.objects.keys())}"
+        assert (set(obj_ids) & set(prev_snapshot_objs)) == set(), f"{set(obj_ids)} & {set(prev_snapshot_objs)} != empty"
+        assert (set(obj_ids) | set(prev_snapshot_objs) | set(obj_exclude)) == set(self.objects.keys()), f"{set(obj_ids)} | {set(prev_snapshot_objs)} | {set(obj_exclude)} != {set(self.objects.keys())}"
 
         for key, snapshot in new_snapshots.items():
             if key in self.snapshots.keys():

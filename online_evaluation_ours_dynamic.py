@@ -350,19 +350,17 @@ def main(cfg):
                 all_angles.append(main_angle)
 
                 # observe and update the TSDF
-                rgb_egocentric_views = []
+                rgb_egocentric_views_features = []
                 all_added_obj_ids = []
                 for view_idx, ang in enumerate(all_angles):
                     obs, cam_pose = scene.get_observation(pts, ang)
                     rgb = obs["color_sensor"]
                     depth = obs["depth_sensor"]
                     semantic_obs = obs["semantic_sensor"]
+                    rgb = rgba2rgb(rgb)
 
                     cam_pose_normal = pose_habitat_to_normal(cam_pose)
                     cam_pose_tsdf = pose_normal_to_tsdf(cam_pose_normal)
-
-                    rgb = rgba2rgb(rgb)
-                    rgb_egocentric_views.append(rgb)
 
                     obs_file_name = f"{cnt_step}-view_{view_idx}.png"
                     with torch.no_grad():
@@ -381,6 +379,7 @@ def main(cfg):
                             cfg.patch_size
                         )
                         all_snapshot_features[obs_file_name] = img_feature.to("cpu")
+                        rgb_egocentric_views_features.append(img_feature.to("cpu"))
                         if cfg.save_visualization or cfg.save_frontier_video:
                             plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), annotated_rgb)
                         if target_obj_id_det is not None:
@@ -517,19 +516,9 @@ def main(cfg):
                     vlm_id_to_ft_id = {v: k for k, v in ft_id_to_vlm_id.items()}
 
                     if cfg.egocentric_views:
-                        assert len(rgb_egocentric_views) == total_views
-                        egocentric_views_features = []
-                        for rgb_view in rgb_egocentric_views:
-                            processed_rgb = rgba2rgb(rgb_view)
-                            with torch.no_grad():
-                                img_feature = encode(model, image_processor, processed_rgb).mean(0)
-                            img_feature = merge_patches(
-                                img_feature.view(cfg.visual_feature_size, cfg.visual_feature_size, -1), 
-                                cfg.patch_size
-                            )
-                            egocentric_views_features.append(img_feature)
-                        egocentric_views_features = torch.cat(egocentric_views_features, dim=0)
-                        step_dict["egocentric_view_features"] = egocentric_views_features.to("cpu")
+                        assert len(rgb_egocentric_views_features) == total_views
+                        rgb_egocentric_views_features = torch.cat(rgb_egocentric_views_features, dim=0)
+                        step_dict["egocentric_view_features"] = rgb_egocentric_views_features
                         step_dict["use_egocentric_views"] = True
 
                     if cfg.action_memory:

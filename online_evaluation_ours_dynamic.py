@@ -294,7 +294,7 @@ def main(cfg):
             os.makedirs(episode_frontier_dir, exist_ok=True)
             os.makedirs(episode_snapshot_dir, exist_ok=True)
 
-            pts = init_pts
+            pts = np.asarray(init_pts)
             angle = init_angle
             rotation = get_quaternion(angle, 0)
 
@@ -483,7 +483,7 @@ def main(cfg):
                         tsdf_planner.max_point = None
                         tsdf_planner.target_point = None
 
-                print(f'!!!!!!! {target_obj_id_det_list}')
+                logging.info(f"Target object detection list: {target_obj_id_det_list}")
 
                 # use the most common id in the list as the target object id
                 if len(target_obj_id_det_list) > 0:

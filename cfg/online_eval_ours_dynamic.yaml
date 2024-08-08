@@ -5,7 +5,7 @@ output_parent_dir: /work/pi_chuangg_umass_edu/yuncong/results
 scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
 scene_data_path: /work/pi_chuangg_umass_edu/yuncong/data/scene_datasets/hm3d/
 semantic_bbox_data_path: '/home/yuncongyang_umass_edu/scene_understanding/hm3d_obj_bbox_merged'
-model_path: /work/pi_chuangg_umass_edu/yuncong/ds_lora/1e-06_patch2_rand_ego_lora
+model_path: /work/pi_chuangg_umass_edu/yuncong/ds_lora/2e-06_patch2_rand_ego_lora
 path_data_dir: exploration_data_new
 question_file_path: generated_questions/generated_questions.json
 concept_graph_config_path: "conceptgraph/hydra_configs"

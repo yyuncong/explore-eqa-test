@@ -20,7 +20,7 @@ from src.habitat import (
 )
 from src.geom import get_cam_intr, IoU
 from src.tsdf_new_cg import SnapShot
-from src.hierarchy_clustering import SceneHierarchicalClustering
+from src.hierarchy_clustering_dynamic import SceneHierarchicalClustering
 
 # Local application/library specific imports
 from conceptgraph.utils.ious import mask_subtract_contained

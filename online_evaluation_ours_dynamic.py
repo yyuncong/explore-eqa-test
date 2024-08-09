@@ -326,7 +326,7 @@ def main(cfg):
             # clear up the previous detected frontiers and objects
             scene.clear_up_detections()
 
-            logging.info(f'\n\nQuestion id {scene_id} initialization successful!')
+            logging.info(f'\n\nQuestion id {question_id} initialization successful!')
 
             # run steps
             target_found = False
@@ -799,6 +799,21 @@ def main(cfg):
             logging.info(f"Too many steps count: {too_many_steps_count}/{question_ind - success_count}")
             logging.info(f"Other errors count: {other_errors_count}/{question_ind - success_count}")
             logging.info(f"#######################################################\n")
+
+            # print the items in the scene graph
+            snapshot_dict = {}
+            for obj_id, obj in scene.objects.items():
+                if obj['image'] not in snapshot_dict:
+                    snapshot_dict[obj['image']] = []
+                snapshot_dict[obj['image']].append(
+                    f"{obj_id}: {obj['class_name']} {obj['num_detections']}"
+                )
+            logging.info(f"Scene graph of question {question_id}:")
+            for snapshot_id, obj_list in snapshot_dict.items():
+                logging.info(f"{snapshot_id}:")
+                for obj_str in obj_list:
+                    logging.info(f"\t{obj_str}")
+
 
         logging.info(f'Scene {scene_id} finish')
 

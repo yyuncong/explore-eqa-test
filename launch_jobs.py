@@ -45,8 +45,8 @@ if __name__ == "__main__":
         with open('run_test_jobs.sh', 'w') as f:
             f.write('#!/bin/bash\n')
             f.write(f'#SBATCH --job-name={job_name}_{job_count}\n' +
-                    f'#SBATCH -o output/{job_name}_{job_count}_%j.out\n' +
-                    f'#SBATCH -e output/{job_name}_{job_count}_%j.err\n' +
+                    f'#SBATCH -o output/{job_name}_%j_{job_count}.out\n' +
+                    f'#SBATCH -e output/{job_name}_%j_{job_count}.err\n' +
                     '#SBATCH --mem=100G\n' +
                     '#SBATCH --nodes=1\n' +
                     '#SBATCH --ntasks-per-node=1\n' +
@@ -58,7 +58,7 @@ if __name__ == "__main__":
 
         os.system('cat run_test_jobs.sh')
         os.system('sbatch run_test_jobs.sh')
-        time.sleep(10)
+        time.sleep(1)
         start_ratio += increment
         job_count += 1
 

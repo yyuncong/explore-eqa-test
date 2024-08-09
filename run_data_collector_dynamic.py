@@ -1,3 +1,6 @@
+import matplotlib.pyplot as plt
+import matplotlib.image
+
 import os
 import random
 os.environ["TRANSFORMERS_VERBOSITY"] = "error"  # disable warning
@@ -12,8 +15,6 @@ np.set_printoptions(precision=3)
 import json
 import logging
 import glob
-import matplotlib.pyplot as plt
-import matplotlib.image
 from habitat_sim.utils.common import quat_from_two_vectors, quat_to_angle_axis
 import open_clip
 from ultralytics import YOLO, SAM
@@ -37,12 +38,6 @@ from conceptgraph.utils.general_utils import measure_time
 
 def main(cfg):
     # use hydra to load concept graph related configs
-    # @hydra.main(version_base=None, config_path=cfg.concept_graph_config_path, config_name=cfg.concept_graph_config_name)
-    # def get_conceptgraph_config(conf):
-    #     conf = process_cfg(conf)
-    #     return conf
-    # cfg_cg = get_conceptgraph_config()
-
     with initialize(config_path="conceptgraph/hydra_configs", job_name="app"):
         cfg_cg = compose(config_name=cfg.concept_graph_config_name)
 
@@ -84,8 +79,8 @@ def main(cfg):
         all_questions_in_scene = [q for q in questions_data if q["episode_history"] == scene_id]
 
         ##########################################################
-        if '00538' not in scene_id:
-            continue
+        # if '00538' not in scene_id:
+        #     continue
         # if int(scene_id.split("-")[0]) >= 800:
         #     continue
         # rand_q = np.random.randint(0, len(all_questions_in_scene) - 1)
@@ -242,6 +237,7 @@ def main(cfg):
                     all_angles.append(main_angle)
 
                     # observe and update the TSDF
+                    all_added_obj_ids = []
                     for view_idx, ang in enumerate(all_angles):
                         obs, cam_pose = scene.get_observation(pts, ang)
                         rgb = obs["color_sensor"]
@@ -251,9 +247,8 @@ def main(cfg):
                         cam_pose_normal = pose_habitat_to_normal(cam_pose)
                         cam_pose_tsdf = pose_normal_to_tsdf(cam_pose_normal)
 
-                        # construct an frequency count map of each semantic id to a unique id
                         obs_file_name = f"{cnt_step}-view_{view_idx}.png"
-                        annotated_rgb, object_added, target_obj_id_det = scene.update_scene_graph(
+                        annotated_rgb, added_obj_ids, target_obj_id_det = scene.update_scene_graph(
                             image_rgb=rgb[..., :3], depth=depth, intrinsics=cam_intr, cam_pos=cam_pose,
                             detection_model=detection_model, sam_predictor=sam_predictor, clip_model=clip_model,
                             clip_preprocess=clip_preprocess, clip_tokenizer=clip_tokenizer,
@@ -262,10 +257,10 @@ def main(cfg):
                             frame_idx=cnt_step * total_views + view_idx,
                             target_obj_mask=semantic_obs == target_obj_id,
                         )
-                        if object_added:
-                            plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), annotated_rgb)
+                        plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), annotated_rgb)
                         if target_obj_id_det is not None:
                             target_obj_id_det_list.append(target_obj_id_det)
+                        all_added_obj_ids += added_obj_ids
 
                         # clean up or merge redundant objects periodically
                         scene.periodic_cleanup_objects(frame_idx=cnt_step * total_views + view_idx, pts=pts)
@@ -285,7 +280,13 @@ def main(cfg):
                         if cfg.save_egocentric_view:
                             plt.imsave(os.path.join(egocentric_save_dir, f"{cnt_step}_view_{view_idx}.png"), rgb)
 
-                    scene.update_snapshots(min_num_obj_threshold=cfg.min_num_obj_threshold)
+                    # cluster all the newly added objects
+                    all_added_obj_ids = [obj_id for obj_id in all_added_obj_ids if obj_id in scene.objects]
+                    # as well as the objects nearby
+                    for obj_id, obj in scene.objects.items():
+                        if np.linalg.norm(obj['bbox'].center[[0, 2]] - pts[[0, 2]]) < cfg.scene_graph.obj_include_dist + 0.5:
+                            all_added_obj_ids.append(obj_id)
+                    scene.update_snapshots(obj_set=set(all_added_obj_ids))
                     logging.info(f"Step {cnt_step} {len(scene.objects)} objects, {len(scene.snapshots)} snapshots")
 
                     update_success = tsdf_planner.update_frontier_map(pts=pts_normal, cfg=cfg.planner)
@@ -329,12 +330,15 @@ def main(cfg):
                     tsdf_planner.max_point = None
                     tsdf_planner.target_point = None
 
-                    print(f'!!!!!!! {target_obj_id_det_list}')
+                    logging.info(f"Target object detection list: {target_obj_id_det_list}")
 
                     # use the most common id in the list as the target object id
                     if len(target_obj_id_det_list) > 0:
                         target_obj_id_det = max(set(target_obj_id_det_list), key=target_obj_id_det_list.count)
                         logging.info(f"Target object {target_obj_id_det} {scene.objects[target_obj_id_det]['class_name']} used for selecting snapshot!")
+                        if scene.objects[target_obj_id_det]['num_detections'] < 2:
+                            logging.info(f"Target object {target_obj_id_det} {scene.objects[target_obj_id_det]['class_name']} has less than 2 detections, not used for selecting snapshot!")
+                            target_obj_id_det = -1
                     else:
                         target_obj_id_det = -1
 
@@ -383,7 +387,7 @@ def main(cfg):
                         step_dict["snapshots"].append(
                             {
                                 "img_id": snapshot.image,
-                                "obj_ids": [int(obj_id) for obj_id in snapshot.selected_obj_list]
+                                "obj_ids": [int(obj_id) for obj_id in snapshot.cluster]
                              }
                         )
 
@@ -398,23 +402,35 @@ def main(cfg):
 
                     # sanity check
                     assert len(step_dict["snapshots"]) == len(scene.snapshots), f"{len(step_dict['snapshots'])} != {len(scene.snapshots)}"
-                    total_objs_count = 0
-                    for snapshot in scene.snapshots.values():
-                        total_objs_count += len(snapshot.selected_obj_list)
-                    assert len(scene.objects) == total_objs_count, f"{len(scene.objects)} != {total_objs_count}"
+                    obj_exclude_count = sum([1 if obj['num_detections'] < 2 else 0 for obj in scene.objects.values()])
+                    total_objs_count = sum(
+                        [len(snapshot.cluster) for snapshot in scene.snapshots.values()]
+                    )
+                    assert len(scene.objects) == total_objs_count + obj_exclude_count, f"{len(scene.objects)} != {total_objs_count} + {obj_exclude_count}"
+                    total_objs_count = sum(
+                        [len(set(snapshot.cluster)) for snapshot in scene.snapshots.values()]
+                    )
+                    assert len(scene.objects) == total_objs_count + obj_exclude_count, f"{len(scene.objects)} != {total_objs_count} + {obj_exclude_count}"
                     for obj_id in scene.objects.keys():
                         exist_count = 0
                         for ss in scene.snapshots.values():
-                            if obj_id in ss.selected_obj_list:
+                            if obj_id in ss.cluster:
                                 exist_count += 1
-                        assert exist_count == 1, f"{exist_count} != 1 for obj_id {obj_id}, {scene.objects[obj_id]['class_name']}"
+                        if scene.objects[obj_id]['num_detections'] < 2:
+                            assert exist_count == 0, f"{exist_count} != 0 for obj_id {obj_id}, {scene.objects[obj_id]['class_name']}"
+                        else:
+                            assert exist_count == 1, f"{exist_count} != 1 for obj_id {obj_id}, {scene.objects[obj_id]['class_name']}"
                     for ss in scene.snapshots.values():
-                        assert len(ss.selected_obj_list) == len(set(ss.selected_obj_list)), f"{ss.selected_obj_list} has duplicates"
+                        assert len(ss.cluster) == len(set(ss.cluster)), f"{ss.cluster} has duplicates"
                         assert len(ss.full_obj_list.keys()) == len(set(ss.full_obj_list.keys())), f"{ss.full_obj_list.keys()} has duplicates"
-                        for obj_id in ss.selected_obj_list:
+                        for obj_id in ss.cluster:
                             assert obj_id in ss.full_obj_list, f"{obj_id} not in {ss.full_obj_list.keys()}"
                         for obj_id in ss.full_obj_list.keys():
                             assert obj_id in scene.objects, f"{obj_id} not in scene objects"
+                    # check whether the snapshots in scene.snapshots and scene.frames are the same
+                    for file_name, ss in scene.snapshots.items():
+                        assert ss.cluster == scene.frames[file_name].cluster, f"{ss}\n!=\n{scene.frames[file_name]}"
+                        assert ss.full_obj_list == scene.frames[file_name].full_obj_list, f"{ss}\n==\n{scene.frames[file_name]}"
 
                     # save the ground truth choice
                     if type(max_point_choice) == SnapShot:
@@ -453,8 +469,11 @@ def main(cfg):
                         assert type(max_point_choice) == SnapShot, f"{type(max_point_choice)} != SnapShot"
 
                     # Save step data
-                    with open(os.path.join(episode_data_dir, f"{cnt_step:04d}.json"), "w") as f:
-                        json.dump(step_dict, f, indent=4)
+                    if type(max_point_choice) == Frontier and tsdf_planner.frontiers_weight is not None and len(tsdf_planner.frontiers_weight) > 0 and np.max(tsdf_planner.frontiers_weight) < 1:
+                        pass
+                    else:
+                        with open(os.path.join(episode_data_dir, f"{cnt_step:04d}.json"), "w") as f:
+                            json.dump(step_dict, f, indent=4)
 
                     # update the agent's position record
                     pts_pixs = np.vstack((pts_pixs, pts_pix))

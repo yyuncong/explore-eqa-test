@@ -707,11 +707,12 @@ def get_proper_snapshot_observation_point(
             target_obs_point = potential_obs_point
             break
 
-    if target_obs_point is None:
-        logging.error(f"Error in get_proper_snapshot_observation_point: cannot find a proper observation point among {len(indices_rank)} candidates!")
-        return None
+    if target_obs_point is not None:
+        return target_obs_point
 
-    return target_obs_point
+    # if cannot find a proper observation point, then just return the position where the snapshot is taken
+    logging.error(f"Error in get_proper_snapshot_observation_point: cannot find a proper observation point among {len(valid_coords)} candidates, return the snapshot center!")
+    return snapshot_observation_point[:2]
 
 
 def get_random_snapshot_observation_point(
@@ -771,7 +772,7 @@ def get_random_snapshot_observation_point(
         try_count_pick += 1
         if try_count_pick > 100:
             logging.error(f"Error in get_random_snapshot_observation_point: cannot find a proper observation point! try many tries")
-            return None
+            break
 
         potential_obs_point = valid_coords[np.random.choice(len(valid_coords), p=selection_weight)]
 

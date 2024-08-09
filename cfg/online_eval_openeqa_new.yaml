@@ -1,21 +1,27 @@
 # General
 seed: 66
-exp_name: exp_new_val_snapshots_filter_openeqa_every_3
+exp_name: exp_patch2_rand_ego_openeqa_every_3_3.5_all_success
 output_parent_dir: /work/pi_chuangg_umass_edu/yuncong/results
 scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
 scene_data_path: /work/pi_chuangg_umass_edu/yuncong/data/scene_datasets/hm3d/
 semantic_bbox_data_path: '/home/yuncongyang_umass_edu/scene_understanding/hm3d_obj_bbox_merged'
 detection_model_name: "yolo_world/x"
+scene_features_path_train: /work/pi_chuangg_umass_edu/yuncong/data/scene_feature_dict_merged_flex/
+scene_features_path_val: /work/pi_chuangg_umass_edu/yuncong/data/scene_feature_dict_merged_flex/
+model_path: /work/pi_chuangg_umass_edu/yuncong/2e-06_patch2_rand_ego_0.pt
 questions_list_path: 'data/generated_questions-eval.json'
-model_path: /work/pi_chuangg_umass_edu/yuncong/snapshots_filter_top10_rand_pos_ego_3.pt
+
+visual_feature_size: 24
+patch_size: 8
 
 choose_every_step: true
 egocentric_views: true
 action_memory: false
-prefiltering: true
+prefiltering: false
 top_k_categories: 10
+use_deepspeed: false
 
-add_positional_encodings: true
+add_positional_encodings: false
 
 # Camera, image
 camera_height: 1.5
@@ -67,4 +73,4 @@ scene_graph:
   confidence: 0.003
   nms_threshold: 0.1
   iou_threshold: 0.5
-  obj_include_dist: 2.5
+  obj_include_dist: 3.5

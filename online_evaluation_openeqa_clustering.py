@@ -1,5 +1,3 @@
-import quaternion
-
 import os
 import random
 
@@ -19,6 +17,7 @@ import logging
 import glob
 import math
 import torch
+import quaternion
 import matplotlib.pyplot as plt
 import matplotlib.image
 from PIL import Image, ImageDraw, ImageFont
@@ -35,18 +34,8 @@ from src.habitat import (
     get_frontier_observation
 )
 from src.geom import get_cam_intr, get_scene_bnds, get_collision_distance
-from src.tsdf_new import TSDFPlanner, Frontier, SnapShot
-from src.eval_utils_snapshot_new import (
-    prepare_step_dict, 
-    get_item, 
-    encode, 
-    load_scene_features, 
-    rgba2rgb, load_checkpoint, 
-    collate_wrapper, 
-    construct_selection_prompt,
-    merge_patches,
-    load_ds_checkpoint
-)
+from src.tsdf_clustering import TSDFPlanner, Frontier, SnapShot
+from src.eval_utils_snapshot_new import prepare_step_dict, get_item, encode, load_scene_features, rgba2rgb, load_checkpoint, collate_wrapper, construct_selection_prompt
 from src.eval_utils_snapshot_new import SCENE_TOKEN
 from inference.models import YOLOWorld
 
@@ -124,9 +113,6 @@ def inference(model, tokenizer, step_dict, cfg):
     #step_dict["use_action_memory"] = cfg.action_memory
     step_dict["top_k_categories"] = cfg.top_k_categories
     step_dict["add_positional_encodings"] = cfg.add_positional_encodings
-
-    num_visual_tokens = (cfg.visual_feature_size // cfg.patch_size) ** 2
-    step_dict["num_visual_tokens"] = num_visual_tokens
     # print("pos", step_dict["add_positional_encodings"])
     # try:
     sample = get_item(
@@ -148,11 +134,10 @@ def inference(model, tokenizer, step_dict, cfg):
             selection_dict.frontier_text,
             selection_dict.frontier_features,
             selection_dict.snapshot_info_dict,
-            4096,
+            2048,
             True,
             filter_outputs,
-            cfg.top_k_categories,
-            num_visual_tokens
+            cfg.top_k_categories
         )
         sample = collate_wrapper([selection_input])
         outputs = infer_selection(model,tokenizer,sample)
@@ -197,11 +182,7 @@ def main(cfg):
         model_path, None, model_name, device_map=None, add_multisensory_token=True
     )
     # model = model.to("cuda")
-    # load_checkpoint(model, cfg.model_path)
-    if not cfg.use_deepspeed:
-        load_checkpoint(model, cfg.model_path)
-    else:
-        load_ds_checkpoint(model, cfg.model_path, exclude_frozen_parameters = True)
+    load_checkpoint(model, cfg.model_path)
     model = model.to("cuda")
     # model = None
     model.eval()
@@ -233,10 +214,6 @@ def main(cfg):
         init_pts = question_data["position"]
         init_quat = quaternion.quaternion(*question_data["rotation"])
         logging.info(f"\n========\nIndex: {question_idx} Scene: {scene_id}")
-
-        if "808" in scene_id:
-            logging.info(f"Question id {question_id} invalid: scene 808!")
-            continue
 
         # load scene
         split = "train" if int(scene_id.split("-")[0]) < 800 else "val"
@@ -374,10 +351,9 @@ def main(cfg):
                 rgb = obs["color_sensor"]
                 depth = obs["depth_sensor"]
                 semantic_obs = obs["semantic_sensor"]
-                if cfg.save_visualization:
-                    plt.imsave(
-                        os.path.join(episode_observations_dir, "{}.png".format(cnt_step)), rgb
-                    )
+                plt.imsave(
+                    os.path.join(episode_observations_dir, "{}.png".format(cnt_step)), rgb
+                )
                 rgb = rgba2rgb(rgb)
                 rgb_egocentric_views.append(rgb)
 
@@ -397,14 +373,10 @@ def main(cfg):
                     )
                 if object_added:
                     with torch.no_grad():
-                        img_feature = encode(model, image_processor, rgb).mean(0)
-                    img_feature = merge_patches(
-                        img_feature.view(cfg.visual_feature_size, cfg.visual_feature_size, -1), 
-                        cfg.patch_size
-                    )
+                        img_feature = encode(model, image_processor, rgb).mean(1)
                     all_snapshot_features[obs_file_name] = img_feature.to("cpu")
-                    # if cfg.save_visualization:
-                    plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), rgb)
+                    if cfg.save_visualization or cfg.save_frontier_video:
+                        plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), rgb)
 
                 # TSDF fusion
                 tsdf_planner.integrate(
@@ -418,15 +390,33 @@ def main(cfg):
                     explored_depth=cfg.explored_depth,
                 )
 
-            tsdf_planner.update_snapshots(min_num_obj_threshold=cfg.min_num_obj_threshold)
-            logging.info(f'length updated scene graph {len(tsdf_planner.simple_scene_graph.keys())}')
-            logging.info(f'length updated snapshots {len(tsdf_planner.snapshots.keys())}')
+            if not cfg.incremental:
+                tsdf_planner.update_snapshots(
+                    obj_id_to_bbox=object_id_to_bbox,
+                    obj_set=set(tsdf_planner.scene_graph_list),
+                    incremental=cfg.incremental,
+                )
+            else:
+                # find the object ids that are within 2.5m away from the agent
+                obj_ids = tsdf_planner.scene_graph_list.copy()[
+                    tsdf_planner.prev_scene_graph_length:
+                ]
+                for obj_id, obj in tsdf_planner.simple_scene_graph.items():
+                    if np.linalg.norm(obj.bbox_center - pts) < cfg.scene_graph.obj_include_dist:
+                        obj_ids.append(obj_id)
+                tsdf_planner.update_snapshots(
+                    obj_id_to_bbox=object_id_to_bbox,
+                    obj_set=set(obj_ids),
+                    incremental=cfg.incremental,
+                )
+            tsdf_planner.prev_scene_graph_length = len(tsdf_planner.scene_graph_list)
+            logging.info(f"Step {cnt_step} total objects: {len(tsdf_planner.simple_scene_graph)}, total snapshots: {len(tsdf_planner.snapshots)}")
 
             step_dict["snapshot_features"] = {}
             step_dict["snapshot_objects"] = {}
             for rgb_id, snapshot in tsdf_planner.snapshots.items():
                 step_dict["snapshot_features"][rgb_id] = all_snapshot_features[rgb_id]
-                step_dict["snapshot_objects"][rgb_id] = snapshot.selected_obj_list
+                step_dict["snapshot_objects"][rgb_id] = snapshot.cluster
             # print(step_dict["snapshot_objects"])
             # input()
 
@@ -477,11 +467,7 @@ def main(cfg):
                         )
                     processed_rgb = rgba2rgb(frontier_obs)
                     with torch.no_grad():
-                        img_feature = encode(model, image_processor, processed_rgb).mean(0)
-                    img_feature = merge_patches(
-                        img_feature.view(cfg.visual_feature_size, cfg.visual_feature_size, -1), 
-                        cfg.patch_size
-                    )
+                        img_feature = encode(model, image_processor, processed_rgb).mean(1)
                     assert img_feature is not None
                     frontier.image = f"{cnt_step}_{i}.png"
                     frontier.feature = img_feature
@@ -521,11 +507,7 @@ def main(cfg):
                     for rgb_view in rgb_egocentric_views:
                         processed_rgb = rgba2rgb(rgb_view)
                         with torch.no_grad():
-                            img_feature = encode(model, image_processor, processed_rgb).mean(0)
-                        img_feature = merge_patches(
-                            img_feature.view(cfg.visual_feature_size, cfg.visual_feature_size, -1), 
-                            cfg.patch_size
-                        )
+                            img_feature = encode(model, image_processor, processed_rgb).mean(1)
                         egocentric_views_features.append(img_feature)
                     egocentric_views_features = torch.cat(egocentric_views_features, dim=0)
                     step_dict["egocentric_view_features"] = egocentric_views_features.to("cpu")
@@ -581,12 +563,12 @@ def main(cfg):
                             break
                         target_index = snapshot_id_mapping[int(target_index)]
                         logging.info(f"The index of target snapshot {target_index}")
-                    if int(target_index) < 0 or int(target_index) >= len(list(tsdf_planner.snapshots.values())):
+                    if int(target_index) < 0 or int(target_index) >= len(tsdf_planner.simple_scene_graph):
                         logging.info(f"Prediction out of range: {target_index}, {len(tsdf_planner.simple_scene_graph)}, failed!")
                         break
                     pred_target_snapshot = list(tsdf_planner.snapshots.values())[int(target_index)]
                     logging.info(
-                        "pred_target_class: " + str(' '.join([object_id_to_name[obj_id] for obj_id in pred_target_snapshot.selected_obj_list]))
+                        "pred_target_class: " + str(' '.join([object_id_to_name[obj_id] for obj_id in pred_target_snapshot.cluster]))
                     )
 
                     logging.info(f"Next choice Snapshot")
@@ -714,15 +696,6 @@ def main(cfg):
             path_length_list[question_id] = explore_dist
             logging.info(f"Question id {question_id} finish with {cnt_step} steps, {explore_dist} length")
         else:
-            # if question_id not in success_list:
-            #     success_list.append(question_id)
-            # path_length_list[question_id] = explore_dist
-            # num_images = len(tsdf_planner.snapshots.keys())
-            # snapshots = list(tsdf_planner.snapshots.keys())
-            # for snapshot in snapshots:
-            #     os.system(
-            #         f"cp {episode_snapshot_dir}/{snapshot} {episode_object_observe_dir}/{snapshot}"
-            #     )
             logging.info(f"Question id {question_id} failed, {explore_dist} length")
         logging.info(f"{question_idx + 1}/{total_questions}: Success rate: {success_count}/{question_idx + 1}")
         logging.info(f"Mean path length for success exploration: {np.mean(list(path_length_list.values()))}")

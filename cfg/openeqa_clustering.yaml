@@ -1,17 +1,18 @@
 # General
 seed: 66
-exp_name: vlm_exp_frontiers
-output_parent_dir: results
+exp_name: clustering_106_reverse_merge_4.0
+output_parent_dir: /work/pi_chuangg_umass_edu/yuncong/results
 question_data_path: "generated_questions"
 scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
-scene_data_path: "/home/hanyang/code/3d_project/explore-eqa/data/versioned_data/hm3d-0.2/hm3d"
-dataset_output_dir: "exploration_data"
-detection_model_name: "yolo_world/s"
+scene_data_path: /work/pi_chuangg_umass_edu/yuncong/data/scene_datasets/hm3d/
+semantic_bbox_data_path: '/home/yuncongyang_umass_edu/scene_understanding/hm3d_obj_bbox_merged'
+dataset_output_dir: "open_eqa_clustering"
+detection_model_name: "yolo_world/x"
+questions_list_path: 'data/generated_questions-hm3d-single-floor.json'
 
-concept_graph_config_path: "conceptgraph/hydra_configs"
-concept_graph_config_name: "rerun_realtime_mapping"
+scene_pose_path: /home/yuncongyang_umass_edu/scene_understanding/open-eqa/data/frames/hm3d-v0
 
-incremental: true
+incremental: false
 
 # Sampling navigation point
 min_travel_dist: 5.0
@@ -28,15 +29,19 @@ margin_w_ratio: 0.25
 margin_h_ratio: 0.6
 
 save_obs: false
-save_visualization: true
-save_frontier_video: true
+save_visualization: false
+save_frontier_video: false
+save_snapshots: true 
 save_egocentric_view: true
 del_fail_case: false
+
+save_clustering_process: true
 
 paths_per_question: 1
 
 # Navigation
 init_clearance: 0.3
+max_step_room_size_ratio: 3
 max_step_dist_ratio: 1.5
 max_step_ratio: 2.5
 extra_view_phase_1: 4
@@ -45,7 +50,7 @@ extra_view_phase_2: 4  # in phase 2, have more observations
 extra_view_angle_deg_phase_2: 60
 
 # Snapshot
-min_num_obj_threshold: 2
+min_num_obj_threshold: 1
 
 # Semantic map
 explored_depth: 1.5
@@ -75,5 +80,4 @@ scene_graph:
   confidence: 0.003
   nms_threshold: 0.1
   iou_threshold: 0.5
-  obj_include_dist: 2.5
-  target_obj_iou_threshold: 0.6
+  obj_include_dist: 4.0

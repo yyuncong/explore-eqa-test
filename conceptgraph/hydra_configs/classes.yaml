@@ -3,5 +3,5 @@ defaults:
 
 classes_file: /home/hanyang/code/3d_project/explore-eqa-test/conceptgraph/scannet200_classes.txt
 # classes_file: /home/kuwajerw/repos/new_conceptgraphs/concept-graphs/conceptgraph/scannet200_classes.txt
-bg_classes : ["wall", "floor", "ceiling"]
+bg_classes : ["wall", "floor", "ceiling", "carpet", "door", "rug"]
 skip_bg: !!bool True

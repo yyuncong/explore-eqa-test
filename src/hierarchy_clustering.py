@@ -304,7 +304,7 @@ class SceneHierarchicalClustering(BisectingKmeans):
         else:
             # use the size of the full_obj_list and the confidence sum of all objects in obj_set to sort
             def key_func(x):
-                return len(frames[x].full_obj_list), -sum([frames[x].full_obj_list[obj] for obj in obj_set])
+                return -len(frames[x].full_obj_list), -sum([frames[x].full_obj_list[obj] for obj in obj_set])
             sorted_candidates = sorted(candidates, key=lambda x: key_func(x))
             for key in sorted_candidates:
                 if key in current_keys:

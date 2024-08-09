@@ -1,21 +1,28 @@
 # General
 seed: 66
-exp_name: vlm_exp_frontiers
-output_parent_dir: results
-question_data_path: "generated_questions"
+exp_name: exp_patch2_rand_ego_lora_1e-06_ours_dynamic
+output_parent_dir: /work/pi_chuangg_umass_edu/yuncong/results
 scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
-scene_data_path: "/home/hanyang/code/3d_project/explore-eqa/data/versioned_data/hm3d-0.2/hm3d"
-dataset_output_dir: "exploration_data"
-detection_model_name: "yolo_world/s"
-
+scene_data_path: /work/pi_chuangg_umass_edu/yuncong/data/scene_datasets/hm3d/
+semantic_bbox_data_path: '/home/yuncongyang_umass_edu/scene_understanding/hm3d_obj_bbox_merged'
+model_path: /work/pi_chuangg_umass_edu/yuncong/ds_lora/2e-06_patch2_rand_ego_lora
+path_data_dir: exploration_data_new
+question_file_path: generated_questions/generated_questions.json
 concept_graph_config_path: "conceptgraph/hydra_configs"
 concept_graph_config_name: "rerun_realtime_mapping"
 
-incremental: true
+visual_feature_size: 24
+patch_size: 8
+choose_every_step: true
+egocentric_views: true
+action_memory: false
+prefiltering: false
+top_k_categories: 10
 
-# Sampling navigation point
-min_travel_dist: 5.0
-min_travel_dist_ratio: 0.8
+not_observe_snapshot: true
+use_deepspeed: true #false
+
+add_positional_encodings: false
 
 # Camera, image
 camera_height: 1.5
@@ -27,38 +34,29 @@ tsdf_grid_size: 0.1
 margin_w_ratio: 0.25
 margin_h_ratio: 0.6
 
-save_obs: false
-save_visualization: true
-save_frontier_video: true
-save_egocentric_view: true
-del_fail_case: false
-
-paths_per_question: 1
+save_visualization: false
+save_frontier_video: false
 
 # Navigation
 init_clearance: 0.3
-max_step_dist_ratio: 1.5
-max_step_ratio: 2.5
+max_step_room_size_ratio: 11
 extra_view_phase_1: 4
 extra_view_angle_deg_phase_1: 60
-extra_view_phase_2: 4  # in phase 2, have more observations
-extra_view_angle_deg_phase_2: 60
 
 # Snapshot
 min_num_obj_threshold: 2
 
 # Semantic map
-explored_depth: 1.5
+explored_depth: 1.7
 planner:
   unexplored_T: 2.0
   unoccupied_T: 2.0
   eps: 1
   max_dist_from_cur_phase_1: 1  # when the target object is not found, explore the frontiers with this step length
-  max_dist_from_cur_phase_2: 0.5  # when the target object is found, go to the target object with this step length
+  max_dist_from_cur_phase_2: 1  # when the target object is found, go to the target object with this step length
   max_unexplored_check_frontier: 3
   max_unoccupied_check_frontier: 1
   final_observe_distance: 1.5  # in phase 2, find a place that is this far from the target object to observe it
-  return_choice: true  # always set to true to return max_point
   surrounding_explored_radius: 0.7
 
   # about frontier selection
@@ -75,5 +73,5 @@ scene_graph:
   confidence: 0.003
   nms_threshold: 0.1
   iou_threshold: 0.5
-  obj_include_dist: 2.5
+  obj_include_dist: 3.5
   target_obj_iou_threshold: 0.6

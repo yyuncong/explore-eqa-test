@@ -29,7 +29,7 @@ save_obs: false
 save_visualization: false
 save_frontier_video: false
 save_tsdf_video: false
-del_fail_case: false
+del_fail_case: true
 
 save_clustering_process: true
 

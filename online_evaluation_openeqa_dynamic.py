@@ -32,7 +32,18 @@ from src.habitat import (
 from src.geom import get_cam_intr, get_scene_bnds
 from src.tsdf_new_cg import TSDFPlanner, Frontier, SnapShot
 from src.scene import Scene
-from src.eval_utils_snapshot_new import prepare_step_dict, get_item, encode, load_scene_features, rgba2rgb, load_checkpoint, collate_wrapper, construct_selection_prompt
+from src.eval_utils_snapshot_new import (
+    prepare_step_dict,
+    get_item,
+    encode,
+    load_scene_features,
+    rgba2rgb,
+    load_checkpoint,
+    collate_wrapper,
+    construct_selection_prompt,
+    merge_patches,
+    load_ds_checkpoint
+)
 from src.eval_utils_snapshot_new import SCENE_TOKEN
 
 from conceptgraph.utils.general_utils import measure_time
@@ -111,6 +122,9 @@ def inference(model, tokenizer, step_dict, cfg):
     #step_dict["use_action_memory"] = cfg.action_memory
     step_dict["top_k_categories"] = cfg.top_k_categories
     step_dict["add_positional_encodings"] = cfg.add_positional_encodings
+
+    num_visual_tokens = (cfg.visual_feature_size // cfg.patch_size) ** 2
+    step_dict["num_visual_tokens"] = num_visual_tokens
     # print("pos", step_dict["add_positional_encodings"])
     # try:
     sample = get_item(
@@ -132,10 +146,11 @@ def inference(model, tokenizer, step_dict, cfg):
             selection_dict.frontier_text,
             selection_dict.frontier_features,
             selection_dict.snapshot_info_dict,
-            2048,
+            4096,
             True,
             filter_outputs,
-            cfg.top_k_categories
+            cfg.top_k_categories,
+            num_visual_tokens
         )
         sample = collate_wrapper([selection_input])
         outputs = infer_selection(model,tokenizer,sample)
@@ -151,6 +166,7 @@ def inference(model, tokenizer, step_dict, cfg):
 
 
 def main(cfg):
+    # use hydra to load concept graph related configs
     with initialize(config_path="conceptgraph/hydra_configs", job_name="app"):
         cfg_cg = compose(config_name=cfg.concept_graph_config_name)
 
@@ -190,7 +206,10 @@ def main(cfg):
         model_path, None, model_name, device_map=None, add_multisensory_token=True
     )
     # model = model.to("cuda")
-    load_checkpoint(model, cfg.model_path)
+    if not cfg.use_deepspeed:
+        load_checkpoint(model, cfg.model_path)
+    else:
+        load_ds_checkpoint(model, cfg.model_path, exclude_frozen_parameters=True)
     model = model.to("cuda")
     # model = None
     model.eval()
@@ -249,7 +268,7 @@ def main(cfg):
             success_count += 1
             continue
 
-        pts = init_pts
+        pts = np.asarray(init_pts)
         angle, axis = quat_to_angle_axis(init_quat)
         angle = angle * axis[1] / np.abs(axis[1])
         rotation = get_quaternion(angle, 0)
@@ -302,18 +321,17 @@ def main(cfg):
             all_angles.append(main_angle)
 
             # observe and update the TSDF
-            rgb_egocentric_views = []
+            rgb_egocentric_views_features = []
+            all_added_obj_ids = []
             for view_idx, ang in enumerate(all_angles):
                 obs, cam_pose = scene.get_observation(pts, ang)
                 rgb = obs["color_sensor"]
                 depth = obs["depth_sensor"]
                 semantic_obs = obs["semantic_sensor"]
+                rgb = rgba2rgb(rgb)
 
                 cam_pose_normal = pose_habitat_to_normal(cam_pose)
                 cam_pose_tsdf = pose_normal_to_tsdf(cam_pose_normal)
-
-                rgb = rgba2rgb(rgb)
-                rgb_egocentric_views.append(rgb)
 
                 plt.imsave(
                     os.path.join(episode_observations_dir, "{}.png".format(cnt_step)), rgb
@@ -322,7 +340,7 @@ def main(cfg):
                 # collect all view features
                 obs_file_name = f"{cnt_step}-view_{view_idx}.png"
                 with torch.no_grad():
-                    annotated_rgb, object_added, target_obj_id_det = scene.update_scene_graph(
+                    annotated_rgb, added_obj_ids, target_obj_id_det = scene.update_scene_graph(
                         image_rgb=rgb[..., :3], depth=depth, intrinsics=cam_intr, cam_pos=cam_pose,
                         detection_model=detection_model, sam_predictor=sam_predictor, clip_model=clip_model,
                         clip_preprocess=clip_preprocess, clip_tokenizer=clip_tokenizer,
@@ -331,11 +349,16 @@ def main(cfg):
                         frame_idx=cnt_step * total_views + view_idx,
                         target_obj_mask=None,
                     )
-                    if object_added:
-                        img_feature = encode(model, image_processor, rgb).mean(1)
-                        all_snapshot_features[obs_file_name] = img_feature.to("cpu")
-                        if cfg.save_visualization or cfg.save_frontier_video:
-                            plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), annotated_rgb)
+                    img_feature = encode(model, image_processor, rgb).mean(0)
+                    img_feature = merge_patches(
+                        img_feature.view(cfg.visual_feature_size, cfg.visual_feature_size, -1),
+                        cfg.patch_size
+                    )
+                    all_snapshot_features[obs_file_name] = img_feature.to("cpu")
+                    rgb_egocentric_views_features.append(img_feature.to("cpu"))
+                    if cfg.save_visualization or cfg.save_frontier_video:
+                        plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), annotated_rgb)
+                    all_added_obj_ids += added_obj_ids
 
                 # clean up or merge redundant objects periodically
                 scene.periodic_cleanup_objects(frame_idx=cnt_step * total_views + view_idx, pts=pts)
@@ -352,8 +375,15 @@ def main(cfg):
                     explored_depth=cfg.explored_depth,
                 )
 
-            scene.update_snapshots(min_num_obj_threshold=cfg.min_num_obj_threshold)
+            # cluster all the newly added objects
+            all_added_obj_ids = [obj_id for obj_id in all_added_obj_ids if obj_id in scene.objects]
+            # as well as the objects nearby
+            for obj_id, obj in scene.objects.items():
+                if np.linalg.norm(obj['bbox'].center[[0, 2]] - pts[[0, 2]]) < cfg.scene_graph.obj_include_dist + 0.5:
+                    all_added_obj_ids.append(obj_id)
+            scene.update_snapshots(obj_ids=set(all_added_obj_ids))
             logging.info(f"Step {cnt_step} {len(scene.objects)} objects, {len(scene.snapshots)} snapshots")
+
             # update the mapping of object id to class name, since the objects have been updated
             object_id_to_name = {obj_id: obj["class_name"] for obj_id, obj in scene.objects.items()}
 
@@ -361,7 +391,7 @@ def main(cfg):
             step_dict["snapshot_objects"] = {}
             for rgb_id, snapshot in scene.snapshots.items():
                 step_dict["snapshot_features"][rgb_id] = all_snapshot_features[rgb_id]
-                step_dict["snapshot_objects"][rgb_id] = snapshot.selected_obj_list
+                step_dict["snapshot_objects"][rgb_id] = snapshot.cluster
             # print(step_dict["snapshot_objects"])
             # input()
 
@@ -406,7 +436,11 @@ def main(cfg):
                         )
                     processed_rgb = rgba2rgb(frontier_obs)
                     with torch.no_grad():
-                        img_feature = encode(model, image_processor, processed_rgb).mean(1)
+                        img_feature = encode(model, image_processor, processed_rgb).mean(0)
+                    img_feature = merge_patches(
+                        img_feature.view(cfg.visual_feature_size, cfg.visual_feature_size, -1),
+                        cfg.patch_size
+                    )
                     assert img_feature is not None
                     frontier.image = f"{cnt_step}_{i}.png"
                     frontier.feature = img_feature
@@ -441,15 +475,9 @@ def main(cfg):
                 vlm_id_to_ft_id = {v: k for k, v in ft_id_to_vlm_id.items()}
 
                 if cfg.egocentric_views:
-                    assert len(rgb_egocentric_views) == total_views
-                    egocentric_views_features = []
-                    for rgb_view in rgb_egocentric_views:
-                        processed_rgb = rgba2rgb(rgb_view)
-                        with torch.no_grad():
-                            img_feature = encode(model, image_processor, processed_rgb).mean(1)
-                        egocentric_views_features.append(img_feature)
-                    egocentric_views_features = torch.cat(egocentric_views_features, dim=0)
-                    step_dict["egocentric_view_features"] = egocentric_views_features.to("cpu")
+                    assert len(rgb_egocentric_views_features) == total_views
+                    rgb_egocentric_views_features = torch.cat(rgb_egocentric_views_features, dim=0)
+                    step_dict["egocentric_view_features"] = rgb_egocentric_views_features
                     step_dict["use_egocentric_views"] = True
 
                 if cfg.action_memory:
@@ -507,7 +535,7 @@ def main(cfg):
                         break
                     pred_target_snapshot = list(scene.snapshots.values())[int(target_index)]
                     logging.info(
-                        "pred_target_class: " + str(' '.join([object_id_to_name[obj_id] for obj_id in pred_target_snapshot.selected_obj_list]))
+                        "pred_target_class: " + str(' '.join([object_id_to_name[obj_id] for obj_id in pred_target_snapshot.cluster]))
                     )
 
                     logging.info(f"Next choice Snapshot of {pred_target_snapshot.image}")
@@ -526,7 +554,7 @@ def main(cfg):
                     max_point_choice = tsdf_planner.frontiers[target_index]
 
                     # TODO: modify this: update memory feature only in frontiers (for now)
-                    memory_feature = tsdf_planner.frontiers[int(target_index)].feature.to("cpu")
+                    memory_feature = tsdf_planner.frontiers[target_index].feature.to("cpu")
 
                 if max_point_choice is None:
                     logging.info(f"Question id {question_id} invalid: no valid choice!")
@@ -560,23 +588,35 @@ def main(cfg):
             pts_normal, angle, pts_pix, fig, _, target_arrived = return_values
 
             # sanity check
-            total_objs_count = 0
-            for snapshot in scene.snapshots.values():
-                total_objs_count += len(snapshot.selected_obj_list)
-            assert len(scene.objects) == total_objs_count, f"{len(scene.objects)} != {total_objs_count}"
+            obj_exclude_count = sum([1 if obj['num_detections'] < 2 else 0 for obj in scene.objects.values()])
+            total_objs_count = sum(
+                [len(snapshot.cluster) for snapshot in scene.snapshots.values()]
+            )
+            assert len(scene.objects) == total_objs_count + obj_exclude_count, f"{len(scene.objects)} != {total_objs_count} + {obj_exclude_count}"
+            total_objs_count = sum(
+                [len(set(snapshot.cluster)) for snapshot in scene.snapshots.values()]
+            )
+            assert len(scene.objects) == total_objs_count + obj_exclude_count, f"{len(scene.objects)} != {total_objs_count} + {obj_exclude_count}"
             for obj_id in scene.objects.keys():
                 exist_count = 0
                 for ss in scene.snapshots.values():
-                    if obj_id in ss.selected_obj_list:
+                    if obj_id in ss.cluster:
                         exist_count += 1
-                assert exist_count == 1, f"{exist_count} != 1 for obj_id {obj_id}, {scene.objects[obj_id]['class_name']}"
+                if scene.objects[obj_id]['num_detections'] < 2:
+                    assert exist_count == 0, f"{exist_count} != 0 for obj_id {obj_id}, {scene.objects[obj_id]['class_name']}"
+                else:
+                    assert exist_count == 1, f"{exist_count} != 1 for obj_id {obj_id}, {scene.objects[obj_id]['class_name']}"
             for ss in scene.snapshots.values():
-                assert len(ss.selected_obj_list) == len(set(ss.selected_obj_list)), f"{ss.selected_obj_list} has duplicates"
+                assert len(ss.cluster) == len(set(ss.cluster)), f"{ss.cluster} has duplicates"
                 assert len(ss.full_obj_list.keys()) == len(set(ss.full_obj_list.keys())), f"{ss.full_obj_list.keys()} has duplicates"
-                for obj_id in ss.selected_obj_list:
+                for obj_id in ss.cluster:
                     assert obj_id in ss.full_obj_list, f"{obj_id} not in {ss.full_obj_list.keys()}"
                 for obj_id in ss.full_obj_list.keys():
                     assert obj_id in scene.objects, f"{obj_id} not in scene objects"
+            # check whether the snapshots in scene.snapshots and scene.frames are the same
+            for file_name, ss in scene.snapshots.items():
+                assert ss.cluster == scene.frames[file_name].cluster, f"{ss}\n!=\n{scene.frames[file_name]}"
+                assert ss.full_obj_list == scene.frames[file_name].full_obj_list, f"{ss}\n==\n{scene.frames[file_name]}"
 
             # update the agent's position record
             pts_pixs = np.vstack((pts_pixs, pts_pix))

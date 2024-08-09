@@ -43,9 +43,6 @@ max_step_room_size_ratio: 11
 extra_view_phase_1: 4
 extra_view_angle_deg_phase_1: 60
 
-# Snapshot
-min_num_obj_threshold: 2
-
 # Semantic map
 explored_depth: 1.7
 planner:

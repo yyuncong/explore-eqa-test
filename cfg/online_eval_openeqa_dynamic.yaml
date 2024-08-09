@@ -1,13 +1,12 @@
 # General
 seed: 77
-exp_name: exp_ours_dynamic_test
+exp_name: exp_openeqa_dynamic
 output_parent_dir: /work/pi_chuangg_umass_edu/yuncong/results
 scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
 scene_data_path: /work/pi_chuangg_umass_edu/yuncong/data/scene_datasets/hm3d/
-semantic_bbox_data_path: '/home/yuncongyang_umass_edu/scene_understanding/hm3d_obj_bbox_merged'
+questions_list_path: 'data/generated_questions-eval.json'
 model_path: /work/pi_chuangg_umass_edu/yuncong/ds_lora/2e-06_patch2_rand_ego_lora
-path_data_dir: exploration_data
-question_file_path: generated_questions/generated_questions.json
+
 concept_graph_config_path: "conceptgraph/hydra_configs"
 concept_graph_config_name: "rerun_realtime_mapping"
 
@@ -34,17 +33,14 @@ tsdf_grid_size: 0.1
 margin_w_ratio: 0.25
 margin_h_ratio: 0.6
 
-save_visualization: true
-save_frontier_video: true
+save_visualization: false
+save_frontier_video: false
 
 # Navigation
 init_clearance: 0.3
 max_step_room_size_ratio: 5
 extra_view_phase_1: 4
 extra_view_angle_deg_phase_1: 60
-
-# Snapshot
-min_num_obj_threshold: 2
 
 # Semantic map
 explored_depth: 1.7

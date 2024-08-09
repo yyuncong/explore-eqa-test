@@ -20,7 +20,7 @@ from src.habitat import (
 )
 from src.geom import get_cam_intr, IoU
 from src.tsdf_new_cg import SnapShot
-from src.hierarchy_clustering_dynamic import SceneHierarchicalClustering
+from src.hierarchy_clustering import SceneHierarchicalClustering
 
 # Local application/library specific imports
 from conceptgraph.utils.ious import mask_subtract_contained
@@ -583,22 +583,19 @@ class Scene:
 
     def update_snapshots(
         self,
-        obj_set,
+        obj_ids,
     ):
         self.cleanup_empty_frames_snapshots()
 
-        obj_ids = obj_set
-        ss_to_pop = []
+        prev_snapshots = copy.deepcopy(self.snapshots)
+
         obj_ids_temp = obj_ids.copy()
         for filename, snapshot in self.snapshots.items():
             cluster = snapshot.cluster
             if any([obj_id in obj_ids_temp for obj_id in cluster]):
                 obj_ids = obj_ids.union(set(cluster))
-                ss_to_pop.append(filename)
-        for filename in ss_to_pop:
-            self.snapshots.pop(filename)
+                prev_snapshots.pop(filename)
         obj_ids = list(set(obj_ids))
-        prev_snapshot_objs = [obj_id for snapshot in self.snapshots.values() for obj_id in snapshot.cluster]
 
         # find and exclude the objects that have only one observation
         obj_exclude = [obj_id for obj_id in self.objects.keys() if self.objects[obj_id]['num_detections'] < 2]
@@ -612,20 +609,27 @@ class Scene:
             return
 
         new_snapshots = self.clustering.fit(obj_centers, obj_ids, self.frames)
+
+        prev_snapshot_objs = [obj_id for snapshot in prev_snapshots.values() for obj_id in snapshot.cluster]
         assert set([obj_id for snapshot in new_snapshots.values() for obj_id in snapshot.cluster]) == set(obj_ids), f"{set([obj_id for snapshot in new_snapshots.values() for obj_id in snapshot.cluster])} != {set(obj_ids)}"
         assert (set(obj_ids) & set(prev_snapshot_objs)) == set(), f"{set(obj_ids)} & {set(prev_snapshot_objs)} != empty"
         assert (set(obj_ids) | set(prev_snapshot_objs) | set(obj_exclude)) == set(self.objects.keys()), f"{set(obj_ids)} | {set(prev_snapshot_objs)} | {set(obj_exclude)} != {set(self.objects.keys())}"
 
         for key, snapshot in new_snapshots.items():
-            if key in self.snapshots.keys():
-                self.snapshots[key].cluster += snapshot.cluster
+            if key in prev_snapshots.keys():
+                prev_snapshots[key].cluster += snapshot.cluster
             else:
-                self.snapshots[key] = snapshot
+                prev_snapshots[key] = snapshot
+        self.snapshots = prev_snapshots
 
         # update the snapshot belonging of each object
         for file_name, snapshot in self.snapshots.items():
             for obj_id in snapshot.cluster:
                 self.objects[obj_id]['image'] = file_name
+
+        # remove the duplicates caused by copying snapshots: self.frames and self.snapshots should point to the same object
+        for file_name, snapshot in self.snapshots.items():
+            self.frames[file_name] = snapshot
 
         # sanity check
         for obj_id, obj in self.objects.items():

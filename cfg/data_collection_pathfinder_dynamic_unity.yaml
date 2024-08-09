@@ -3,9 +3,15 @@ seed: 66
 exp_name: exp_gen_path_dynamic
 output_parent_dir: /work/pi_chuangg_umass_edu/yuncong/results
 question_data_path: "generated_questions"
+<<<<<<< HEAD:cfg/data_collection_pathfinder_dynamic_aimos.yaml
+scene_dataset_config_path: '/gpfs/u/home/LMCG/LMCGnngn/scratch/multisensory/MLLM/data/hm3d/hm3d_annotated_basis.scene_dataset_config.json'
+scene_data_path: "/gpfs/u/home/LMCG/LMCGnngn/scratch/multisensory/MLLM/data/hm3d"
+dataset_output_dir: "exploration_data_test"
+=======
 scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
 scene_data_path: "/project/pi_chuangg_umass_edu/yuncong/data_v2/scene_datasets/hm3d/"
 dataset_output_dir: "/work/pi_chuangg_umass_edu/yuncong/results/exp_gen_path_dynamic/exploration_data"
+>>>>>>> d59d16e3a07db96163db94aff132d7bdfe2262f8:cfg/data_collection_pathfinder_dynamic_unity.yaml
 detection_model_name: "yolo_world/x"
 
 concept_graph_config_path: "conceptgraph/hydra_configs"

@@ -140,7 +140,7 @@ def main(cfg):
         object_id_to_bbox = {int(item['id']): {'bbox': item['bbox'], 'class': item['class_name']} for item in bounding_box_data}
         object_id_to_name = {int(item['id']): item['class_name'] for item in bounding_box_data}
 
-        for question_data in all_questions_in_scene[:5]:
+        for question_data in all_questions_in_scene:
             # for each question, generate several paths, starting from different starting points
             for path_idx in range(cfg.path_id_offset, cfg.path_id_offset + cfg.paths_per_question):
                 question_ind += 1
@@ -304,8 +304,7 @@ def main(cfg):
                             obs_point=pts,
                             return_annotated=True
                         )
-                        if object_added:
-                            plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), rgb)
+                        plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), rgb)
 
                         # TSDF fusion
                         tsdf_planner.integrate(
@@ -319,8 +318,8 @@ def main(cfg):
                             explored_depth=cfg.explored_depth,
                         )
 
-                        if cfg.save_egocentric_view:
-                            plt.imsave(os.path.join(egocentric_save_dir, f"{cnt_step}_view_{view_idx}.png"), rgb)
+                        # if cfg.save_egocentric_view:
+                        #     plt.imsave(os.path.join(egocentric_save_dir, f"{cnt_step}_view_{view_idx}.png"), rgb)
 
                     if not cfg.incremental:
                         tsdf_planner.update_snapshots(

@@ -749,13 +749,13 @@ def main(cfg):
                     )
 
                 # tempt
-                step_dict["scene_graph_file2objs"] = {}
-                for obj_id, obj in tsdf_planner.simple_scene_graph.items():
-                    if obj.image not in step_dict["scene_graph_file2objs"]:
-                        step_dict["scene_graph_file2objs"][obj.image] = []
-                    step_dict["scene_graph_file2objs"][obj.image].append(
-                        f"{obj_id}: {object_id_to_name[obj_id]}"
-                    )
+                # step_dict["scene_graph_file2objs"] = {}
+                # for obj_id, obj in tsdf_planner.simple_scene_graph.items():
+                #     if obj.image not in step_dict["scene_graph_file2objs"]:
+                #         step_dict["scene_graph_file2objs"][obj.image] = []
+                #     step_dict["scene_graph_file2objs"][obj.image].append(
+                #         f"{obj_id}: {object_id_to_name[obj_id]}"
+                #     )
 
                 # sanity check
                 assert len(step_dict["snapshots"]) == len(tsdf_planner.snapshots), f"{len(step_dict['snapshots'])} != {len(tsdf_planner.snapshots)}"

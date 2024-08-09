@@ -140,7 +140,7 @@ def main(cfg):
         object_id_to_bbox = {int(item['id']): {'bbox': item['bbox'], 'class': item['class_name']} for item in bounding_box_data}
         object_id_to_name = {int(item['id']): item['class_name'] for item in bounding_box_data}
 
-        for question_data in all_questions_in_scene[:5]:
+        for question_data in all_questions_in_scene:
             # for each question, generate several paths, starting from different starting points
             for path_idx in range(cfg.path_id_offset, cfg.path_id_offset + cfg.paths_per_question):
                 question_ind += 1
@@ -304,8 +304,8 @@ def main(cfg):
                             obs_point=pts,
                             return_annotated=True
                         )
-                        if object_added:
-                            plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), rgb)
+                        # if object_added:
+                        #     plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), rgb)
 
                         # TSDF fusion
                         tsdf_planner.integrate(
@@ -431,13 +431,13 @@ def main(cfg):
                         )
 
                     # # tempt
-                    step_dict["scene_graph_file2objs"] = {}
-                    for obj_id, obj in tsdf_planner.simple_scene_graph.items():
-                        if obj.image not in step_dict["scene_graph_file2objs"]:
-                            step_dict["scene_graph_file2objs"][obj.image] = []
-                        step_dict["scene_graph_file2objs"][obj.image].append(
-                            f"{obj_id}: {object_id_to_name[obj_id]}"
-                        )
+                    # step_dict["scene_graph_file2objs"] = {}
+                    # for obj_id, obj in tsdf_planner.simple_scene_graph.items():
+                    #     if obj.image not in step_dict["scene_graph_file2objs"]:
+                    #         step_dict["scene_graph_file2objs"][obj.image] = []
+                    #     step_dict["scene_graph_file2objs"][obj.image].append(
+                    #         f"{obj_id}: {object_id_to_name[obj_id]}"
+                    #     )
 
                     # sanity check
                     assert len(step_dict["snapshots"]) == len(tsdf_planner.snapshots), f"{len(step_dict['snapshots'])} != {len(tsdf_planner.snapshots)}"

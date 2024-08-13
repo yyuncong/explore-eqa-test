@@ -75,5 +75,5 @@ scene_graph:
   confidence: 0.003
   nms_threshold: 0.1
   iou_threshold: 0.5
-  obj_include_dist: 2.5
+  obj_include_dist: 3.5
   target_obj_iou_threshold: 0.6

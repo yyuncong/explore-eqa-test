@@ -286,7 +286,7 @@ def main(cfg):
                     for obj_id, obj in scene.objects.items():
                         if np.linalg.norm(obj['bbox'].center[[0, 2]] - pts[[0, 2]]) < cfg.scene_graph.obj_include_dist + 0.5:
                             all_added_obj_ids.append(obj_id)
-                    scene.update_snapshots(obj_set=set(all_added_obj_ids))
+                    scene.update_snapshots(obj_ids=set(all_added_obj_ids))
                     logging.info(f"Step {cnt_step} {len(scene.objects)} objects, {len(scene.snapshots)} snapshots")
 
                     update_success = tsdf_planner.update_frontier_map(pts=pts_normal, cfg=cfg.planner)
@@ -330,6 +330,8 @@ def main(cfg):
                     tsdf_planner.max_point = None
                     tsdf_planner.target_point = None
 
+                    # filter the target object list to remove the objects that have been cleared
+                    target_obj_id_det_list = [obj_id for obj_id in target_obj_id_det_list if obj_id in scene.objects]
                     logging.info(f"Target object detection list: {target_obj_id_det_list}")
 
                     # use the most common id in the list as the target object id

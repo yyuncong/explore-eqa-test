@@ -89,7 +89,7 @@ class TSDFPlanner(TSDFPlannerBase):
         self.target_point: [np.ndarray] = None  # the corresponding navigable location of max_point. The agent goes to this point to observe the max_point
 
         self.simple_scene_graph: Dict[int, SceneGraphItem] = {}  # obj_id to object
-        self.scene_graph_list: List[int] = [] # what is this? a list of obj_id
+        self.scene_graph_list: List[int] = [] # what is this? a list of obj_id    yh: the logic is a bit tricky, but scene_graph_list and prev_scene_graph_length are used to get to know what new objects are added at current step
         self.prev_scene_graph_length = 0
         self.snapshots: Dict[str, SnapShot] = {}  # filename to snapshot
         self.frames: Dict[str, SnapShot] = {}  # filename to frame
@@ -210,13 +210,13 @@ class TSDFPlanner(TSDFPlannerBase):
                     #         # remove the obj id in the old snapshot and add to new snapshot
                     #         self.snapshots[old_snapshot_filename].selected_obj_list.remove(obj_id)
                     #         frame.selected_obj_list.append(obj_id)
-                    # the i th detection is adopted, caption_list?
+                    # the i th detection is adopted, caption_list?      yh: caption_list is used to annotate the image for visualization
                     adopted_indices.append(i)
                     caption_list.append(caption)
                     object_added = True
                     break
 
-        # what is the file_name for?
+        # what is the file_name for?      yh: file_name is a key that could conveniently fetch a certain snapshot. It's the image path of the observation of this frame
         self.frames[file_name] = frame
 
         if return_annotated:

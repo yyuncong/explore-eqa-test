@@ -89,7 +89,7 @@ class TSDFPlanner(TSDFPlannerBase):
         self.target_point: [np.ndarray] = None  # the corresponding navigable location of max_point. The agent goes to this point to observe the max_point
 
         self.simple_scene_graph: Dict[int, SceneGraphItem] = {}  # obj_id to object
-        self.scene_graph_list: List[int] = []
+        self.scene_graph_list: List[int] = [] # what is this? a list of obj_id
         self.prev_scene_graph_length = 0
         self.snapshots: Dict[str, SnapShot] = {}  # filename to snapshot
         self.frames: Dict[str, SnapShot] = {}  # filename to frame
@@ -131,7 +131,7 @@ class TSDFPlanner(TSDFPlannerBase):
         unique_obj_ids = np.unique(semantic_obs)
         class_to_obj_id = {}
         for obj_id in unique_obj_ids:
-            if obj_id == 0 or obj_id not in obj_id_to_name.keys() or obj_id_to_name[obj_id] in ['wall', 'floor', 'ceiling', 'door frame', 'door']:
+            if obj_id == 0 or obj_id not in obj_id_to_name.keys() or obj_id_to_name[obj_id] in ['wall', 'floor', 'ceiling', 'door frame']:
                 continue
             if obj_id_to_name[obj_id] not in class_to_obj_id.keys():
                 class_to_obj_id[obj_id_to_name[obj_id]] = [obj_id]
@@ -198,6 +198,7 @@ class TSDFPlanner(TSDFPlannerBase):
                             confidence=confidence,
                             image=None
                         )
+                        # add this to scene_graph_list
                         if obj_id not in self.scene_graph_list:
                             self.scene_graph_list.append(obj_id)
                         caption += "_N"
@@ -209,12 +210,13 @@ class TSDFPlanner(TSDFPlannerBase):
                     #         # remove the obj id in the old snapshot and add to new snapshot
                     #         self.snapshots[old_snapshot_filename].selected_obj_list.remove(obj_id)
                     #         frame.selected_obj_list.append(obj_id)
-
+                    # the i th detection is adopted, caption_list?
                     adopted_indices.append(i)
                     caption_list.append(caption)
                     object_added = True
                     break
 
+        # what is the file_name for?
         self.frames[file_name] = frame
 
         if return_annotated:
@@ -601,7 +603,7 @@ class TSDFPlanner(TSDFPlannerBase):
         self.max_point = choice
 
         if type(choice) == SnapShot:
-            obj_centers = [self.simple_scene_graph[obj_id].bbox_center for obj_id in choice.full_obj_list]
+            obj_centers = [self.simple_scene_graph[obj_id].bbox_center for obj_id in choice.cluster]
             obj_centers = np.asarray([self.habitat2voxel(center)[:2] for center in obj_centers])
             snapshot_center = np.mean(obj_centers, axis=0)
             choice.position = snapshot_center

@@ -421,7 +421,7 @@ def main(cfg):
                         )
                         all_snapshot_features[obs_file_name] = img_feature.to("cpu")
                         if cfg.save_visualization or cfg.save_frontier_video:
-                            plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), rgb)
+                            plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), annotated_rgb)
 
                     # TSDF fusion
                     tsdf_planner.integrate(

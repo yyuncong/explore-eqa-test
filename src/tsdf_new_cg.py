@@ -201,7 +201,10 @@ class TSDFPlanner(TSDFPlannerBase):
             IoU_values = np.asarray([IoU(frontier.region, new_ft['region']) for new_ft in valid_ft_angles])
             pix_diff_values = np.asarray([pix_diff(frontier.region, new_ft['region']) for new_ft in valid_ft_angles])
             frontier_appended = False
-            if np.any((IoU_values > cfg.region_equal_threshold) | (pix_diff_values <= 3)):
+            if np.any(
+                    ((IoU_values > cfg.region_equal_threshold) & (pix_diff_values < 75)) |  # ensure that a normal step on a very large region can cause the large region to be considered as changed
+                    (pix_diff_values <= 3)
+            ):
                 # the frontier is not changed (almost)
                 filtered_frontiers.append(frontier)
                 kept_frontier_area = kept_frontier_area | frontier.region
@@ -263,23 +266,23 @@ class TSDFPlanner(TSDFPlannerBase):
                         kept_frontier_area = kept_frontier_area | filtered_frontiers[-1].region
         self.frontiers = filtered_frontiers
 
-        # merge new frontiers if they are too close
-        if len(valid_ft_angles) > 1:
-            valid_ft_angles_new = []
-            # sort the angles
-            valid_ft_angles = sorted(valid_ft_angles, key=lambda x: x['angle'])
-            while len(valid_ft_angles) > 0:
-                cur_angle = valid_ft_angles.pop(0)
-                if len(valid_ft_angles) > 0:
-                    next_angle = valid_ft_angles[0]
-                    if next_angle['angle'] - cur_angle['angle'] < cfg.min_frontier_angle_diff_deg * np.pi / 180:
-                        # merge the two
-                        weight = np.sum(cur_angle['region']) / (np.sum(cur_angle['region']) + np.sum(next_angle['region']))
-                        cur_angle['angle'] = cur_angle['angle'] * weight + next_angle['angle'] * (1 - weight)
-                        cur_angle['region'] = cur_angle['region'] | next_angle['region']
-                        valid_ft_angles.pop(0)
-                valid_ft_angles_new.append(cur_angle)
-            valid_ft_angles = valid_ft_angles_new
+        # # merge new frontiers if they are too close
+        # if len(valid_ft_angles) > 1:
+        #     valid_ft_angles_new = []
+        #     # sort the angles
+        #     valid_ft_angles = sorted(valid_ft_angles, key=lambda x: x['angle'])
+        #     while len(valid_ft_angles) > 0:
+        #         cur_angle = valid_ft_angles.pop(0)
+        #         if len(valid_ft_angles) > 0:
+        #             next_angle = valid_ft_angles[0]
+        #             if next_angle['angle'] - cur_angle['angle'] < cfg.min_frontier_angle_diff_deg * np.pi / 180:
+        #                 # merge the two
+        #                 weight = np.sum(cur_angle['region']) / (np.sum(cur_angle['region']) + np.sum(next_angle['region']))
+        #                 cur_angle['angle'] = cur_angle['angle'] * weight + next_angle['angle'] * (1 - weight)
+        #                 cur_angle['region'] = cur_angle['region'] | next_angle['region']
+        #                 valid_ft_angles.pop(0)
+        #         valid_ft_angles_new.append(cur_angle)
+        #     valid_ft_angles = valid_ft_angles_new
 
         # create new frontiers and add to frontier list
         for ft_data in valid_ft_angles:

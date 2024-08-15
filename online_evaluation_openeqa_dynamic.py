@@ -687,6 +687,10 @@ def main(cfg):
                     target_found = True
                     break
 
+        # here once the model has chosen one snapshot, we count it as a success
+        if target_observation_count > 0:
+            target_found = True
+
         if target_found:
             success_count += 1
             # We only consider samples that model predicts object (use baseline results other samples for now)
@@ -700,6 +704,20 @@ def main(cfg):
         logging.info(f"{question_idx + 1}/{total_questions}: Success rate: {success_count}/{question_idx + 1}")
         logging.info(f"Mean path length for success exploration: {np.mean(list(path_length_list.values()))}")
         # logging.info(f'Scene {scene_id} finish')
+
+        # print the items in the scene graph
+        snapshot_dict = {}
+        for obj_id, obj in scene.objects.items():
+            if obj['image'] not in snapshot_dict:
+                snapshot_dict[obj['image']] = []
+            snapshot_dict[obj['image']].append(
+                f"{obj_id}: {obj['class_name']} {obj['num_detections']}"
+            )
+        logging.info(f"Scene graph of question {question_id}:")
+        for snapshot_id, obj_list in snapshot_dict.items():
+            logging.info(f"{snapshot_id}:")
+            for obj_str in obj_list:
+                logging.info(f"\t{obj_str}")
 
         # ensure that the observation dir has at most 50 images
         all_img_paths = glob.glob(os.path.join(episode_observations_dir, "*.png"))

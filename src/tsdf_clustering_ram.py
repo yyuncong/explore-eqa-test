@@ -256,7 +256,7 @@ class TSDFPlanner(TSDFPlannerBase):
                     )
                     if obj_id not in self.scene_graph_list:
                         self.scene_graph_list.append(obj_id)
-                    caption += "_N"
+                    caption += "_N"   # denote that this object is newly added
                 else:
                     # add the count of the recognized class
                     recognize_class = dinfo['class_name']
@@ -264,6 +264,7 @@ class TSDFPlanner(TSDFPlannerBase):
                         self.simple_scene_graph[obj_id].classes[recognize_class] = 1
                     else:
                         self.simple_scene_graph[obj_id].classes[recognize_class] += 1
+                    caption += f"_{sum(list(self.simple_scene_graph[obj_id].classes.values()))}"   # denote how many times this object is recognized
                 adopted_indices.append(matched_idx)
                 caption_list.append(caption)
                 object_added = True

@@ -713,6 +713,8 @@ def main(cfg):
                 f"{obj_id}: {obj['class_name']} {obj['num_detections']}"
             )
         logging.info(f"Scene graph of question {question_id}:")
+        logging.info(f"Question: {question}")
+        logging.info(f"Answer: {answer}")
         for snapshot_id, obj_list in snapshot_dict.items():
             logging.info(f"{snapshot_id}:")
             for obj_str in obj_list:

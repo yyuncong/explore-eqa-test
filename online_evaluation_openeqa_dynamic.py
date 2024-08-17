@@ -444,6 +444,11 @@ def main(cfg):
                     frontier.image = f"{cnt_step}_{i}.png"
                     frontier.feature = img_feature
 
+            # if this is the last step, we force to choose a snapshot
+            if cnt_step == num_step - 1:
+                tsdf_planner.frontiers = []
+                logging.info(f"Force to choose a snapshot at the last step {cnt_step}!")
+
             if cfg.choose_every_step:
                 if tsdf_planner.max_point is not None and type(tsdf_planner.max_point) == Frontier:
                     # reset target point to allow the model to choose again
@@ -541,6 +546,19 @@ def main(cfg):
                     tsdf_planner.frontiers_weight = np.zeros((len(tsdf_planner.frontiers)))
                     # TODO: where to go if snapshot?
                     max_point_choice = pred_target_snapshot
+
+                    # print the items in the scene graph
+                    snapshot_dict = {}
+                    for obj_id, obj in scene.objects.items():
+                        if obj['image'] not in snapshot_dict:
+                            snapshot_dict[obj['image']] = []
+                        snapshot_dict[obj['image']].append(
+                            f"{obj_id}: {obj['class_name']} {obj['num_detections']}"
+                        )
+                    for snapshot_id, obj_list in snapshot_dict.items():
+                        logging.info(f"{snapshot_id}:")
+                        for obj_str in obj_list:
+                            logging.info(f"\t{obj_str}")
                 else:
                     target_index = int(target_index)
                     if target_index not in vlm_id_to_ft_id.keys():

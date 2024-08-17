@@ -390,7 +390,9 @@ class TSDFPlanner(TSDFPlannerBase):
 
         if type(choice) == SnapShot:
             obj_centers = [objects[obj_id]['bbox'].center for obj_id in choice.cluster]
-            obj_centers = np.asarray([self.habitat2voxel(center)[:2] for center in obj_centers])
+            obj_centers = [self.habitat2voxel(center)[:2] for center in obj_centers]
+            obj_centers = list(set([tuple(center) for center in obj_centers]))  # remove duplicates
+            obj_centers = np.asarray(obj_centers)
             snapshot_center = np.mean(obj_centers, axis=0)
             choice.position = snapshot_center
 

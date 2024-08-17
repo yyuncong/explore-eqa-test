@@ -263,7 +263,7 @@ def main(cfg):
         os.makedirs(episode_frontier_dir, exist_ok=True)
         os.makedirs(episode_snapshot_dir, exist_ok=True)
 
-        if len(os.listdir(episode_observations_dir)) >= 50:
+        if len(os.listdir(episode_object_observe_dir)) > 0:
             logging.info(f"Question id {question_id} already has enough target observations!")
             success_count += 1
             continue
@@ -356,8 +356,7 @@ def main(cfg):
                     )
                     all_snapshot_features[obs_file_name] = img_feature.to("cpu")
                     rgb_egocentric_views_features.append(img_feature.to("cpu"))
-                    if cfg.save_visualization or cfg.save_frontier_video:
-                        plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), rgb)
+                    plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), rgb)
                     all_added_obj_ids += added_obj_ids
 
                 # clean up or merge redundant objects periodically

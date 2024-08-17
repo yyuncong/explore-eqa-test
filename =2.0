@@ -1,0 +1,14 @@
+Collecting numpy==1.23.5
+  Downloading numpy-1.23.5-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (2.3 kB)
+Requirement already satisfied: pydantic in /home/yuncongyang_umass_edu/.conda/envs/explore-eqa/lib/python3.9/site-packages (2.0)
+Requirement already satisfied: annotated-types>=0.4.0 in /home/yuncongyang_umass_edu/.conda/envs/explore-eqa/lib/python3.9/site-packages (from pydantic) (0.7.0)
+Requirement already satisfied: pydantic-core==2.0.1 in /home/yuncongyang_umass_edu/.conda/envs/explore-eqa/lib/python3.9/site-packages (from pydantic) (2.0.1)
+Requirement already satisfied: typing-extensions>=4.6.1 in /home/yuncongyang_umass_edu/.conda/envs/explore-eqa/lib/python3.9/site-packages (from pydantic) (4.10.0)
+Downloading numpy-1.23.5-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (17.1 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 17.1/17.1 MB 74.3 MB/s eta 0:00:00
+Installing collected packages: numpy
+  Attempting uninstall: numpy
+    Found existing installation: numpy 1.26.4
+    Uninstalling numpy-1.26.4:
+      Successfully uninstalled numpy-1.26.4
+Successfully installed numpy-1.23.5

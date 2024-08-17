@@ -773,8 +773,13 @@ def get_random_snapshot_observation_point(
         if try_count_pick > 100:
             logging.error(f"Error in get_random_snapshot_observation_point: cannot find a proper observation point! try many tries")
             break
-
-        potential_obs_point = valid_coords[np.random.choice(len(valid_coords), p=selection_weight)]
+        
+        try:
+            potential_obs_point = valid_coords[np.random.choice(len(valid_coords), p=selection_weight)]
+        except:
+            # really need to figure out why this happens
+            logging.error(f"Error in get_random_snapshot_observation_point: random choice failed!")
+            return None
 
         # we need to ensure that there is no occupied point between the observation point and the snapshot center
         direction = snapshot_center - potential_obs_point

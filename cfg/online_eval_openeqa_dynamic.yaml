@@ -1,15 +1,15 @@
 # General
 seed: 77
-exp_name: exp_openeqa_dynamic
+exp_name: exp_openeqa_dynamic_3
 output_parent_dir: /work/pi_chuangg_umass_edu/yuncong/results
 scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
 scene_data_path: /work/pi_chuangg_umass_edu/yuncong/data/scene_datasets/hm3d/
 questions_list_path: 'data/generated_questions-eval.json'
-model_path: /work/pi_chuangg_umass_edu/yuncong/ds_lora/2e-06_patch2_rand_ego_lora
-
+model_path: /work/pi_chuangg_umass_edu/yuncong/ds_lora/ds_cluster_best_2.5_4e-06_patch1_ds_rand_ego_lora
 concept_graph_config_path: "conceptgraph/hydra_configs"
 concept_graph_config_name: "rerun_realtime_mapping"
 
+incremental: true
 visual_feature_size: 24
 patch_size: 8
 choose_every_step: true
@@ -38,7 +38,7 @@ save_frontier_video: false
 
 # Navigation
 init_clearance: 0.3
-max_step_room_size_ratio: 5
+max_step_room_size_ratio: 3
 extra_view_phase_1: 4
 extra_view_angle_deg_phase_1: 60
 max_target_observation: 4

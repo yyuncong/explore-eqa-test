@@ -222,6 +222,7 @@ def main(cfg):
     wrong_snapshot_count = 0
     too_many_steps_count = 0
     other_errors_count = 0
+    missing_target_count = 0
 
     success_list = []
     path_length_list = []
@@ -305,8 +306,17 @@ def main(cfg):
             target_obj_id = metadata['target_obj_id']
             target_obj_class = metadata['target_obj_class']
             target_obs_pos = question_file[question_id.split('_path')[0]]['position']
+            object_set = set([int(item['id']) for item in bounding_box_data])
             # get target object global location
-            obj_bbox = [item['bbox'] for item in bounding_box_data if int(item['id']) == target_obj_id][0]
+            try:
+                obj_bbox = [item['bbox'] for item in bounding_box_data if int(item['id']) == target_obj_id][0]
+            except:
+                print(f"the {missing_target_count} scene with missing target object")
+                print(f"target object {target_obj_id} not found in the scene, skip")
+                print(f"question id {question_id}")
+                print("the target object is", target_obj_id)
+                missing_target_count += 1
+                continue
             obj_bbox = np.asarray(obj_bbox)  # (2, 3)
             obj_bbox_center = np.mean(obj_bbox, axis=0)
             obj_bbox_center = obj_bbox_center[[0, 2, 1]]

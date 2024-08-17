@@ -7,3 +7,9 @@ results/*
 exploration_data/
 exploration_data_new/
 output/
+ram_output/
+exploration_data_success_incremental_ram/
+yolov8l-world.pt
+yolov8x-world.pt
+sam_I.pt
+mobile_sam.pt

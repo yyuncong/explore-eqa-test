@@ -1,3 +1,4 @@
+import quaternion
 import os
 import random
 
@@ -17,7 +18,6 @@ import logging
 import glob
 import math
 import torch
-import quaternion
 import matplotlib.pyplot as plt
 import matplotlib.image
 from PIL import Image, ImageDraw, ImageFont
@@ -35,6 +35,7 @@ from src.habitat import (
 )
 from src.geom import get_cam_intr, get_scene_bnds, get_collision_distance
 from src.tsdf_clustering import TSDFPlanner, Frontier, SnapShot
+#from src.tsdf_clustering_ram import TSDFPlanner, Frontier, SnapShot
 #from src.eval_utils_snapshot import prepare_step_dict, get_item, encode, load_scene_features, rgba2rgb, load_checkpoint, collate_wrapper, construct_selection_prompt
 from src.eval_utils_snapshot_new import (
     prepare_step_dict, 
@@ -133,6 +134,7 @@ def inference(model, tokenizer, step_dict, cfg):
 
     num_visual_tokens = (cfg.visual_feature_size // cfg.patch_size) ** 2
     step_dict["num_visual_tokens"] = num_visual_tokens
+    step_dict["noclass"] = cfg.noclass
     # print("pos", step_dict["add_positional_encodings"])
     # try:
     sample = get_item(
@@ -158,7 +160,8 @@ def inference(model, tokenizer, step_dict, cfg):
             True,
             filter_outputs,
             cfg.top_k_categories,
-            num_visual_tokens
+            num_visual_tokens,
+            cfg.no_class,
         )
         sample = collate_wrapper([selection_input])
         outputs = infer_selection(model,tokenizer,sample)
@@ -223,6 +226,7 @@ def main(cfg):
     wrong_snapshot_count = 0
     too_many_steps_count = 0
     other_errors_count = 0
+    missing_target_count = 0
 
     success_list = []
     path_length_list = []
@@ -307,7 +311,16 @@ def main(cfg):
             target_obj_class = metadata['target_obj_class']
             target_obs_pos = question_file[question_id.split('_path')[0]]['position']
             # get target object global location
-            obj_bbox = [item['bbox'] for item in bounding_box_data if int(item['id']) == target_obj_id][0]
+            #obj_bbox = [item['bbox'] for item in bounding_box_data if int(item['id']) == target_obj_id][0]
+            try:
+                obj_bbox = [item['bbox'] for item in bounding_box_data if int(item['id']) == target_obj_id][0]
+            except:
+                print(f"the {missing_target_count} scene with missing target object")
+                print(f"target object {target_obj_id} not found in the scene, skip")
+                print(f"question id {question_id}")
+                print("the target object is", target_obj_id)
+                missing_target_count += 1
+                continue
             obj_bbox = np.asarray(obj_bbox)  # (2, 3)
             obj_bbox_center = np.mean(obj_bbox, axis=0)
             obj_bbox_center = obj_bbox_center[[0, 2, 1]]

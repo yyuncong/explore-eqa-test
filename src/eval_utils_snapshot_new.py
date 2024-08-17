@@ -279,6 +279,7 @@ def prepare_snapshot_input(
     ranking,
     topk,
     num_visual_tokens,
+    noclass = False
 ):
     import logging
     snapshot_index = len(snapshot_classes)
@@ -325,8 +326,9 @@ def prepare_snapshot_input(
         class_names_set = set(class_names)
         class_names_list = list(class_names_set)
         sorted_class_names = sorted(class_names_list)
-        for class_name in sorted_class_names:
-            text += f"{class_name}, "
+        if not noclass:
+            for class_name in sorted_class_names:
+                text += f"{class_name}, "
         for _ in range(num_visual_tokens):
             text += "<scene>"
         text += " / "
@@ -398,6 +400,7 @@ def construct_selection_prompt(
     ranking,
     topk,
     num_visual_tokens,
+    noclass = False
 ):
     snapshot_text, snapshot_features, snapshot_index, snapshot_id_mapping = prepare_snapshot_input(
         snapshot_info_dict.seen_classes,
@@ -407,9 +410,11 @@ def construct_selection_prompt(
         ranking,
         topk,
         num_visual_tokens,
+        noclass
     )
     
     text = text_before_snapshot + snapshot_text + frontier_text
+    #print("test token number", text)
     scene_feature = feature_before_snapshot + [snapshot_features] + [frontier_features]
     scene_feature = [f for f in scene_feature if f is not None]
     scene_feature = torch.cat(scene_feature, dim=0)
@@ -573,6 +578,7 @@ def get_item(tokenizer, step_dict):
             None,
             None,
             step["num_visual_tokens"],
+            step.get("noclass", False)
         )
         batch = [input_dict]
         # print('before wrap up')

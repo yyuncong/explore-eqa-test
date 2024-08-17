@@ -410,6 +410,7 @@ def main(cfg):
                             obj_id_to_bbox=object_id_to_bbox,
                             cfg=cfg.scene_graph,
                             target_obj_id=target_obj_id,
+                            obs_point=pts,
                             return_annotated=True
                         )
                     if cfg.save_obs:

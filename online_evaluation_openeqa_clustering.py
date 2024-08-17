@@ -1,3 +1,5 @@
+import quaternion
+
 import os
 import random
 
@@ -17,7 +19,6 @@ import logging
 import glob
 import math
 import torch
-import quaternion
 import matplotlib.pyplot as plt
 import matplotlib.image
 from PIL import Image, ImageDraw, ImageFont
@@ -373,9 +374,13 @@ def main(cfg):
                 rgb = obs["color_sensor"]
                 depth = obs["depth_sensor"]
                 semantic_obs = obs["semantic_sensor"]
-                plt.imsave(
-                    os.path.join(episode_observations_dir, "{}.png".format(cnt_step)), rgb
-                )
+                if cfg.save_visualization:
+                    plt.imsave(
+                        os.path.join(episode_observations_dir, "{}.png".format(cnt_step)), rgb
+                    )
+                # plt.imsave(
+                #     os.path.join(episode_observations_dir, "{}.png".format(cnt_step)), rgb
+                # )
                 rgb = rgba2rgb(rgb)
                 rgb_egocentric_views.append(rgb)
 
@@ -401,8 +406,8 @@ def main(cfg):
                         cfg.patch_size
                     )
                     all_snapshot_features[obs_file_name] = img_feature.to("cpu")
-                    if cfg.save_visualization or cfg.save_frontier_video:
-                        plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), rgb)
+                    # if cfg.save_visualization or cfg.save_frontier_video:
+                    plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), rgb)
 
                 # TSDF fusion
                 tsdf_planner.integrate(

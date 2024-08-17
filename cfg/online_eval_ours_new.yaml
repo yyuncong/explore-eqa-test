@@ -1,6 +1,9 @@
 # General
 seed: 66
-exp_name: exp_new_val_snapshots_pos_ego_ours
+#exp_name: exp_patch2_rand_ego_every_true_3.5
+#exp_name: exp_patch2_rand_ego_lora
+#exp_name: exp_patch2_rand_ego_lora_filter_top10_coeff0.1
+exp_name: exp_2e-06_patch2_ds_rand_filter_top10_coeff0.1_ego_lora
 output_parent_dir: /work/pi_chuangg_umass_edu/yuncong/results
 scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
 scene_data_path_train: /project/pi_chuangg_umass_edu/yuncong/data_v2/scene_datasets/hm3d/train
@@ -9,18 +12,26 @@ semantic_bbox_data_path: '/home/yuncongyang_umass_edu/scene_understanding/hm3d_o
 detection_model_name: "yolo_world/x"
 scene_features_path_train: /work/pi_chuangg_umass_edu/yuncong/data/scene_feature_dict_merged_flex/
 scene_features_path_val: /work/pi_chuangg_umass_edu/yuncong/data/scene_feature_dict_merged_flex/
-model_path: /work/pi_chuangg_umass_edu/yuncong/snapshots_pos_ego_2.pt
+#model_path: /work/pi_chuangg_umass_edu/yuncong/2e-06_patch2_rand_ego_0.pt
+#model_path: /work/pi_chuangg_umass_edu/yuncong/ds_lora/1e-06_patch2_rand_ego_lora
+#model_path: /work/pi_chuangg_umass_edu/yuncong/ds_lora/1e-06_patch2_ds_rand_filter_top10_coeff0.1_ego_lora
+#model_path: /project/pi_chuangg_umass_edu/yuncong/ds_lora/2e-06_patch2_ds_rand_ego_lora #_filter_top10_coeff0.1_ego_lora
+model_path: /project/pi_chuangg_umass_edu/yuncong/ds_lora/2e-06_patch2_ds_rand_filter_top10_coeff0.1_ego_lora
 path_data_dir: exploration_data_new
 question_file_path: generated_questions/generated_questions.json
 
-choose_every_step: false
+visual_feature_size: 24
+patch_size: 8
+
+choose_every_step: true
 egocentric_views: true
 action_memory: false
-prefiltering: false
+prefiltering: true
 top_k_categories: 10
-not_observe_snapshot: false
+not_observe_snapshot: true
+use_deepspeed: true #false
 
-add_positional_encodings: true
+add_positional_encodings: false
 
 # Camera, image
 camera_height: 1.5
@@ -71,4 +82,4 @@ scene_graph:
   confidence: 0.003
   nms_threshold: 0.1
   iou_threshold: 0.5
-  obj_include_dist: 2.5
+  obj_include_dist: 3.5

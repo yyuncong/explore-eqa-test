@@ -1,19 +1,24 @@
 # General
 seed: 66
-exp_name: exp_patch2_rand_ego_lora_ours_clustering_reverse_merge_3.5
+#exp_name: exp_patch2_rand_ego_lora_ours_clustering_reverse_merge_3.5
+exp_name: exp_2e-06_patch1_rand_ego_lora_ours_clustering_best_3.5_noclass_reverse_merge
+#exp_name: exp_2e-06_patch2_rand_ego_lora_ours_clustering
 output_parent_dir: /work/pi_chuangg_umass_edu/yuncong/results
 scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
 scene_data_path_train: /project/pi_chuangg_umass_edu/yuncong/data_v2/scene_datasets/hm3d/train
 scene_data_path_val: /work/pi_chuangg_umass_edu/yuncong/data/scene_datasets/hm3d/val
 semantic_bbox_data_path: '/home/yuncongyang_umass_edu/scene_understanding/hm3d_obj_bbox_merged'
 detection_model_name: "yolo_world/x"
-model_path: /work/pi_chuangg_umass_edu/yuncong/ds_lora/1e-06_patch2_rand_ego_lora
+#model_path: /project/pi_chuangg_umass_edu/yuncong/ds_lora/1e-06_patch2_rand_ego_lora
+model_path: /work/pi_chuangg_umass_edu/yuncong/ds_lora/ds_cluster_best_2.5_noclass_2e-06_patch1_ds_rand_ego_lora
 path_data_dir: exploration_data_new
 question_file_path: generated_questions/generated_questions.json
 
+# whether reclustering all the objects each step
 incremental: true
+noclass: true
 visual_feature_size: 24
-patch_size: 8
+patch_size: 6
 choose_every_step: true
 egocentric_views: true
 action_memory: false

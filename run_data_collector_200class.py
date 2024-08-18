@@ -163,7 +163,6 @@ def main(cfg):
                 target_rotation = question_data['rotation']
                 episode_data_dir = os.path.join(str(cfg.dataset_output_dir), f"{question_data['question_id']}_path_{path_idx}")
                 episode_frontier_dir = os.path.join(episode_data_dir, "frontier_rgb")
-                egocentric_save_dir = os.path.join(episode_data_dir, 'egocentric')
                 object_feature_save_dir = os.path.join(episode_data_dir, 'object_features')
 
                 # if the data has already generated, skip
@@ -172,7 +171,6 @@ def main(cfg):
 
                 os.makedirs(episode_data_dir, exist_ok=True)
                 os.makedirs(episode_frontier_dir, exist_ok=True)
-                os.makedirs(egocentric_save_dir, exist_ok=True)
                 os.makedirs(object_feature_save_dir, exist_ok=True)
 
                 # get the starting points of other generated paths for this object, if there exists any
@@ -314,7 +312,11 @@ def main(cfg):
                             obs_point=pts,
                             return_annotated=True
                         )
-                        plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), annotated_image)
+                        # save the image as 720 x 720
+                        plt.imsave(
+                            os.path.join(object_feature_save_dir, obs_file_name),
+                            np.asarray(Image.fromarray(annotated_image).resize((720, 720)))
+                        )
                         all_added_obj_ids += added_obj_ids
 
                         # TSDF fusion
@@ -368,9 +370,10 @@ def main(cfg):
                             if target_detected:
                                 frontier.target_detected = True
 
+                            # save the image as 720 x 720
                             plt.imsave(
                                 os.path.join(episode_frontier_dir, f"{cnt_step}_{i}.png"),
-                                frontier_obs,
+                                np.asarray(Image.fromarray(frontier_obs).resize((720, 720)))
                             )
                             frontier.image = f"{cnt_step}_{i}.png"
                             frontier_dict["rgb_id"] = f"{cnt_step}_{i}.png"
@@ -580,8 +583,9 @@ def main(cfg):
                         obs = simulator.get_sensor_observations()
                         rgb = obs["color_sensor"]
                         target_obs_save_dir = os.path.join(episode_data_dir, "target_observation")
-                        os.makedirs(target_obs_save_dir, exist_ok=True)
-                        plt.imsave(os.path.join(target_obs_save_dir, f"{cnt_step}_target_observation.png"), rgb)
+                        if cfg.save_visualization:
+                            os.makedirs(target_obs_save_dir, exist_ok=True)
+                            plt.imsave(os.path.join(target_obs_save_dir, f"{cnt_step}_target_observation.png"), rgb)
                         break
 
                 if target_found:

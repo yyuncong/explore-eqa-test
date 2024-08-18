@@ -25,8 +25,8 @@ tsdf_grid_size: 0.1
 margin_w_ratio: 0.25
 margin_h_ratio: 0.6
 
-save_visualization: true
-save_frontier_video: true
+save_visualization: false
+save_frontier_video: false
 save_tsdf_video: false
 del_fail_case: false
 
@@ -43,8 +43,9 @@ extra_view_angle_deg_phase_1: 60
 extra_view_phase_2: 4  # in phase 2, have more observations
 extra_view_angle_deg_phase_2: 60
 
-# Snapshot
-min_num_obj_threshold: 1
+# For partial initialization
+min_initialize_step: 20
+max_initialize_step: 120
 
 # Semantic map
 explored_depth: 1.5

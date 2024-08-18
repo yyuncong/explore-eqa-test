@@ -86,7 +86,7 @@ def main(cfg):
         all_questions_in_scene = [q for q in questions_data if q["episode_history"] == scene_id]
 
         ##########################################################
-        # if '00732' not in scene_id:
+        # if '00873' not in scene_id:
         #     continue
         # if int(scene_id.split("-")[0]) >= 800:
         #     continue
@@ -163,7 +163,6 @@ def main(cfg):
                 target_rotation = question_data['rotation']
                 episode_data_dir = os.path.join(str(cfg.dataset_output_dir), f"{question_data['question_id']}_path_{path_idx}")
                 episode_frontier_dir = os.path.join(episode_data_dir, "frontier_rgb")
-                egocentric_save_dir = os.path.join(episode_data_dir, 'egocentric')
                 object_feature_save_dir = os.path.join(episode_data_dir, 'object_features')
 
                 # if the data has already generated, skip
@@ -172,7 +171,6 @@ def main(cfg):
 
                 os.makedirs(episode_data_dir, exist_ok=True)
                 os.makedirs(episode_frontier_dir, exist_ok=True)
-                os.makedirs(egocentric_save_dir, exist_ok=True)
                 os.makedirs(object_feature_save_dir, exist_ok=True)
 
                 # get the starting points of other generated paths for this object, if there exists any
@@ -247,22 +245,56 @@ def main(cfg):
                 metadata["target_obj_id"] = target_obj_id
                 metadata["target_obj_class"] = question_data["class"]
 
+                # first run certain steps as initialization
+                initialize_step = random.randint(cfg.min_initialize_step, cfg.max_initialize_step)
+
                 # run steps
                 target_found = False
                 previous_choice_path = None
-                max_explore_dist = travel_dist * cfg.max_step_dist_ratio
-                max_step = int(travel_dist * cfg.max_step_ratio)
+                # in initialization, the max_explore_dist is set to a large number to ensure the agent can reach the target
+                max_explore_dist = travel_dist * cfg.max_step_dist_ratio + 999
+                max_step = int(travel_dist * cfg.max_step_ratio) + 999
+
                 explore_dist = 0.0
                 cnt_step = -1
+
+                state = 'initialize'  # 'initialize' or 'explore'
+                logging.info(f"Question id {question_data['question_id']}-path {path_idx} start initialization for {initialize_step} steps")
+
                 while explore_dist < max_explore_dist and cnt_step < max_step:
                     cnt_step += 1
+
+                    if cnt_step == initialize_step and state == 'initialize':
+                        # at the end of initialization, reset the path points to the target
+                        path = habitat_sim.ShortestPath()
+                        path.requested_start = pts
+                        path.requested_end = target_position
+                        found_path = pathfinder.find_path(path)
+                        if not found_path:
+                            logging.info(f"Question id {question_data['question_id']}-path {path_idx} invalid: cannot find path to target after initialization!")
+                            break
+                        path_points = path.points.copy()
+                        travel_dist = path.geodesic_distance
+
+                        # convert path points to normal and drop y-axis for tsdf planner
+                        path_points = [pos_habitat_to_normal(p) for p in path_points]
+                        path_points = [p[:2] for p in path_points]
+
+                        # reset the max_explore_dist
+                        max_explore_dist = travel_dist * cfg.max_step_dist_ratio
+                        max_step = int(travel_dist * cfg.max_step_ratio) + cnt_step
+
+                        state = 'explore'
+                        explore_dist = 0.0
+
+                        logging.info(f"Question id {question_data['question_id']}-path {path_idx} initialization finished")
 
                     step_dict = {}
                     step_dict["agent_state"] = {}
                     step_dict["agent_state"]["init_pts"] = pts.tolist()
                     step_dict["agent_state"]["init_angle"] = rotation
 
-                    logging.info(f"\n== step: {cnt_step}")
+                    logging.info(f"\n== step: {cnt_step}, {state} ==")
 
                     # for each position, get the views from different angles
                     if target_obj_id in tsdf_planner.simple_scene_graph.keys():
@@ -314,7 +346,11 @@ def main(cfg):
                             obs_point=pts,
                             return_annotated=True
                         )
-                        plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), annotated_image)
+                        # save the image as 720 x 720
+                        plt.imsave(
+                            os.path.join(object_feature_save_dir, obs_file_name),
+                            np.asarray(Image.fromarray(annotated_image).resize((720, 720)))
+                        )
                         all_added_obj_ids += added_obj_ids
 
                         # TSDF fusion
@@ -346,6 +382,11 @@ def main(cfg):
                     if target_found:
                         break
 
+                    if len(tsdf_planner.frontiers) == 0 and state == 'initialize':
+                        logging.info(f"Frontier exausted in initialization step {cnt_step}, directly go to explore state")
+                        cnt_step = initialize_step - 1
+                        continue
+
                     # Get observations for each frontier and store them
                     step_dict["frontiers"] = []
                     for i, frontier in enumerate(tsdf_planner.frontiers):
@@ -368,38 +409,54 @@ def main(cfg):
                             if target_detected:
                                 frontier.target_detected = True
 
+                            # save the image as 720 x 720
                             plt.imsave(
                                 os.path.join(episode_frontier_dir, f"{cnt_step}_{i}.png"),
-                                frontier_obs,
+                                np.asarray(Image.fromarray(frontier_obs).resize((720, 720)))
                             )
                             frontier.image = f"{cnt_step}_{i}.png"
                             frontier_dict["rgb_id"] = f"{cnt_step}_{i}.png"
                         step_dict["frontiers"].append(frontier_dict)
 
-                    # reset target point to allow the model to choose again
-                    tsdf_planner.max_point = None
-                    tsdf_planner.target_point = None
+                    if state == 'explore':
+                        # always reset target point to allow the model to choose again
+                        tsdf_planner.max_point = None
+                        tsdf_planner.target_point = None
+                    else:
+                        # in initialization, always go to the target point
+                        pass
 
-                    max_point_choice = tsdf_planner.get_next_choice(
-                        pts=pts_normal,
-                        path_points=path_points,
-                        pathfinder=pathfinder,
-                        target_obj_id=target_obj_id,
-                        cfg=cfg.planner,
-                    )
-                    if max_point_choice is None:
-                        logging.info(f"Question id {question_data['question_id']}-path {path_idx} invalid: no valid choice!")
-                        break
+                    # get the next choice
+                    max_point_choice = None
+                    if state == 'explore':
+                        # choose the next frontier/snapshot accordingly
+                        max_point_choice = tsdf_planner.get_next_choice(
+                            pts=pts_normal,
+                            path_points=path_points,
+                            pathfinder=pathfinder,
+                            target_obj_id=target_obj_id,
+                            cfg=cfg.planner,
+                        )
+                        if max_point_choice is None:
+                            logging.info(f"Question id {question_data['question_id']}-path {path_idx} invalid: no valid choice!")
+                            break
+                    else:
+                        # randomly choose a frontier as the max point in initialization
+                        if tsdf_planner.max_point is None and tsdf_planner.target_point is None:
+                            max_point_choice = random.choice(tsdf_planner.frontiers)
+                            tsdf_planner.frontiers_weight = np.zeros(len(tsdf_planner.frontiers))
+                            logging.info(f"Randomly choose frontier {max_point_choice.image}")
 
-                    update_success = tsdf_planner.set_next_navigation_point(
-                        choice=max_point_choice,
-                        pts=pts_normal,
-                        cfg=cfg.planner,
-                        pathfinder=pathfinder,
-                    )
-                    if not update_success:
-                        logging.info(f"Question id {question_data['question_id']}-path {path_idx} invalid: set_next_navigation_point failed!")
-                        break
+                    if max_point_choice is not None:
+                        update_success = tsdf_planner.set_next_navigation_point(
+                            choice=max_point_choice,
+                            pts=pts_normal,
+                            cfg=cfg.planner,
+                            pathfinder=pathfinder,
+                        )
+                        if not update_success:
+                            logging.info(f"Question id {question_data['question_id']}-path {path_idx} invalid: set_next_navigation_point failed!")
+                            break
 
                     return_values = tsdf_planner.agent_step(
                         pts=pts_normal,
@@ -449,48 +506,49 @@ def main(cfg):
                         assert ss.cluster == tsdf_planner.frames[file_name].cluster, f"{ss}\n!=\n{tsdf_planner.frames[file_name]}"
                         assert ss.full_obj_list == tsdf_planner.frames[file_name].full_obj_list, f"{ss}\n==\n{tsdf_planner.frames[file_name]}"
 
-                    # save the ground truth choice
-                    if type(max_point_choice) == SnapShot:
-                        filename = max_point_choice.image
-                        prediction = [float(ss["img_id"] == filename) for ss in step_dict["snapshots"]]
-                        prediction += [0.0 for _ in range(len(step_dict["frontiers"]))]
-                    elif type(max_point_choice) == Frontier:
-                        prediction = [0.0 for _ in range(len(step_dict["snapshots"]))]
-                        prediction += [float(ft_dict["rgb_id"] == max_point_choice.image) for ft_dict in step_dict["frontiers"]]
-                    else:
-                        raise ValueError("Invalid max_point_choice type")
-                    assert len(prediction) == len(step_dict["snapshots"]) + len(step_dict["frontiers"]), f"{len(prediction)} != {len(step_dict['snapshots'])} + {len(step_dict['frontiers'])}"
-                    if sum(prediction) != 1.0:
-                        logging.info(f"Error! Prediction sum is not 1.0: {sum(prediction)}")
-                        logging.info(max_point_choice)
-                        logging.info(tsdf_planner.frontiers)
-                        break
-                    assert sum(prediction) == 1.0, f"{sum(prediction)} != 1.0"
-                    step_dict["prediction"] = prediction
+                    if state == 'explore':
+                        # save the ground truth choice
+                        if type(max_point_choice) == SnapShot:
+                            filename = max_point_choice.image
+                            prediction = [float(ss["img_id"] == filename) for ss in step_dict["snapshots"]]
+                            prediction += [0.0 for _ in range(len(step_dict["frontiers"]))]
+                        elif type(max_point_choice) == Frontier:
+                            prediction = [0.0 for _ in range(len(step_dict["snapshots"]))]
+                            prediction += [float(ft_dict["rgb_id"] == max_point_choice.image) for ft_dict in step_dict["frontiers"]]
+                        else:
+                            raise ValueError("Invalid max_point_choice type")
+                        assert len(prediction) == len(step_dict["snapshots"]) + len(step_dict["frontiers"]), f"{len(prediction)} != {len(step_dict['snapshots'])} + {len(step_dict['frontiers'])}"
+                        if sum(prediction) != 1.0:
+                            logging.info(f"Error! Prediction sum is not 1.0: {sum(prediction)}")
+                            logging.info(max_point_choice)
+                            logging.info(tsdf_planner.frontiers)
+                            break
+                        assert sum(prediction) == 1.0, f"{sum(prediction)} != 1.0"
+                        step_dict["prediction"] = prediction
 
-                    # record previous choice
-                    step_dict["previous_choice"] = previous_choice_path  # this could be None or an image path of the frontier in last step
-                    if type(max_point_choice) == Frontier:
-                        previous_choice_path = max_point_choice.image
+                        # record previous choice
+                        step_dict["previous_choice"] = previous_choice_path  # this could be None or an image path of the frontier in last step
+                        if type(max_point_choice) == Frontier:
+                            previous_choice_path = max_point_choice.image
 
-                    # sanity check
-                    num_frontier = len(step_dict["frontiers"])
-                    num_snapshot = len(step_dict["snapshots"])
-                    chosen_idx = np.argwhere(np.array(step_dict["prediction"]) > 0.5).squeeze()
-                    if chosen_idx >= num_snapshot:
-                        chosen_idx -= num_snapshot
-                        assert step_dict["frontiers"][chosen_idx]["rgb_id"] == max_point_choice.image, f"{step_dict['frontiers'][chosen_idx]['rgb_id']} != {max_point_choice.image}"
-                        assert type(max_point_choice) == Frontier, f"{type(max_point_choice)} != Frontier"
-                    else:
-                        assert step_dict["snapshots"][chosen_idx]["img_id"] == max_point_choice.image, f"{step_dict['snapshots'][chosen_idx]['img_id']} != {max_point_choice.image}"
-                        assert type(max_point_choice) == SnapShot, f"{type(max_point_choice)} != SnapShot"
+                        # sanity check
+                        num_frontier = len(step_dict["frontiers"])
+                        num_snapshot = len(step_dict["snapshots"])
+                        chosen_idx = np.argwhere(np.array(step_dict["prediction"]) > 0.5).squeeze()
+                        if chosen_idx >= num_snapshot:
+                            chosen_idx -= num_snapshot
+                            assert step_dict["frontiers"][chosen_idx]["rgb_id"] == max_point_choice.image, f"{step_dict['frontiers'][chosen_idx]['rgb_id']} != {max_point_choice.image}"
+                            assert type(max_point_choice) == Frontier, f"{type(max_point_choice)} != Frontier"
+                        else:
+                            assert step_dict["snapshots"][chosen_idx]["img_id"] == max_point_choice.image, f"{step_dict['snapshots'][chosen_idx]['img_id']} != {max_point_choice.image}"
+                            assert type(max_point_choice) == SnapShot, f"{type(max_point_choice)} != SnapShot"
 
-                    # Save step data
-                    if type(max_point_choice) == Frontier and tsdf_planner.frontiers_weight is not None and len(tsdf_planner.frontiers_weight) > 0 and np.max(tsdf_planner.frontiers_weight) < 1:
-                        pass
-                    else:
-                        with open(os.path.join(episode_data_dir, f"{cnt_step:04d}.json"), "w") as f:
-                            json.dump(step_dict, f, indent=4)
+                        # Save step data
+                        if type(max_point_choice) == Frontier and tsdf_planner.frontiers_weight is not None and len(tsdf_planner.frontiers_weight) > 0 and np.max(tsdf_planner.frontiers_weight) < 1:
+                            pass
+                        else:
+                            with open(os.path.join(episode_data_dir, f"{cnt_step:04d}.json"), "w") as f:
+                                json.dump(step_dict, f, indent=4)
 
                     # update the agent's position record
                     pts_pixs = np.vstack((pts_pixs, pts_pix))
@@ -580,8 +638,9 @@ def main(cfg):
                         obs = simulator.get_sensor_observations()
                         rgb = obs["color_sensor"]
                         target_obs_save_dir = os.path.join(episode_data_dir, "target_observation")
-                        os.makedirs(target_obs_save_dir, exist_ok=True)
-                        plt.imsave(os.path.join(target_obs_save_dir, f"{cnt_step}_target_observation.png"), rgb)
+                        if cfg.save_visualization:
+                            os.makedirs(target_obs_save_dir, exist_ok=True)
+                            plt.imsave(os.path.join(target_obs_save_dir, f"{cnt_step}_target_observation.png"), rgb)
                         break
 
                 if target_found:
@@ -603,7 +662,29 @@ def main(cfg):
 
 
 
-
+                # remove unused snapshots and frontiers
+                all_info_paths = glob.glob(os.path.join(episode_data_dir, "*.json"))
+                all_info_paths = [pth for pth in all_info_paths if 'metadata' not in pth]
+                all_snapshots = []
+                all_frontiers = []
+                for pth in all_info_paths:
+                    step_data = json.load(open(pth, 'r'))
+                    all_snapshots += [item['img_id'] for item in step_data['snapshots']]
+                    all_frontiers += [item['rgb_id'] for item in step_data['frontiers']]
+                all_snapshots = set(all_snapshots)
+                all_frontiers = set(all_frontiers)
+                # remove unused snapshots
+                all_saved_snapshots = os.listdir(object_feature_save_dir)
+                for ss_id in all_saved_snapshots:
+                    ss_step = int(ss_id.split('-')[0])
+                    # only remove the unused snapshot collected during initialization
+                    if ss_step < initialize_step and ss_id not in all_snapshots:
+                        os.system(f"rm {os.path.join(object_feature_save_dir, ss_id)}")
+                # remove unused frontiers
+                all_saved_frontiers = os.listdir(episode_frontier_dir)
+                for ft_id in all_saved_frontiers:
+                    if ft_id not in all_frontiers:
+                        os.system(f"rm {os.path.join(episode_frontier_dir, ft_id)}")
 
                 # print the stats of total number of images
                 img_dict = {}

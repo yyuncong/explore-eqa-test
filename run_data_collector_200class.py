@@ -315,7 +315,7 @@ def main(cfg):
                         # save the image as 720 x 720
                         plt.imsave(
                             os.path.join(object_feature_save_dir, obs_file_name),
-                            np.asarray(Image.fromarray(annotated_image).resize((720, 720)))
+                            np.asarray(Image.fromarray(rgb[..., :3]).resize((720, 720)))
                         )
                         all_added_obj_ids += added_obj_ids
 
@@ -457,6 +457,10 @@ def main(cfg):
                         filename = max_point_choice.image
                         prediction = [float(ss["img_id"] == filename) for ss in step_dict["snapshots"]]
                         prediction += [0.0 for _ in range(len(step_dict["frontiers"]))]
+
+                        logging.info(f"Classes in chosen snapshot:")
+                        logging.info([ss_data for ss_data in step_dict["snapshots"] if ss_data["img_id"] == filename][0])
+
                     elif type(max_point_choice) == Frontier:
                         prediction = [0.0 for _ in range(len(step_dict["snapshots"]))]
                         prediction += [float(ft_dict["rgb_id"] == max_point_choice.image) for ft_dict in step_dict["frontiers"]]

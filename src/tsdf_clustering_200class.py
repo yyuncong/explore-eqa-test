@@ -552,11 +552,8 @@ class TSDFPlanner(TSDFPlannerBase):
             cfg
     ) -> Optional[Union[SnapShot, Frontier]]:
         # determine whether the target object is in scene graph
-        if target_obj_id in self.simple_scene_graph.keys():
-            for key, snapshot in self.snapshots.items():
-                if target_obj_id in snapshot.cluster:
-                    break
-            snapshot = self.snapshots[key]
+        if target_obj_id in self.simple_scene_graph.keys() and sum(self.simple_scene_graph[target_obj_id].classes.values()) >= 2:
+            snapshot = self.snapshots[self.simple_scene_graph[target_obj_id].image]
             logging.info(f"Next choice: Snapshot with file name {snapshot.image} containing object {target_obj_id}")
 
             # for debug

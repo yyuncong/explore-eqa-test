@@ -349,7 +349,7 @@ def main(cfg):
                         # save the image as 720 x 720
                         plt.imsave(
                             os.path.join(object_feature_save_dir, obs_file_name),
-                            np.asarray(Image.fromarray(annotated_image).resize((720, 720)))
+                            np.asarray(Image.fromarray(rgb[..., :3]).resize((720, 720)))
                         )
                         all_added_obj_ids += added_obj_ids
 

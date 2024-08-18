@@ -356,7 +356,10 @@ def main(cfg):
                     )
                     all_snapshot_features[obs_file_name] = img_feature.to("cpu")
                     rgb_egocentric_views_features.append(img_feature.to("cpu"))
-                    plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), rgb)
+                    if cfg.save_frontier_video or cfg.save_visualization:
+                        plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), annotated_rgb)
+                    else:
+                        plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), rgb)
                     all_added_obj_ids += added_obj_ids
 
                 # clean up or merge redundant objects periodically
@@ -444,11 +447,6 @@ def main(cfg):
                     frontier.image = f"{cnt_step}_{i}.png"
                     frontier.feature = img_feature
 
-            # if this is the last step, we force to choose a snapshot
-            if cnt_step == num_step - 1:
-                tsdf_planner.frontiers = []
-                logging.info(f"Force to choose a snapshot at the last step {cnt_step}!")
-
             if cfg.choose_every_step:
                 if tsdf_planner.max_point is not None and type(tsdf_planner.max_point) == Frontier:
                     # reset target point to allow the model to choose again
@@ -458,25 +456,29 @@ def main(cfg):
             if tsdf_planner.max_point is None and tsdf_planner.target_point is None:
                 # choose a frontier, and set it as the explore target
                 step_dict["frontiers"] = []
-                # since we skip the stuck frontier for input of the vlm, we need to map the
-                # vlm output frontier id to the tsdf planner frontier id
-                ft_id_to_vlm_id = {}
-                vlm_id_count = 0
-                for i, frontier in enumerate(tsdf_planner.frontiers):
-                    frontier_dict = {}
-                    pos_voxel = frontier.position
-                    pos_world = pos_voxel * tsdf_planner._voxel_size + tsdf_planner._vol_origin[:2]
-                    pos_world = pos_normal_to_habitat(np.append(pos_world, floor_height))
-                    frontier_dict["coordinate"] = pos_world.tolist()
-                    assert frontier.image is not None and frontier.feature is not None
-                    frontier_dict["rgb_feature"] = frontier.feature
-                    frontier_dict["rgb_id"] = frontier.image
 
-                    step_dict["frontiers"].append(frontier_dict)
+                if cnt_step == num_step - 20 or cnt_step == 50:
+                    pass
+                else:
+                    # since we skip the stuck frontier for input of the vlm, we need to map the
+                    # vlm output frontier id to the tsdf planner frontier id
+                    ft_id_to_vlm_id = {}
+                    vlm_id_count = 0
+                    for i, frontier in enumerate(tsdf_planner.frontiers):
+                        frontier_dict = {}
+                        pos_voxel = frontier.position
+                        pos_world = pos_voxel * tsdf_planner._voxel_size + tsdf_planner._vol_origin[:2]
+                        pos_world = pos_normal_to_habitat(np.append(pos_world, floor_height))
+                        frontier_dict["coordinate"] = pos_world.tolist()
+                        assert frontier.image is not None and frontier.feature is not None
+                        frontier_dict["rgb_feature"] = frontier.feature
+                        frontier_dict["rgb_id"] = frontier.image
 
-                    ft_id_to_vlm_id[i] = vlm_id_count
-                    vlm_id_count += 1
-                vlm_id_to_ft_id = {v: k for k, v in ft_id_to_vlm_id.items()}
+                        step_dict["frontiers"].append(frontier_dict)
+
+                        ft_id_to_vlm_id[i] = vlm_id_count
+                        vlm_id_count += 1
+                    vlm_id_to_ft_id = {v: k for k, v in ft_id_to_vlm_id.items()}
 
                 if cfg.egocentric_views:
                     assert len(rgb_egocentric_views_features) == total_views

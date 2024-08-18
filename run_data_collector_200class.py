@@ -53,8 +53,8 @@ def main(cfg):
     np.random.seed(cfg.seed)
 
     # load object detection model
-    detection_model_yoloworld = YOLOWorld(model_id=cfg.detection_model_name)
-    detection_model = YOLO('yolov8l-world.pt')  # yolov8x-world.pt
+    detection_model_yoloworld = YOLOWorld(model_id=cfg.yolo_world_model_name)
+    detection_model = YOLO(cfg.yolo_model_name)  # yolov8x-world.pt
 
     # load scannet 200 classes
     with open('data/scannet200_classes.txt', 'r') as f:
@@ -68,7 +68,8 @@ def main(cfg):
     questions_data = sorted(questions_data, key=lambda x: x["episode_history"])
     questions_data = questions_data[int(args.start * len(questions_data)):int(args.end * len(questions_data))]
     all_scene_list = list(set([q["episode_history"] for q in questions_data]))
-    all_scene_list = sorted(all_scene_list, key=lambda x: int(x.split("-")[0]))
+    # all_scene_list = sorted(all_scene_list, key=lambda x: int(x.split("-")[0]))
+    random.shuffle(all_scene_list)
     logging.info(f"Loaded {len(questions_data)} questions.")
 
     success_list = []
@@ -276,6 +277,7 @@ def main(cfg):
                     all_angles.append(main_angle)
 
                     # observe and update the TSDF
+                    all_added_obj_ids = []
                     for view_idx, ang in enumerate(all_angles):
                         agent_state.position = pts
                         agent_state.rotation = get_quaternion(ang, 0)
@@ -300,7 +302,7 @@ def main(cfg):
 
                         # construct an frequency count map of each semantic id to a unique id
                         obs_file_name = f"{cnt_step}-view_{view_idx}.png"
-                        object_added, annotated_image = tsdf_planner.update_scene_graph(
+                        added_obj_ids, annotated_image = tsdf_planner.update_scene_graph(
                             detection_model=detection_model,
                             rgb=rgb[..., :3],
                             semantic_obs=semantic_obs,
@@ -313,6 +315,7 @@ def main(cfg):
                             return_annotated=True
                         )
                         plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), annotated_image)
+                        all_added_obj_ids += added_obj_ids
 
                         # TSDF fusion
                         tsdf_planner.integrate(
@@ -326,27 +329,14 @@ def main(cfg):
                             explored_depth=cfg.explored_depth,
                         )
 
-                    if not cfg.incremental:
-                        tsdf_planner.update_snapshots(
-                            obj_id_to_bbox=object_id_to_bbox,
-                            obj_set=set(tsdf_planner.scene_graph_list),
-                            incremental=cfg.incremental,
-                        )
-                    else:
-                        # find the object ids that are within 2.5m away from the agent
-                        obj_ids = tsdf_planner.scene_graph_list.copy()[
-                            tsdf_planner.prev_scene_graph_length:
-                        ]
-                        for obj_id, obj in tsdf_planner.simple_scene_graph.items():
-                            if np.linalg.norm(obj.bbox_center - pts) < cfg.scene_graph.obj_include_dist:
-                                obj_ids.append(obj_id)
-                        tsdf_planner.update_snapshots(
-                            obj_id_to_bbox=object_id_to_bbox,
-                            obj_set=set(obj_ids),
-                            incremental=cfg.incremental,
-                        )
-                    tsdf_planner.prev_scene_graph_length = len(tsdf_planner.scene_graph_list)
-                    logging.info(f"Step {cnt_step} total objects: {len(tsdf_planner.simple_scene_graph)}, total snapshots: {len(tsdf_planner.snapshots)}")
+                    # cluster all the newly added objects
+                    all_added_obj_ids = [obj_id for obj_id in all_added_obj_ids if obj_id in tsdf_planner.simple_scene_graph]
+                    # as well as the objects nearby
+                    for obj_id, obj in tsdf_planner.simple_scene_graph.items():
+                        if np.linalg.norm(obj.bbox_center[[0, 2]] - pts[[0, 2]]) < cfg.scene_graph.obj_include_dist + 0.5:
+                            all_added_obj_ids.append(obj_id)
+                    tsdf_planner.update_snapshots(obj_ids=set(all_added_obj_ids))
+                    logging.info(f"Step {cnt_step} {len(tsdf_planner.simple_scene_graph)} objects, {len(tsdf_planner.snapshots)} snapshots")
 
                     update_success = tsdf_planner.update_frontier_map(pts=pts_normal, cfg=cfg.planner)
                     if not update_success:
@@ -425,51 +415,39 @@ def main(cfg):
                     pts_normal, angle, pts_pix, fig, path_points, target_arrived = return_values
 
                     # save snapshots
-                    # revise snapshot saving logic here
-                    #step_dict["snapshots"] = []
                     step_dict["snapshots"] = format_snapshot(tsdf_planner.snapshots.values(), tsdf_planner.simple_scene_graph)
-                    '''
-                    for snapshot in tsdf_planner.snapshots.values():
-                        step_dict["snapshots"].append(
-                            {
-                                "img_id": snapshot.image,
-                                "obj_ids": [int(obj_id) for obj_id in snapshot.cluster]
-                             }
-                        )
-                        step_dict["snapshots"].append(format_snapshot(snapshot, tsdf_planner.simple_scene_graph))
-                    '''
-                    # # tempt
-                    # step_dict["scene_graph_file2objs"] = {}
-                    # for obj_id, obj in tsdf_planner.simple_scene_graph.items():
-                    #     if obj.image not in step_dict["scene_graph_file2objs"]:
-                    #         step_dict["scene_graph_file2objs"][obj.image] = []
-                    #     step_dict["scene_graph_file2objs"][obj.image].append(
-                    #         f"{obj_id}: {object_id_to_name[obj_id]}"
-                    #     )
 
                     # sanity check
                     assert len(step_dict["snapshots"]) == len(tsdf_planner.snapshots), f"{len(step_dict['snapshots'])} != {len(tsdf_planner.snapshots)}"
+                    obj_exclude_count = sum([1 if sum(obj.classes.values()) < 2 else 0 for obj in tsdf_planner.simple_scene_graph.values()])
                     total_objs_count = sum(
                         [len(snapshot.cluster) for snapshot in tsdf_planner.snapshots.values()]
                     )
-                    assert len(tsdf_planner.simple_scene_graph) == total_objs_count, f"{len(tsdf_planner.simple_scene_graph)} != {total_objs_count}"
+                    assert len(tsdf_planner.simple_scene_graph) == total_objs_count + obj_exclude_count, f"{len(tsdf_planner.simple_scene_graph)} != {total_objs_count} + {obj_exclude_count}"
                     total_objs_count = sum(
                         [len(set(snapshot.cluster)) for snapshot in tsdf_planner.snapshots.values()]
                     )
-                    assert len(tsdf_planner.simple_scene_graph) == total_objs_count, f"{len(tsdf_planner.simple_scene_graph)} != {total_objs_count}"
+                    assert len(tsdf_planner.simple_scene_graph) == total_objs_count + obj_exclude_count, f"{len(tsdf_planner.simple_scene_graph)} != {total_objs_count} + {obj_exclude_count}"
                     for obj_id in tsdf_planner.simple_scene_graph.keys():
                         exist_count = 0
                         for ss in tsdf_planner.snapshots.values():
                             if obj_id in ss.cluster:
                                 exist_count += 1
-                        assert exist_count == 1, f"{exist_count} != 1 for obj_id {obj_id}, {object_id_to_name[obj_id]}"
+                        if sum(tsdf_planner.simple_scene_graph[obj_id].classes.values()) < 2:
+                            assert exist_count == 0, f"{exist_count} != 0 for obj_id {obj_id}"
+                        else:
+                            assert exist_count == 1, f"{exist_count} != 1 for obj_id {obj_id}"
                     for ss in tsdf_planner.snapshots.values():
-                        assert len(ss.cluster) == len(set(ss.cluster)), f"{ss.cluster} has duplicate objects"
-                        assert len(ss.full_obj_list.keys()) == len(set(ss.full_obj_list.keys())), f"{ss.full_obj_list} has duplicate objects"
+                        assert len(ss.cluster) == len(set(ss.cluster)), f"{ss.cluster} has duplicates"
+                        assert len(ss.full_obj_list.keys()) == len(set(ss.full_obj_list.keys())), f"{ss.full_obj_list.keys()} has duplicates"
                         for obj_id in ss.cluster:
-                            assert obj_id in ss.full_obj_list, f"{obj_id} not in {ss.full_obj_list}"
+                            assert obj_id in ss.full_obj_list, f"{obj_id} not in {ss.full_obj_list.keys()}"
                         for obj_id in ss.full_obj_list.keys():
                             assert obj_id in tsdf_planner.simple_scene_graph, f"{obj_id} not in scene graph"
+                    # check whether the snapshots in scene.snapshots and scene.frames are the same
+                    for file_name, ss in tsdf_planner.snapshots.items():
+                        assert ss.cluster == tsdf_planner.frames[file_name].cluster, f"{ss}\n!=\n{tsdf_planner.frames[file_name]}"
+                        assert ss.full_obj_list == tsdf_planner.frames[file_name].full_obj_list, f"{ss}\n==\n{tsdf_planner.frames[file_name]}"
 
                     # save the ground truth choice
                     if type(max_point_choice) == SnapShot:

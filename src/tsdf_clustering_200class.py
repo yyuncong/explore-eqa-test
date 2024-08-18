@@ -9,14 +9,12 @@ import copy
 from typing import List, Tuple, Optional, Dict, Union
 from dataclasses import dataclass, field
 import supervision as sv
-from PIL import Image
 import itertools
 
 from .geom import *
 from .habitat import pos_normal_to_habitat, pos_habitat_to_normal
 from .tsdf_new_base import TSDFPlannerBase
 from .hierarchy_clustering import SceneHierarchicalClustering
-from RAM.ram import get_transform
 from .detection_utils import detection_metric
 
 
@@ -95,10 +93,10 @@ class TSDFPlanner(TSDFPlannerBase):
         self.target_point: [np.ndarray] = None  # the corresponding navigable location of max_point. The agent goes to this point to observe the max_point
 
         self.simple_scene_graph: Dict[int, SceneGraphItem] = {}  # obj_id to object
-        self.scene_graph_list: List[int] = []
-        self.prev_scene_graph_length = 0
+
         self.snapshots: Dict[str, SnapShot] = {}  # filename to snapshot
         self.frames: Dict[str, SnapShot] = {}  # filename to frame
+
         self.frontiers: List[Frontier] = []
 
         self.clustering = SceneHierarchicalClustering(
@@ -132,9 +130,7 @@ class TSDFPlanner(TSDFPlannerBase):
         file_name,
         obs_point,  # position in habitat space
         return_annotated=False
-    ):
-        # no object added yet
-        object_added = False
+    ) -> Tuple[List[int], Optional[np.ndarray]]:
         # where the object id comes from?
         unique_obj_ids = np.unique(semantic_obs)
         class_to_obj_id = {}
@@ -154,9 +150,9 @@ class TSDFPlanner(TSDFPlannerBase):
         # no classes got?
         if len(all_classes_gt) == 0:
             if return_annotated:
-                return object_added, rgb
+                return [], rgb
             else:
-                return object_added
+                return [], None
 
         # get the detection results
         results = detection_model.predict(rgb, conf=cfg.confidence, verbose=False)
@@ -193,17 +189,17 @@ class TSDFPlanner(TSDFPlannerBase):
 
         # go through all groundtruth objects to see if they are correctly detected
         detected_class = []
+        new_obj_ids = []
         for obj_id in all_obj_id:
             if obj_id not in gt_obj_id_to_bbox.keys():
                     continue
-            #print(obj_id, " in the map")
             # skip objects that are too far away from agent
             bbox = np.asarray(gt_obj_id_to_bbox[obj_id]["bbox"])
             bbox_center = np.mean(bbox, axis=0)
             bbox_center = bbox_center[[0, 2, 1]]
             if np.linalg.norm(np.asarray([bbox_center[0] - obs_point[0], bbox_center[2] - obs_point[2]])) > cfg.obj_include_dist:
-                #print(obj_id , " too far away")
                 continue
+
             # start matching detection
             obj_x_start, obj_y_start = np.argwhere(semantic_obs == obj_id).min(axis=0)
             obj_x_end, obj_y_end = np.argwhere(semantic_obs == obj_id).max(axis=0)
@@ -232,9 +228,8 @@ class TSDFPlanner(TSDFPlannerBase):
                         classes={dinfo['class_name']:1},
                         gt_class = gt_obj_id_to_name[obj_id]
                     )
-                    if obj_id not in self.scene_graph_list:
-                        self.scene_graph_list.append(obj_id)
                     caption += "_N"   # denote that this object is newly added
+                    new_obj_ids.append(obj_id)
                 else:
                     # add the count of the recognized class
                     recognize_class = dinfo['class_name']
@@ -245,7 +240,6 @@ class TSDFPlanner(TSDFPlannerBase):
                     caption += f"_{sum(list(self.simple_scene_graph[obj_id].classes.values()))}"   # denote how many times this object is recognized
                 adopted_indices.append(matched_idx)
                 caption_list.append(caption)
-                object_added = True
                 current_obj_name, count = '',0
                 for class_name_,count_ in self.simple_scene_graph[obj_id].classes.items():
                     if count_ > count:
@@ -262,7 +256,7 @@ class TSDFPlanner(TSDFPlannerBase):
 
         if return_annotated:
             if len(adopted_indices) == 0:
-                return object_added, rgb
+                return new_obj_ids, rgb
 
             # filter out the detections that are not adopted
             detections = detections[adopted_indices]
@@ -275,82 +269,81 @@ class TSDFPlanner(TSDFPlannerBase):
             LABEL_ANNOTATOR = sv.LabelAnnotator(text_thickness=1, text_scale=0.25, text_color=sv.Color.BLACK)
             annotated_image = BOUNDING_BOX_ANNOTATOR.annotate(annotated_image, detections)
             annotated_image = LABEL_ANNOTATOR.annotate(annotated_image, detections)
-            return object_added, annotated_image
+            return new_obj_ids, annotated_image
         else:
-            return object_added
+            return new_obj_ids, None
 
-    def cleanup_empty_frames(self):
-        # remove the snapshots that have no selected objects
+    def cleanup_empty_frames_snapshots(self):
+        # remove the frame that have empty detected objects
         filtered_frames = {}
         for file_name, frame in self.frames.items():
             if len(frame.full_obj_list) > 0:
                 filtered_frames[file_name] = frame
         self.frames = filtered_frames
 
+        # remove the snapshots that have no cluster
+        filtered_snapshots = {}
+        for file_name, snapshot in self.snapshots.items():
+            if len(snapshot.cluster) > 0:
+                filtered_snapshots[file_name] = snapshot
+        self.snapshots = filtered_snapshots
+
     def update_snapshots(
         self,
-        obj_id_to_bbox,
-        obj_set,
-        incremental=False,
+        obj_ids,
     ):
-        self.cleanup_empty_frames()
+        self.cleanup_empty_frames_snapshots()
 
         prev_snapshots = copy.deepcopy(self.snapshots)
 
-        assert len(self.scene_graph_list[self.prev_scene_graph_length:]) + sum(
-            [len(snapshot.cluster) for snapshot in self.snapshots.values()]
-        ) == len(self.simple_scene_graph), f"{len(self.scene_graph_list[self.prev_scene_graph_length:])} + {sum([len(snapshot.cluster) for snapshot in self.snapshots.values()])} != {len(self.simple_scene_graph)}"
-
-        obj_ids = obj_set
-        if incremental:
-            obj_ids_temp = obj_ids.copy()
-            for key, snapshot in self.snapshots.items():
-                cluster = snapshot.cluster
-                if any([obj_id in obj_ids_temp for obj_id in cluster]):
-                    obj_ids = obj_ids.union(set(cluster))
-                    prev_snapshots.pop(key)
+        obj_ids_temp = obj_ids.copy()
+        for filename, snapshot in self.snapshots.items():
+            cluster = snapshot.cluster
+            if any([obj_id in obj_ids_temp for obj_id in cluster]):
+                obj_ids = obj_ids.union(set(cluster))
+                prev_snapshots.pop(filename)
         obj_ids = list(set(obj_ids))
+
+        # find and exclude the objects that have only one observation
+        obj_exclude = [obj_id for obj_id in self.simple_scene_graph.keys() if sum(list(self.simple_scene_graph[obj_id].classes.values())) < 2]
+        obj_ids = [obj_id for obj_id in obj_ids if obj_id not in obj_exclude]
 
         obj_centers = np.zeros((len(obj_ids), 2))
         for i, obj_id in enumerate(obj_ids):
-            bbox = obj_id_to_bbox[obj_id]["bbox"]
-            bbox = np.asarray(bbox)
-            bbox_center = np.mean(bbox, axis=0)
-            # change to x, z, y for habitat
-            bbox_center = bbox_center[[0, 1]]
-            obj_centers[i] = bbox_center
+            obj_centers[i] = self.simple_scene_graph[obj_id].bbox_center[[0, 2]]
 
         if len(obj_centers) == 0:
             return
 
-        if not incremental:
-            self.snapshots = self.clustering.fit(obj_centers, obj_ids, self.frames)
-        else:
-            snapshots = self.clustering.fit(obj_centers, obj_ids, self.frames)
-            assert len(
-                set([obj_id for snapshot in snapshots.values() for obj_id in snapshot.cluster])
-            ) == len(obj_ids), f"{len(set([obj_id for snapshot in snapshots.values() for obj_id in snapshot.cluster]))} != {len(obj_ids)}"
-            assert len(
-                set([obj_id for snapshot in snapshots.values() for obj_id in snapshot.cluster]).union(
-                    set([obj_id for snapshot in prev_snapshots.values() for obj_id in snapshot.cluster])
-                )
-            ) == len(self.scene_graph_list), f"{len(set([obj_id for snapshot in snapshots.values() for obj_id in snapshot.cluster]).union(set([obj_id for snapshot in self.snapshots.values() for obj_id in snapshot.cluster])))} != {len(self.scene_graph_list)}"
-    
-            for key, snapshot in snapshots.items():
-                if key in prev_snapshots.keys():
-                    prev_snapshots[key].cluster += snapshot.cluster
-                else:
-                    prev_snapshots[key] = snapshot
-            self.snapshots = prev_snapshots
+        new_snapshots = self.clustering.fit(obj_centers, obj_ids, self.frames)
+
+        prev_snapshot_objs = [obj_id for snapshot in prev_snapshots.values() for obj_id in snapshot.cluster]
+        assert set([obj_id for snapshot in new_snapshots.values() for obj_id in snapshot.cluster]) == set(obj_ids), f"{set([obj_id for snapshot in new_snapshots.values() for obj_id in snapshot.cluster])} != {set(obj_ids)}"
+        assert (set(obj_ids) & set(prev_snapshot_objs)) == set(), f"{set(obj_ids)} & {set(prev_snapshot_objs)} != empty"
+        assert (set(obj_ids) | set(prev_snapshot_objs) | set(obj_exclude)) == set(self.simple_scene_graph.keys()), f"{set(obj_ids)} | {set(prev_snapshot_objs)} | {set(obj_exclude)} != {set(self.simple_scene_graph.keys())}"
+
+        for key, snapshot in new_snapshots.items():
+            if key in prev_snapshots.keys():
+                prev_snapshots[key].cluster += snapshot.cluster
+            else:
+                prev_snapshots[key] = snapshot
+        self.snapshots = prev_snapshots
 
         # update the snapshot belonging of each object
         for file_name, snapshot in self.snapshots.items():
             for obj_id in snapshot.cluster:
                 self.simple_scene_graph[obj_id].image = file_name
 
+        # remove the duplicates caused by copying snapshots: self.frames and self.snapshots should point to the same object
+        for file_name, snapshot in self.snapshots.items():
+            self.frames[file_name] = snapshot
+
         # sanity check
         for obj_id, obj in self.simple_scene_graph.items():
-            assert obj.image is not None, f"{obj_id} has no image"
+            if sum(list(self.simple_scene_graph[obj_id].classes.values())) < 2:
+                assert obj.image is None, f"{obj_id} has only one detection but has image"
+            else:
+                assert obj.image is not None, f"{obj_id} has no image"
 
 
     def update_frontier_map(

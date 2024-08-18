@@ -214,27 +214,12 @@ class TSDFPlannerBase:
         pix_x, pix_y = pix[:, 0], pix[:, 1]
 
         # Eliminate pixels outside view frustum
-        valid_pix = np.logical_and(
-            pix_x >= 0,
-            np.logical_and(
-                pix_x < im_w,
-                np.logical_and(pix_y >= 0, np.logical_and(pix_y < im_h, pix_z > 0)),
-            ),
-        )
+        valid_pix = (pix_x >= 0) & (pix_x < im_w) & (pix_y >= 0) & (pix_y < im_h) & (pix_z > 0) & (pix_z < 5)
         depth_val = np.zeros(pix_x.shape)
         depth_val[valid_pix] = depth_im[pix_y[valid_pix], pix_x[valid_pix]]
 
         # narrow view
-        valid_pix_narrow = np.logical_and(
-            pix_x >= margin_w,
-            np.logical_and(
-                pix_x < (im_w - margin_w),
-                np.logical_and(
-                    pix_y >= margin_h,
-                    np.logical_and(pix_y < im_h, pix_z > 0),
-                ),
-            ),
-        )
+        valid_pix_narrow = (pix_x >= margin_w) & (pix_x < (im_w - margin_w)) & (pix_y >= margin_h) & (pix_y < im_h) & (pix_z > 0) & (pix_z < 5)
         depth_val_narrow = np.zeros(pix_x.shape)
         depth_val_narrow[valid_pix_narrow] = depth_im[
             pix_y[valid_pix_narrow], pix_x[valid_pix_narrow]

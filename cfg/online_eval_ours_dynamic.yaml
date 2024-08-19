@@ -10,6 +10,7 @@ path_data_dir: exploration_data_new
 question_file_path: generated_questions/generated_questions.json
 concept_graph_config_path: "conceptgraph/hydra_configs"
 concept_graph_config_name: "rerun_realtime_mapping"
+detection_class_path: "data/scannet200_classes.txt"
 
 visual_feature_size: 24
 patch_size: 8

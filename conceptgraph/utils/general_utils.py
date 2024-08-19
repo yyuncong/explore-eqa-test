@@ -610,12 +610,15 @@ class ObjectClasses:
         some_class_color = obj_classes.get_class_color(index or class_name)
     """
     def __init__(self, classes_file_path, bg_classes, skip_bg):
-        self.classes_file_path = Path('data/scannet200_classes.txt')
+        #self.classes_file_path = Path('data/scannet200_classes.txt')
+        self.classes_file_path = Path(classes_file_path)
+        # set up background classes and decide whether to skip them
         self.bg_classes = bg_classes
         self.skip_bg = skip_bg
         self.classes = self._load_or_create_colors()
 
     def _load_or_create_colors(self):
+        # load classes names
         with open(self.classes_file_path, "r") as f:
             # all_lines = [cls.strip() for cls in f.readlines()][1:]
             # all_classes = [line.split(',')[2].replace("\"", "") for line in all_lines]

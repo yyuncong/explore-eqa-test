@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=eval_cluster
-#SBATCH -o output/dynamic_%j.out
-#SBATCH -e output/dynamic_%j.err
+#SBATCH -o output/cluster_merge_%j.out
+#SBATCH -e output/cluster_merge_%j.err
 #SBATCH --mem=128G
 #SBATCH --nodes=1
 #SBATCH --time=08:00:00
@@ -18,4 +18,4 @@ conda activate explore-eqa
 # python online_evaluation_openeqa_new.py -cf cfg/online_eval_openeqa_new.yaml
 #python run_openeqa_clustering.py -cf cfg/openeqa_clustering.yaml
 #python online_evaluation_ours_new_1.py -cf cfg/online_eval_ours_new.yaml
-python online_evaluation_ours_clustering.py -cf cfg/online_eval_ours_clustering.yaml
+python online_evaluation_ours_dynamic.py -cf cfg/online_eval_ours_dynamic.yaml

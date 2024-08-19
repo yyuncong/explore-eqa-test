@@ -324,7 +324,8 @@ def main(cfg):
                             obs_point=pts,
                             return_annotated=True
                         )
-                        plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), rgb)
+                        #plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), rgb)
+                        plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), annotated_image)
 
                         # TSDF fusion
                         tsdf_planner.integrate(

@@ -238,6 +238,11 @@ def main(cfg):
 
         # Extract question
         scene_id = question_data["episode_history"]
+
+        if '00852' in scene_id:
+            logging.info(f"Skip scene 00852")
+            continue
+
         init_pts = question_data["position"]
         init_quat = quaternion.quaternion(*question_data["rotation"])
         logging.info(f"\n========\nIndex: {question_idx} Scene: {scene_id}")

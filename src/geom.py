@@ -544,6 +544,10 @@ def adjust_navigation_point(pos, occupied, max_dist=0.5, max_adjust_distance=0.3
         new_pos = new_pos - direction * step_size
         new_pos_int = np.round(new_pos).astype(int)
         new_occupied_point = get_nearest_true_point(new_pos_int, occupied)
+        if new_occupied_point is None:
+            # after the adjustment, the point is out of the map
+            # then just return the previous point
+            return np.round(new_pos + direction * step_size).astype(int)
         new_dist = np.linalg.norm(new_occupied_point - new_pos_int)
         if new_dist >= max_dist:
             break

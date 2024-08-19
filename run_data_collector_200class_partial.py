@@ -661,30 +661,30 @@ def main(cfg):
 
 
 
-
-                # remove unused snapshots and frontiers
-                all_info_paths = glob.glob(os.path.join(episode_data_dir, "*.json"))
-                all_info_paths = [pth for pth in all_info_paths if 'metadata' not in pth]
-                all_snapshots = []
-                all_frontiers = []
-                for pth in all_info_paths:
-                    step_data = json.load(open(pth, 'r'))
-                    all_snapshots += [item['img_id'] for item in step_data['snapshots']]
-                    all_frontiers += [item['rgb_id'] for item in step_data['frontiers']]
-                all_snapshots = set(all_snapshots)
-                all_frontiers = set(all_frontiers)
-                # remove unused snapshots
-                all_saved_snapshots = os.listdir(object_feature_save_dir)
-                for ss_id in all_saved_snapshots:
-                    ss_step = int(ss_id.split('-')[0])
-                    # only remove the unused snapshot collected during initialization
-                    if ss_step < initialize_step and ss_id not in all_snapshots:
-                        os.system(f"rm {os.path.join(object_feature_save_dir, ss_id)}")
-                # remove unused frontiers
-                all_saved_frontiers = os.listdir(episode_frontier_dir)
-                for ft_id in all_saved_frontiers:
-                    if ft_id not in all_frontiers:
-                        os.system(f"rm {os.path.join(episode_frontier_dir, ft_id)}")
+                if os.path.exists(episode_data_dir):
+                    # remove unused snapshots and frontiers
+                    all_info_paths = glob.glob(os.path.join(episode_data_dir, "*.json"))
+                    all_info_paths = [pth for pth in all_info_paths if 'metadata' not in pth]
+                    all_snapshots = []
+                    all_frontiers = []
+                    for pth in all_info_paths:
+                        step_data = json.load(open(pth, 'r'))
+                        all_snapshots += [item['img_id'] for item in step_data['snapshots']]
+                        all_frontiers += [item['rgb_id'] for item in step_data['frontiers']]
+                    all_snapshots = set(all_snapshots)
+                    all_frontiers = set(all_frontiers)
+                    # remove unused snapshots
+                    all_saved_snapshots = os.listdir(object_feature_save_dir)
+                    for ss_id in all_saved_snapshots:
+                        ss_step = int(ss_id.split('-')[0])
+                        # only remove the unused snapshot collected during initialization
+                        if ss_step < initialize_step and ss_id not in all_snapshots:
+                            os.system(f"rm {os.path.join(object_feature_save_dir, ss_id)}")
+                    # remove unused frontiers
+                    all_saved_frontiers = os.listdir(episode_frontier_dir)
+                    for ft_id in all_saved_frontiers:
+                        if ft_id not in all_frontiers:
+                            os.system(f"rm {os.path.join(episode_frontier_dir, ft_id)}")
 
                 # print the stats of total number of images
                 img_dict = {}

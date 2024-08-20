@@ -1,0 +1,2894 @@
+{
+    "6": {
+        "class_name": "picture",
+        "count": 3327
+    },
+    "10": {
+        "class_name": "pillow",
+        "count": 2927
+    },
+    "7": {
+        "class_name": "door",
+        "count": 2879
+    },
+    "13": {
+        "class_name": "lamp",
+        "count": 2683
+    },
+    "15": {
+        "class_name": "window",
+        "count": 2532
+    },
+    "12": {
+        "class_name": "cabinet",
+        "count": 2048
+    },
+    "0": {
+        "class_name": "ceiling lamp",
+        "count": 1943
+    },
+    "4": {
+        "class_name": "chair",
+        "count": 1847
+    },
+    "21": {
+        "class_name": "box",
+        "count": 1763
+    },
+    "34": {
+        "class_name": "book",
+        "count": 1738
+    },
+    "23": {
+        "class_name": "decoration",
+        "count": 1586
+    },
+    "28": {
+        "class_name": "shelf",
+        "count": 1081
+    },
+    "32": {
+        "class_name": "table",
+        "count": 1025
+    },
+    "44": {
+        "class_name": "mirror",
+        "count": 979
+    },
+    "76": {
+        "class_name": "curtain",
+        "count": 961
+    },
+    "64": {
+        "class_name": "kitchen cabinet",
+        "count": 874
+    },
+    "52": {
+        "class_name": "towel",
+        "count": 854
+    },
+    "5": {
+        "class_name": "painting",
+        "count": 809
+    },
+    "40": {
+        "class_name": "sink",
+        "count": 577
+    },
+    "173": {
+        "class_name": "clothes",
+        "count": 562
+    },
+    "9": {
+        "class_name": "bed",
+        "count": 559
+    },
+    "83": {
+        "class_name": "bag",
+        "count": 543
+    },
+    "142": {
+        "class_name": "plant",
+        "count": 541
+    },
+    "86": {
+        "class_name": "shoe",
+        "count": 516
+    },
+    "47": {
+        "class_name": "stairs",
+        "count": 513
+    },
+    "51": {
+        "class_name": "tap",
+        "count": 486
+    },
+    "80": {
+        "class_name": "cardboard box",
+        "count": 466
+    },
+    "25": {
+        "class_name": "toy",
+        "count": 462
+    },
+    "43": {
+        "class_name": "beam",
+        "count": 429
+    },
+    "49": {
+        "class_name": "toilet",
+        "count": 429
+    },
+    "36": {
+        "class_name": "basket",
+        "count": 376
+    },
+    "111": {
+        "class_name": "armchair",
+        "count": 374
+    },
+    "46": {
+        "class_name": "wall lamp",
+        "count": 371
+    },
+    "417": {
+        "class_name": "wall hanging decoration",
+        "count": 364
+    },
+    "8": {
+        "class_name": "drawer",
+        "count": 347
+    },
+    "45": {
+        "class_name": "wardrobe",
+        "count": 335
+    },
+    "129": {
+        "class_name": "vase",
+        "count": 324
+    },
+    "319": {
+        "class_name": "cushion",
+        "count": 319
+    },
+    "50": {
+        "class_name": "toilet paper",
+        "count": 317
+    },
+    "95": {
+        "class_name": "bottle",
+        "count": 313
+    },
+    "30": {
+        "class_name": "tv",
+        "count": 305
+    },
+    "591": {
+        "class_name": "product",
+        "count": 296
+    },
+    "17": {
+        "class_name": "desk",
+        "count": 284
+    },
+    "302": {
+        "class_name": "pipe",
+        "count": 284
+    },
+    "116": {
+        "class_name": "hanger",
+        "count": 275
+    },
+    "217": {
+        "class_name": "blinds",
+        "count": 275
+    },
+    "186": {
+        "class_name": "decorative plant",
+        "count": 271
+    },
+    "27": {
+        "class_name": "couch",
+        "count": 269
+    },
+    "82": {
+        "class_name": "container",
+        "count": 264
+    },
+    "14": {
+        "class_name": "appliance",
+        "count": 262
+    },
+    "130": {
+        "class_name": "flowerpot",
+        "count": 257
+    },
+    "210": {
+        "class_name": "trashcan",
+        "count": 256
+    },
+    "134": {
+        "class_name": "ventilation",
+        "count": 255
+    },
+    "196": {
+        "class_name": "photo",
+        "count": 251
+    },
+    "138": {
+        "class_name": "clutter",
+        "count": 250
+    },
+    "93": {
+        "class_name": "storage box",
+        "count": 249
+    },
+    "115": {
+        "class_name": "blanket",
+        "count": 248
+    },
+    "87": {
+        "class_name": "device",
+        "count": 244
+    },
+    "472": {
+        "class_name": "door knob",
+        "count": 241
+    },
+    "244": {
+        "class_name": "radiator",
+        "count": 237
+    },
+    "22": {
+        "class_name": "rack",
+        "count": 233
+    },
+    "35": {
+        "class_name": "stool",
+        "count": 233
+    },
+    "56": {
+        "class_name": "candle",
+        "count": 232
+    },
+    "389": {
+        "class_name": "support beam",
+        "count": 229
+    },
+    "55": {
+        "class_name": "dining chair",
+        "count": 224
+    },
+    "209": {
+        "class_name": "nightstand",
+        "count": 216
+    },
+    "131": {
+        "class_name": "ornament",
+        "count": 215
+    },
+    "328": {
+        "class_name": "window curtain",
+        "count": 212
+    },
+    "165": {
+        "class_name": "basket of something",
+        "count": 207
+    },
+    "582": {
+        "class_name": "light fixture",
+        "count": 194
+    },
+    "31": {
+        "class_name": "speaker",
+        "count": 186
+    },
+    "39": {
+        "class_name": "bathroom cabinet",
+        "count": 186
+    },
+    "70": {
+        "class_name": "kitchen appliance",
+        "count": 186
+    },
+    "120": {
+        "class_name": "curtain rod",
+        "count": 186
+    },
+    "41": {
+        "class_name": "bathroom accessory",
+        "count": 183
+    },
+    "322": {
+        "class_name": "towel bar",
+        "count": 180
+    },
+    "403": {
+        "class_name": "hanging clothes",
+        "count": 180
+    },
+    "294": {
+        "class_name": "plate",
+        "count": 179
+    },
+    "177": {
+        "class_name": "flower vase",
+        "count": 176
+    },
+    "218": {
+        "class_name": "window glass",
+        "count": 173
+    },
+    "220": {
+        "class_name": "kitchen lower cabinet",
+        "count": 171
+    },
+    "447": {
+        "class_name": "air vent",
+        "count": 168
+    },
+    "84": {
+        "class_name": "clock",
+        "count": 167
+    },
+    "3": {
+        "class_name": "heater",
+        "count": 163
+    },
+    "444": {
+        "class_name": "table lamp",
+        "count": 161
+    },
+    "1": {
+        "class_name": "vent",
+        "count": 158
+    },
+    "133": {
+        "class_name": "case",
+        "count": 158
+    },
+    "171": {
+        "class_name": "dresser",
+        "count": 158
+    },
+    "63": {
+        "class_name": "refrigerator",
+        "count": 154
+    },
+    "37": {
+        "class_name": "bathtub",
+        "count": 153
+    },
+    "136": {
+        "class_name": "board",
+        "count": 153
+    },
+    "169": {
+        "class_name": "flower",
+        "count": 152
+    },
+    "221": {
+        "class_name": "faucet",
+        "count": 151
+    },
+    "99": {
+        "class_name": "cup",
+        "count": 148
+    },
+    "152": {
+        "class_name": "jar",
+        "count": 146
+    },
+    "219": {
+        "class_name": "ceiling vent",
+        "count": 146
+    },
+    "2": {
+        "class_name": "fire alarm",
+        "count": 137
+    },
+    "151": {
+        "class_name": "bin",
+        "count": 137
+    },
+    "233": {
+        "class_name": "cosmetics",
+        "count": 136
+    },
+    "202": {
+        "class_name": "monitor",
+        "count": 135
+    },
+    "178": {
+        "class_name": "coffee table",
+        "count": 134
+    },
+    "231": {
+        "class_name": "bathroom utensil",
+        "count": 133
+    },
+    "287": {
+        "class_name": "bowl",
+        "count": 133
+    },
+    "283": {
+        "class_name": "cloth",
+        "count": 132
+    },
+    "317": {
+        "class_name": "can",
+        "count": 132
+    },
+    "128": {
+        "class_name": "microwave",
+        "count": 131
+    },
+    "373": {
+        "class_name": "cabinet door",
+        "count": 130
+    },
+    "222": {
+        "class_name": "bottle of detergent",
+        "count": 129
+    },
+    "190": {
+        "class_name": "telephone",
+        "count": 128
+    },
+    "61": {
+        "class_name": "kitchen counter",
+        "count": 126
+    },
+    "223": {
+        "class_name": "kitchen utensil",
+        "count": 126
+    },
+    "301": {
+        "class_name": "chest of drawers",
+        "count": 126
+    },
+    "237": {
+        "class_name": "fan",
+        "count": 122
+    },
+    "114": {
+        "class_name": "plush toy",
+        "count": 119
+    },
+    "277": {
+        "class_name": "glass",
+        "count": 119
+    },
+    "238": {
+        "class_name": "pot",
+        "count": 118
+    },
+    "358": {
+        "class_name": "sofa",
+        "count": 117
+    },
+    "132": {
+        "class_name": "tray",
+        "count": 116
+    },
+    "65": {
+        "class_name": "oven",
+        "count": 112
+    },
+    "267": {
+        "class_name": "pillar",
+        "count": 112
+    },
+    "194": {
+        "class_name": "dishwasher",
+        "count": 111
+    },
+    "320": {
+        "class_name": "sensor",
+        "count": 111
+    },
+    "330": {
+        "class_name": "bench",
+        "count": 111
+    },
+    "181": {
+        "class_name": "bedside lamp",
+        "count": 107
+    },
+    "227": {
+        "class_name": "wall electronics",
+        "count": 106
+    },
+    "465": {
+        "class_name": "shelving",
+        "count": 106
+    },
+    "125": {
+        "class_name": "washing machine",
+        "count": 104
+    },
+    "252": {
+        "class_name": "toilet brush",
+        "count": 104
+    },
+    "380": {
+        "class_name": "parapet",
+        "count": 104
+    },
+    "386": {
+        "class_name": "bucket",
+        "count": 104
+    },
+    "504": {
+        "class_name": "sign",
+        "count": 104
+    },
+    "67": {
+        "class_name": "kitchen countertop item",
+        "count": 103
+    },
+    "235": {
+        "class_name": "cosmetic",
+        "count": 103
+    },
+    "26": {
+        "class_name": "wall panel",
+        "count": 102
+    },
+    "236": {
+        "class_name": "sink cabinet",
+        "count": 102
+    },
+    "292": {
+        "class_name": "fireplace",
+        "count": 102
+    },
+    "137": {
+        "class_name": "paper",
+        "count": 101
+    },
+    "69": {
+        "class_name": "coffee machine",
+        "count": 100
+    },
+    "176": {
+        "class_name": "mat",
+        "count": 100
+    },
+    "457": {
+        "class_name": "ceiling fan",
+        "count": 100
+    },
+    "71": {
+        "class_name": "paper towel",
+        "count": 97
+    },
+    "127": {
+        "class_name": "liquid soap",
+        "count": 96
+    },
+    "242": {
+        "class_name": "side table",
+        "count": 96
+    },
+    "155": {
+        "class_name": "stack of papers",
+        "count": 95
+    },
+    "365": {
+        "class_name": "washbasin",
+        "count": 95
+    },
+    "29": {
+        "class_name": "alarm",
+        "count": 93
+    },
+    "375": {
+        "class_name": "smoke detector",
+        "count": 92
+    },
+    "245": {
+        "class_name": "stairs railing",
+        "count": 91
+    },
+    "341": {
+        "class_name": "keyboard",
+        "count": 90
+    },
+    "143": {
+        "class_name": "stand",
+        "count": 87
+    },
+    "214": {
+        "class_name": "toilet paper dispenser",
+        "count": 87
+    },
+    "94": {
+        "class_name": "tissue box",
+        "count": 85
+    },
+    "180": {
+        "class_name": "floor lamp",
+        "count": 85
+    },
+    "197": {
+        "class_name": "doormat",
+        "count": 85
+    },
+    "291": {
+        "class_name": "ventilation hood",
+        "count": 85
+    },
+    "140": {
+        "class_name": "bookshelf",
+        "count": 84
+    },
+    "135": {
+        "class_name": "hat",
+        "count": 83
+    },
+    "189": {
+        "class_name": "window shutter",
+        "count": 83
+    },
+    "38": {
+        "class_name": "shower cabin",
+        "count": 82
+    },
+    "97": {
+        "class_name": "soap dispenser",
+        "count": 82
+    },
+    "261": {
+        "class_name": "handrail",
+        "count": 82
+    },
+    "187": {
+        "class_name": "chandelier",
+        "count": 81
+    },
+    "256": {
+        "class_name": "shower curtain",
+        "count": 81
+    },
+    "248": {
+        "class_name": "curtain rail",
+        "count": 80
+    },
+    "66": {
+        "class_name": "countertop",
+        "count": 79
+    },
+    "191": {
+        "class_name": "bed table",
+        "count": 78
+    },
+    "366": {
+        "class_name": "photo mount",
+        "count": 78
+    },
+    "520": {
+        "class_name": "decor",
+        "count": 74
+    },
+    "24": {
+        "class_name": "printer",
+        "count": 73
+    },
+    "247": {
+        "class_name": "wall board",
+        "count": 72
+    },
+    "263": {
+        "class_name": "stair step",
+        "count": 72
+    },
+    "565": {
+        "class_name": "ceiling light",
+        "count": 71
+    },
+    "174": {
+        "class_name": "railing",
+        "count": 70
+    },
+    "72": {
+        "class_name": "stove",
+        "count": 69
+    },
+    "118": {
+        "class_name": "pouffe",
+        "count": 69
+    },
+    "300": {
+        "class_name": "door window",
+        "count": 69
+    },
+    "450": {
+        "class_name": "decorative plate",
+        "count": 68
+    },
+    "350": {
+        "class_name": "tool",
+        "count": 67
+    },
+    "59": {
+        "class_name": "display cabinet",
+        "count": 65
+    },
+    "308": {
+        "class_name": "brochure",
+        "count": 65
+    },
+    "18": {
+        "class_name": "desk chair",
+        "count": 64
+    },
+    "121": {
+        "class_name": "wall clock",
+        "count": 64
+    },
+    "600": {
+        "class_name": "doorpost",
+        "count": 64
+    },
+    "665": {
+        "class_name": "strings",
+        "count": 64
+    },
+    "705": {
+        "class_name": "display",
+        "count": 64
+    },
+    "290": {
+        "class_name": "seat",
+        "count": 63
+    },
+    "207": {
+        "class_name": "floor mat",
+        "count": 61
+    },
+    "254": {
+        "class_name": "clothes hanger",
+        "count": 61
+    },
+    "271": {
+        "class_name": "sofa chair",
+        "count": 61
+    },
+    "701": {
+        "class_name": "cabinet /otherroom",
+        "count": 61
+    },
+    "148": {
+        "class_name": "shampoo",
+        "count": 60
+    },
+    "172": {
+        "class_name": "chest",
+        "count": 60
+    },
+    "408": {
+        "class_name": "shelf with clutter",
+        "count": 60
+    },
+    "460": {
+        "class_name": "magazine",
+        "count": 60
+    },
+    "68": {
+        "class_name": "kettle",
+        "count": 59
+    },
+    "147": {
+        "class_name": "bathroom shelf",
+        "count": 59
+    },
+    "433": {
+        "class_name": "binder",
+        "count": 59
+    },
+    "157": {
+        "class_name": "tool box",
+        "count": 58
+    },
+    "145": {
+        "class_name": "vacuum cleaner",
+        "count": 57
+    },
+    "411": {
+        "class_name": "partition",
+        "count": 57
+    },
+    "475": {
+        "class_name": "statue",
+        "count": 57
+    },
+    "85": {
+        "class_name": "laptop",
+        "count": 56
+    },
+    "146": {
+        "class_name": "bathroom towel",
+        "count": 56
+    },
+    "246": {
+        "class_name": "banister",
+        "count": 56
+    },
+    "538": {
+        "class_name": "shower dial",
+        "count": 56
+    },
+    "636": {
+        "class_name": "ceiling light fixture connection",
+        "count": 55
+    },
+    "206": {
+        "class_name": "laundry basket",
+        "count": 54
+    },
+    "273": {
+        "class_name": "ladder",
+        "count": 54
+    },
+    "288": {
+        "class_name": "bar",
+        "count": 54
+    },
+    "307": {
+        "class_name": "showerhead",
+        "count": 54
+    },
+    "359": {
+        "class_name": "window shade",
+        "count": 54
+    },
+    "454": {
+        "class_name": "storage bin",
+        "count": 54
+    },
+    "226": {
+        "class_name": "oven and stove",
+        "count": 53
+    },
+    "303": {
+        "class_name": "closet",
+        "count": 53
+    },
+    "550": {
+        "class_name": "magazines",
+        "count": 53
+    },
+    "79": {
+        "class_name": "stuffed animal",
+        "count": 52
+    },
+    "284": {
+        "class_name": "washing stuff",
+        "count": 52
+    },
+    "315": {
+        "class_name": "bar chair",
+        "count": 52
+    },
+    "426": {
+        "class_name": "electric box",
+        "count": 52
+    },
+    "57": {
+        "class_name": "air conditioner",
+        "count": 51
+    },
+    "276": {
+        "class_name": "trash can",
+        "count": 51
+    },
+    "304": {
+        "class_name": "office chair",
+        "count": 51
+    },
+    "313": {
+        "class_name": "remote control",
+        "count": 51
+    },
+    "91": {
+        "class_name": "bath towel",
+        "count": 50
+    },
+    "163": {
+        "class_name": "broom",
+        "count": 50
+    },
+    "651": {
+        "class_name": "stack of books",
+        "count": 50
+    },
+    "655": {
+        "class_name": "price tag",
+        "count": 50
+    },
+    "363": {
+        "class_name": "wash cabinet",
+        "count": 49
+    },
+    "54": {
+        "class_name": "dining table",
+        "count": 48
+    },
+    "474": {
+        "class_name": "ceiling lower",
+        "count": 48
+    },
+    "588": {
+        "class_name": "jewelry",
+        "count": 47
+    },
+    "98": {
+        "class_name": "soap",
+        "count": 46
+    },
+    "126": {
+        "class_name": "toaster",
+        "count": 46
+    },
+    "188": {
+        "class_name": "light",
+        "count": 46
+    },
+    "351": {
+        "class_name": "candle holder",
+        "count": 46
+    },
+    "494": {
+        "class_name": "closet door",
+        "count": 46
+    },
+    "53": {
+        "class_name": "step",
+        "count": 45
+    },
+    "124": {
+        "class_name": "wall cabinet",
+        "count": 45
+    },
+    "468": {
+        "class_name": "poster",
+        "count": 45
+    },
+    "141": {
+        "class_name": "tv stand",
+        "count": 44
+    },
+    "11": {
+        "class_name": "sculpture",
+        "count": 43
+    },
+    "388": {
+        "class_name": "shade",
+        "count": 43
+    },
+    "409": {
+        "class_name": "machine",
+        "count": 43
+    },
+    "566": {
+        "class_name": "staircase handrail",
+        "count": 43
+    },
+    "109": {
+        "class_name": "guitar",
+        "count": 41
+    },
+    "193": {
+        "class_name": "kitchen island",
+        "count": 41
+    },
+    "279": {
+        "class_name": "kitchen shelf",
+        "count": 41
+    },
+    "346": {
+        "class_name": "fire extinguisher",
+        "count": 41
+    },
+    "385": {
+        "class_name": "throw blanket",
+        "count": 41
+    },
+    "683": {
+        "class_name": "gym equipment",
+        "count": 41
+    },
+    "250": {
+        "class_name": "cutting board",
+        "count": 40
+    },
+    "514": {
+        "class_name": "column",
+        "count": 40
+    },
+    "77": {
+        "class_name": "radio",
+        "count": 39
+    },
+    "265": {
+        "class_name": "laundry machine",
+        "count": 39
+    },
+    "383": {
+        "class_name": "pad",
+        "count": 39
+    },
+    "461": {
+        "class_name": "paneling",
+        "count": 39
+    },
+    "541": {
+        "class_name": "figure",
+        "count": 39
+    },
+    "89": {
+        "class_name": "computer mouse",
+        "count": 38
+    },
+    "107": {
+        "class_name": "calendar",
+        "count": 38
+    },
+    "361": {
+        "class_name": "bottles",
+        "count": 38
+    },
+    "19": {
+        "class_name": "folder",
+        "count": 37
+    },
+    "42": {
+        "class_name": "shower hose/head",
+        "count": 37
+    },
+    "469": {
+        "class_name": "document",
+        "count": 37
+    },
+    "580": {
+        "class_name": "sunbed",
+        "count": 37
+    },
+    "677": {
+        "class_name": "book display",
+        "count": 37
+    },
+    "149": {
+        "class_name": "shower tap",
+        "count": 36
+    },
+    "184": {
+        "class_name": "led tv",
+        "count": 36
+    },
+    "718": {
+        "class_name": "rafter",
+        "count": 36
+    },
+    "88": {
+        "class_name": "newspaper",
+        "count": 35
+    },
+    "123": {
+        "class_name": "kitchen top",
+        "count": 35
+    },
+    "161": {
+        "class_name": "food",
+        "count": 35
+    },
+    "310": {
+        "class_name": "shower knob",
+        "count": 35
+    },
+    "451": {
+        "class_name": "pile of magazines",
+        "count": 35
+    },
+    "467": {
+        "class_name": "boxes",
+        "count": 35
+    },
+    "512": {
+        "class_name": "electrical controller",
+        "count": 35
+    },
+    "48": {
+        "class_name": "balustrade",
+        "count": 34
+    },
+    "311": {
+        "class_name": "bathroom counter",
+        "count": 34
+    },
+    "343": {
+        "class_name": "alarm clock",
+        "count": 34
+    },
+    "101": {
+        "class_name": "soap bottle",
+        "count": 33
+    },
+    "150": {
+        "class_name": "brush",
+        "count": 33
+    },
+    "333": {
+        "class_name": "knife holder",
+        "count": 33
+    },
+    "446": {
+        "class_name": "wall sign",
+        "count": 33
+    },
+    "515": {
+        "class_name": "arch",
+        "count": 33
+    },
+    "96": {
+        "class_name": "bottle of soap",
+        "count": 32
+    },
+    "102": {
+        "class_name": "shower",
+        "count": 32
+    },
+    "153": {
+        "class_name": "jacket",
+        "count": 32
+    },
+    "354": {
+        "class_name": "fridge",
+        "count": 32
+    },
+    "441": {
+        "class_name": "bowl of fruit",
+        "count": 32
+    },
+    "33": {
+        "class_name": "book rack",
+        "count": 31
+    },
+    "281": {
+        "class_name": "teapot",
+        "count": 31
+    },
+    "306": {
+        "class_name": "bath sink",
+        "count": 31
+    },
+    "394": {
+        "class_name": "ceiling under stairs",
+        "count": 31
+    },
+    "117": {
+        "class_name": "backpack",
+        "count": 30
+    },
+    "360": {
+        "class_name": "amplifier",
+        "count": 30
+    },
+    "573": {
+        "class_name": "kitchen decoration",
+        "count": 30
+    },
+    "159": {
+        "class_name": "range hood",
+        "count": 29
+    },
+    "471": {
+        "class_name": "electric guitar",
+        "count": 29
+    },
+    "104": {
+        "class_name": "box of tissues",
+        "count": 28
+    },
+    "162": {
+        "class_name": "handle",
+        "count": 28
+    },
+    "272": {
+        "class_name": "roof",
+        "count": 28
+    },
+    "323": {
+        "class_name": "bath cabinet",
+        "count": 28
+    },
+    "331": {
+        "class_name": "stack of clothes",
+        "count": 28
+    },
+    "337": {
+        "class_name": "wood",
+        "count": 28
+    },
+    "367": {
+        "class_name": "mouse",
+        "count": 28
+    },
+    "372": {
+        "class_name": "table cloth",
+        "count": 28
+    },
+    "432": {
+        "class_name": "bouquet",
+        "count": 28
+    },
+    "480": {
+        "class_name": "ceiling pipe",
+        "count": 28
+    },
+    "510": {
+        "class_name": "note",
+        "count": 28
+    },
+    "540": {
+        "class_name": "umbrella",
+        "count": 28
+    },
+    "712": {
+        "class_name": "snack",
+        "count": 28
+    },
+    "112": {
+        "class_name": "casket",
+        "count": 27
+    },
+    "166": {
+        "class_name": "storage cabinet",
+        "count": 27
+    },
+    "420": {
+        "class_name": "sliding door",
+        "count": 27
+    },
+    "452": {
+        "class_name": "handbag",
+        "count": 27
+    },
+    "100": {
+        "class_name": "shower soap shelf",
+        "count": 26
+    },
+    "154": {
+        "class_name": "computer",
+        "count": 26
+    },
+    "168": {
+        "class_name": "desk lamp",
+        "count": 26
+    },
+    "251": {
+        "class_name": "shower bar",
+        "count": 26
+    },
+    "275": {
+        "class_name": "shower hose",
+        "count": 26
+    },
+    "309": {
+        "class_name": "bath faucet",
+        "count": 26
+    },
+    "445": {
+        "class_name": "switch",
+        "count": 26
+    },
+    "481": {
+        "class_name": "crate",
+        "count": 26
+    },
+    "639": {
+        "class_name": "artwork",
+        "count": 26
+    },
+    "643": {
+        "class_name": "door hinge",
+        "count": 26
+    },
+    "160": {
+        "class_name": "scale",
+        "count": 25
+    },
+    "224": {
+        "class_name": "kitchen countertop items",
+        "count": 25
+    },
+    "253": {
+        "class_name": "attic door",
+        "count": 25
+    },
+    "286": {
+        "class_name": "ironing board",
+        "count": 25
+    },
+    "485": {
+        "class_name": "vessel",
+        "count": 25
+    },
+    "501": {
+        "class_name": "notes",
+        "count": 25
+    },
+    "679": {
+        "class_name": "can of paint",
+        "count": 25
+    },
+    "113": {
+        "class_name": "ball",
+        "count": 24
+    },
+    "179": {
+        "class_name": "sofa seat",
+        "count": 24
+    },
+    "212": {
+        "class_name": "bath",
+        "count": 24
+    },
+    "347": {
+        "class_name": "garage door",
+        "count": 24
+    },
+    "438": {
+        "class_name": "bath mat",
+        "count": 24
+    },
+    "666": {
+        "class_name": "products",
+        "count": 24
+    },
+    "249": {
+        "class_name": "furnace",
+        "count": 23
+    },
+    "321": {
+        "class_name": "shower handle",
+        "count": 23
+    },
+    "325": {
+        "class_name": "candlestick",
+        "count": 23
+    },
+    "371": {
+        "class_name": "bedside cabinet",
+        "count": 23
+    },
+    "435": {
+        "class_name": "worktop",
+        "count": 23
+    },
+    "456": {
+        "class_name": "curtain bar",
+        "count": 23
+    },
+    "576": {
+        "class_name": "door cabinet",
+        "count": 23
+    },
+    "156": {
+        "class_name": "computer desk",
+        "count": 22
+    },
+    "229": {
+        "class_name": "washer-dryer",
+        "count": 22
+    },
+    "314": {
+        "class_name": "cooker",
+        "count": 22
+    },
+    "338": {
+        "class_name": "stack of towels",
+        "count": 22
+    },
+    "430": {
+        "class_name": "sliding glass door",
+        "count": 22
+    },
+    "555": {
+        "class_name": "kitchen cabinet lower",
+        "count": 22
+    },
+    "676": {
+        "class_name": "hunting trophy",
+        "count": 22
+    },
+    "74": {
+        "class_name": "kitchen extractor",
+        "count": 21
+    },
+    "204": {
+        "class_name": "patio chair",
+        "count": 21
+    },
+    "239": {
+        "class_name": "wall tv",
+        "count": 21
+    },
+    "258": {
+        "class_name": "screen",
+        "count": 21
+    },
+    "270": {
+        "class_name": "clothes rack",
+        "count": 21
+    },
+    "274": {
+        "class_name": "bed stand",
+        "count": 21
+    },
+    "349": {
+        "class_name": "garage door railing",
+        "count": 21
+    },
+    "368": {
+        "class_name": "dumbbell",
+        "count": 21
+    },
+    "398": {
+        "class_name": "wall toilet paper",
+        "count": 21
+    },
+    "399": {
+        "class_name": "shower rail",
+        "count": 21
+    },
+    "401": {
+        "class_name": "clothes dryer",
+        "count": 21
+    },
+    "422": {
+        "class_name": "cuddly toy",
+        "count": 21
+    },
+    "527": {
+        "class_name": "shoe case",
+        "count": 21
+    },
+    "537": {
+        "class_name": "thermostat",
+        "count": 21
+    },
+    "548": {
+        "class_name": "ottoman",
+        "count": 21
+    },
+    "558": {
+        "class_name": "panel",
+        "count": 21
+    },
+    "617": {
+        "class_name": "smoke alarm",
+        "count": 21
+    },
+    "721": {
+        "class_name": "kitchen cabinet door",
+        "count": 21
+    },
+    "144": {
+        "class_name": "l-shaped sofa",
+        "count": 20
+    },
+    "167": {
+        "class_name": "air conditioning",
+        "count": 20
+    },
+    "195": {
+        "class_name": "coffee mug",
+        "count": 20
+    },
+    "413": {
+        "class_name": "hose",
+        "count": 20
+    },
+    "448": {
+        "class_name": "piano",
+        "count": 20
+    },
+    "482": {
+        "class_name": "fire detector",
+        "count": 20
+    },
+    "531": {
+        "class_name": "electrical box",
+        "count": 20
+    },
+    "710": {
+        "class_name": "exhibition window",
+        "count": 20
+    },
+    "62": {
+        "class_name": "refrigerator cabinet",
+        "count": 19
+    },
+    "81": {
+        "class_name": "globe",
+        "count": 19
+    },
+    "240": {
+        "class_name": "bicycle",
+        "count": 19
+    },
+    "339": {
+        "class_name": "soap dish",
+        "count": 19
+    },
+    "402": {
+        "class_name": "exercise ball",
+        "count": 19
+    },
+    "462": {
+        "class_name": "exercise machine",
+        "count": 19
+    },
+    "470": {
+        "class_name": "papers",
+        "count": 19
+    },
+    "483": {
+        "class_name": "clothes hanger rod",
+        "count": 19
+    },
+    "491": {
+        "class_name": "utensil",
+        "count": 19
+    },
+    "525": {
+        "class_name": "light switch",
+        "count": 19
+    },
+    "563": {
+        "class_name": "flatware",
+        "count": 19
+    },
+    "624": {
+        "class_name": "dvd",
+        "count": 19
+    },
+    "170": {
+        "class_name": "flower stand",
+        "count": 18
+    },
+    "182": {
+        "class_name": "footrest",
+        "count": 18
+    },
+    "262": {
+        "class_name": "stair",
+        "count": 18
+    },
+    "280": {
+        "class_name": "recycle bin",
+        "count": 18
+    },
+    "345": {
+        "class_name": "boiler",
+        "count": 18
+    },
+    "378": {
+        "class_name": "wine bottle",
+        "count": 18
+    },
+    "455": {
+        "class_name": "bath utensil",
+        "count": 18
+    },
+    "484": {
+        "class_name": "sconce",
+        "count": 18
+    },
+    "487": {
+        "class_name": "bathrobe",
+        "count": 18
+    },
+    "581": {
+        "class_name": "closet rod",
+        "count": 18
+    },
+    "621": {
+        "class_name": "pen",
+        "count": 18
+    },
+    "623": {
+        "class_name": "stationery",
+        "count": 18
+    },
+    "658": {
+        "class_name": "product box",
+        "count": 18
+    },
+    "703": {
+        "class_name": "cabinet drawer",
+        "count": 18
+    },
+    "713": {
+        "class_name": "lace doily",
+        "count": 18
+    },
+    "90": {
+        "class_name": "doll",
+        "count": 17
+    },
+    "119": {
+        "class_name": "drum",
+        "count": 17
+    },
+    "122": {
+        "class_name": "stovetop",
+        "count": 17
+    },
+    "199": {
+        "class_name": "fruit",
+        "count": 17
+    },
+    "234": {
+        "class_name": "bathtub utensil",
+        "count": 17
+    },
+    "243": {
+        "class_name": "desk clutter",
+        "count": 17
+    },
+    "260": {
+        "class_name": "ceiling dome",
+        "count": 17
+    },
+    "299": {
+        "class_name": "window shutters",
+        "count": 17
+    },
+    "327": {
+        "class_name": "rail",
+        "count": 17
+    },
+    "356": {
+        "class_name": "exercise equipment",
+        "count": 17
+    },
+    "376": {
+        "class_name": "camera",
+        "count": 17
+    },
+    "442": {
+        "class_name": "coffee maker",
+        "count": 17
+    },
+    "571": {
+        "class_name": "box with books",
+        "count": 17
+    },
+    "592": {
+        "class_name": "wall hanger",
+        "count": 17
+    },
+    "595": {
+        "class_name": "shutter",
+        "count": 17
+    },
+    "16": {
+        "class_name": "sheet",
+        "count": 16
+    },
+    "164": {
+        "class_name": "shovel",
+        "count": 16
+    },
+    "200": {
+        "class_name": "mug",
+        "count": 16
+    },
+    "208": {
+        "class_name": "lamp table",
+        "count": 16
+    },
+    "285": {
+        "class_name": "mop",
+        "count": 16
+    },
+    "443": {
+        "class_name": "shower curtain rod",
+        "count": 16
+    },
+    "497": {
+        "class_name": "rocking chair",
+        "count": 16
+    },
+    "509": {
+        "class_name": "exit sign",
+        "count": 16
+    },
+    "523": {
+        "class_name": "bags",
+        "count": 16
+    },
+    "542": {
+        "class_name": "holy cross",
+        "count": 16
+    },
+    "556": {
+        "class_name": "jug",
+        "count": 16
+    },
+    "560": {
+        "class_name": "stone support structure",
+        "count": 16
+    },
+    "108": {
+        "class_name": "cart",
+        "count": 15
+    },
+    "211": {
+        "class_name": "diploma",
+        "count": 15
+    },
+    "228": {
+        "class_name": "socket",
+        "count": 15
+    },
+    "282": {
+        "class_name": "ceiling door",
+        "count": 15
+    },
+    "298": {
+        "class_name": "folding chair",
+        "count": 15
+    },
+    "392": {
+        "class_name": "staircase trim",
+        "count": 15
+    },
+    "405": {
+        "class_name": "storage shelving",
+        "count": 15
+    },
+    "418": {
+        "class_name": "spice rack",
+        "count": 15
+    },
+    "431": {
+        "class_name": "computer equipment",
+        "count": 15
+    },
+    "486": {
+        "class_name": "bidet",
+        "count": 15
+    },
+    "495": {
+        "class_name": "lounge chair",
+        "count": 15
+    },
+    "500": {
+        "class_name": "luggage",
+        "count": 15
+    },
+    "507": {
+        "class_name": "cover",
+        "count": 15
+    },
+    "508": {
+        "class_name": "fire sprinkler",
+        "count": 15
+    },
+    "511": {
+        "class_name": "keys",
+        "count": 15
+    },
+    "564": {
+        "class_name": "ceiling window",
+        "count": 15
+    },
+    "589": {
+        "class_name": "ledge",
+        "count": 15
+    },
+    "58": {
+        "class_name": "duct",
+        "count": 14
+    },
+    "105": {
+        "class_name": "cardboard",
+        "count": 14
+    },
+    "213": {
+        "class_name": "box of tissue",
+        "count": 14
+    },
+    "255": {
+        "class_name": "shower door",
+        "count": 14
+    },
+    "266": {
+        "class_name": "toilet brush holder",
+        "count": 14
+    },
+    "268": {
+        "class_name": "bathtub platform",
+        "count": 14
+    },
+    "278": {
+        "class_name": "door/window",
+        "count": 14
+    },
+    "296": {
+        "class_name": "firewood",
+        "count": 14
+    },
+    "362": {
+        "class_name": "countertop item",
+        "count": 14
+    },
+    "407": {
+        "class_name": "doorstep",
+        "count": 14
+    },
+    "416": {
+        "class_name": "locker",
+        "count": 14
+    },
+    "493": {
+        "class_name": "end table",
+        "count": 14
+    },
+    "498": {
+        "class_name": "flag",
+        "count": 14
+    },
+    "499": {
+        "class_name": "shower tub",
+        "count": 14
+    },
+    "503": {
+        "class_name": "cap",
+        "count": 14
+    },
+    "528": {
+        "class_name": "mascot",
+        "count": 14
+    },
+    "549": {
+        "class_name": "shower shelf",
+        "count": 14
+    },
+    "554": {
+        "class_name": "decorative dinnerware",
+        "count": 14
+    },
+    "609": {
+        "class_name": "knob",
+        "count": 14
+    },
+    "644": {
+        "class_name": "object",
+        "count": 14
+    },
+    "681": {
+        "class_name": "washing powder",
+        "count": 14
+    },
+    "689": {
+        "class_name": "security camera",
+        "count": 14
+    },
+    "704": {
+        "class_name": "kitchen cabinet drawer",
+        "count": 14
+    },
+    "175": {
+        "class_name": "bedside table",
+        "count": 13
+    },
+    "215": {
+        "class_name": "hand soap",
+        "count": 13
+    },
+    "295": {
+        "class_name": "plate of food",
+        "count": 13
+    },
+    "332": {
+        "class_name": "figurine",
+        "count": 13
+    },
+    "335": {
+        "class_name": "dish",
+        "count": 13
+    },
+    "352": {
+        "class_name": "closet shelf",
+        "count": 13
+    },
+    "453": {
+        "class_name": "motion detector",
+        "count": 13
+    },
+    "473": {
+        "class_name": "porcelain",
+        "count": 13
+    },
+    "597": {
+        "class_name": "doorway",
+        "count": 13
+    },
+    "611": {
+        "class_name": "robe",
+        "count": 13
+    },
+    "613": {
+        "class_name": "dog bed",
+        "count": 13
+    },
+    "622": {
+        "class_name": "identifier",
+        "count": 13
+    },
+    "640": {
+        "class_name": "media console",
+        "count": 13
+    },
+    "645": {
+        "class_name": "air duct",
+        "count": 13
+    },
+    "692": {
+        "class_name": "tank",
+        "count": 13
+    },
+    "698": {
+        "class_name": "containers",
+        "count": 13
+    },
+    "73": {
+        "class_name": "dishrag",
+        "count": 12
+    },
+    "183": {
+        "class_name": "door stopper",
+        "count": 12
+    },
+    "198": {
+        "class_name": "decorative bowl",
+        "count": 12
+    },
+    "297": {
+        "class_name": "fireplace tool set",
+        "count": 12
+    },
+    "395": {
+        "class_name": "toothbrush",
+        "count": 12
+    },
+    "404": {
+        "class_name": "coat hanger",
+        "count": 12
+    },
+    "419": {
+        "class_name": "knife",
+        "count": 12
+    },
+    "429": {
+        "class_name": "electric outlet",
+        "count": 12
+    },
+    "502": {
+        "class_name": "dustbin",
+        "count": 12
+    },
+    "546": {
+        "class_name": "small table/stand",
+        "count": 12
+    },
+    "583": {
+        "class_name": "lampshade",
+        "count": 12
+    },
+    "601": {
+        "class_name": "outlet",
+        "count": 12
+    },
+    "610": {
+        "class_name": "towel ring",
+        "count": 12
+    },
+    "632": {
+        "class_name": "furniture",
+        "count": 12
+    },
+    "678": {
+        "class_name": "heater piping",
+        "count": 12
+    },
+    "682": {
+        "class_name": "boxes with books",
+        "count": 12
+    },
+    "708": {
+        "class_name": "ceiling arch",
+        "count": 12
+    },
+    "92": {
+        "class_name": "platform",
+        "count": 11
+    },
+    "110": {
+        "class_name": "crib",
+        "count": 11
+    },
+    "192": {
+        "class_name": "perfume",
+        "count": 11
+    },
+    "216": {
+        "class_name": "shower-bath cabinet",
+        "count": 11
+    },
+    "230": {
+        "class_name": "hot water/cold water knob",
+        "count": 11
+    },
+    "259": {
+        "class_name": "ceiling duct",
+        "count": 11
+    },
+    "264": {
+        "class_name": "fluorescent light",
+        "count": 11
+    },
+    "293": {
+        "class_name": "fireplace utensil",
+        "count": 11
+    },
+    "382": {
+        "class_name": "rope",
+        "count": 11
+    },
+    "415": {
+        "class_name": "fuse box",
+        "count": 11
+    },
+    "434": {
+        "class_name": "plates",
+        "count": 11
+    },
+    "466": {
+        "class_name": "bar cabinet",
+        "count": 11
+    },
+    "489": {
+        "class_name": "sideboard",
+        "count": 11
+    },
+    "505": {
+        "class_name": "file cabinet",
+        "count": 11
+    },
+    "522": {
+        "class_name": "control panel",
+        "count": 11
+    },
+    "535": {
+        "class_name": "wall control",
+        "count": 11
+    },
+    "586": {
+        "class_name": "backrest",
+        "count": 11
+    },
+    "596": {
+        "class_name": "floor vent",
+        "count": 11
+    },
+    "629": {
+        "class_name": "sprinkler",
+        "count": 11
+    },
+    "685": {
+        "class_name": "ceiling fan lamp",
+        "count": 11
+    },
+    "696": {
+        "class_name": "separator",
+        "count": 11
+    },
+    "158": {
+        "class_name": "kitchen table",
+        "count": 10
+    },
+    "201": {
+        "class_name": "high shelf",
+        "count": 10
+    },
+    "257": {
+        "class_name": "plunger",
+        "count": 10
+    },
+    "316": {
+        "class_name": "elevator",
+        "count": 10
+    },
+    "329": {
+        "class_name": "fence",
+        "count": 10
+    },
+    "340": {
+        "class_name": "shower wall cubby",
+        "count": 10
+    },
+    "353": {
+        "class_name": "clothes bag",
+        "count": 10
+    },
+    "364": {
+        "class_name": "washbasin counter",
+        "count": 10
+    },
+    "387": {
+        "class_name": "wreath",
+        "count": 10
+    },
+    "390": {
+        "class_name": "lamp stand",
+        "count": 10
+    },
+    "396": {
+        "class_name": "wall soap shelf",
+        "count": 10
+    },
+    "414": {
+        "class_name": "toilet cleaner",
+        "count": 10
+    },
+    "421": {
+        "class_name": "hook",
+        "count": 10
+    },
+    "423": {
+        "class_name": "paper storage",
+        "count": 10
+    },
+    "427": {
+        "class_name": "clothes container",
+        "count": 10
+    },
+    "437": {
+        "class_name": "iron",
+        "count": 10
+    },
+    "490": {
+        "class_name": "coat rack",
+        "count": 10
+    },
+    "526": {
+        "class_name": "pc tower",
+        "count": 10
+    },
+    "536": {
+        "class_name": "fruit bowl",
+        "count": 10
+    },
+    "545": {
+        "class_name": "shower caddy",
+        "count": 10
+    },
+    "547": {
+        "class_name": "bathroom art",
+        "count": 10
+    },
+    "551": {
+        "class_name": "tissue",
+        "count": 10
+    },
+    "627": {
+        "class_name": "surface",
+        "count": 10
+    },
+    "634": {
+        "class_name": "archway",
+        "count": 10
+    },
+    "635": {
+        "class_name": "chest drawer",
+        "count": 10
+    },
+    "663": {
+        "class_name": "audio cables",
+        "count": 10
+    },
+    "722": {
+        "class_name": "molding",
+        "count": 10
+    },
+    "75": {
+        "class_name": "mini fridge",
+        "count": 9
+    },
+    "203": {
+        "class_name": "grill",
+        "count": 9
+    },
+    "232": {
+        "class_name": "cabinet clutter",
+        "count": 9
+    },
+    "324": {
+        "class_name": "weight",
+        "count": 9
+    },
+    "357": {
+        "class_name": "tablet",
+        "count": 9
+    },
+    "377": {
+        "class_name": "trash bag",
+        "count": 9
+    },
+    "391": {
+        "class_name": "rod",
+        "count": 9
+    },
+    "440": {
+        "class_name": "jewelry box",
+        "count": 9
+    },
+    "458": {
+        "class_name": "whiteboard",
+        "count": 9
+    },
+    "459": {
+        "class_name": "acoustic panel",
+        "count": 9
+    },
+    "476": {
+        "class_name": "glasses",
+        "count": 9
+    },
+    "521": {
+        "class_name": "tv remote",
+        "count": 9
+    },
+    "532": {
+        "class_name": "cables",
+        "count": 9
+    },
+    "553": {
+        "class_name": "shower bench",
+        "count": 9
+    },
+    "569": {
+        "class_name": "shower rod",
+        "count": 9
+    },
+    "577": {
+        "class_name": "window /outside",
+        "count": 9
+    },
+    "598": {
+        "class_name": "bed comforter",
+        "count": 9
+    },
+    "603": {
+        "class_name": "plumbing",
+        "count": 9
+    },
+    "612": {
+        "class_name": "display table",
+        "count": 9
+    },
+    "619": {
+        "class_name": "basin",
+        "count": 9
+    },
+    "630": {
+        "class_name": "iron board",
+        "count": 9
+    },
+    "647": {
+        "class_name": "oil lamp",
+        "count": 9
+    },
+    "649": {
+        "class_name": "pool stick",
+        "count": 9
+    },
+    "659": {
+        "class_name": "violin",
+        "count": 9
+    },
+    "669": {
+        "class_name": "lighting fixture",
+        "count": 9
+    },
+    "671": {
+        "class_name": "place mat",
+        "count": 9
+    },
+    "674": {
+        "class_name": "wine rack",
+        "count": 9
+    },
+    "106": {
+        "class_name": "paper towel dispenser",
+        "count": 8
+    },
+    "334": {
+        "class_name": "music player",
+        "count": 8
+    },
+    "348": {
+        "class_name": "garage door opener motor",
+        "count": 8
+    },
+    "393": {
+        "class_name": "bulletin board",
+        "count": 8
+    },
+    "425": {
+        "class_name": "washing machine and dryer",
+        "count": 8
+    },
+    "439": {
+        "class_name": "shower curtain bar",
+        "count": 8
+    },
+    "478": {
+        "class_name": "trophy",
+        "count": 8
+    },
+    "513": {
+        "class_name": "headphones",
+        "count": 8
+    },
+    "543": {
+        "class_name": "pitcher",
+        "count": 8
+    },
+    "562": {
+        "class_name": "counter",
+        "count": 8
+    },
+    "578": {
+        "class_name": "highchair",
+        "count": 8
+    },
+    "602": {
+        "class_name": "baseboard",
+        "count": 8
+    },
+    "620": {
+        "class_name": "notebook",
+        "count": 8
+    },
+    "625": {
+        "class_name": "board game",
+        "count": 8
+    },
+    "648": {
+        "class_name": "briefcase",
+        "count": 8
+    },
+    "691": {
+        "class_name": "storage",
+        "count": 8
+    },
+    "702": {
+        "class_name": "countertop /otherroom",
+        "count": 8
+    },
+    "707": {
+        "class_name": "sheets / clothes",
+        "count": 8
+    },
+    "20": {
+        "class_name": "calculator",
+        "count": 7
+    },
+    "60": {
+        "class_name": "bottles of wine",
+        "count": 7
+    },
+    "185": {
+        "class_name": "record player",
+        "count": 7
+    },
+    "225": {
+        "class_name": "washcloth",
+        "count": 7
+    },
+    "241": {
+        "class_name": "box of something",
+        "count": 7
+    },
+    "269": {
+        "class_name": "shower pipe",
+        "count": 7
+    },
+    "318": {
+        "class_name": "bath tub",
+        "count": 7
+    },
+    "326": {
+        "class_name": "antique clock",
+        "count": 7
+    },
+    "336": {
+        "class_name": "firewood holder",
+        "count": 7
+    },
+    "369": {
+        "class_name": "yoga mat",
+        "count": 7
+    },
+    "370": {
+        "class_name": "cloth hanger",
+        "count": 7
+    },
+    "374": {
+        "class_name": "tile",
+        "count": 7
+    },
+    "381": {
+        "class_name": "dartboard",
+        "count": 7
+    },
+    "384": {
+        "class_name": "canvas",
+        "count": 7
+    },
+    "410": {
+        "class_name": "stick",
+        "count": 7
+    },
+    "477": {
+        "class_name": "urinal",
+        "count": 7
+    },
+    "496": {
+        "class_name": "exercise bike",
+        "count": 7
+    },
+    "506": {
+        "class_name": "projector",
+        "count": 7
+    },
+    "524": {
+        "class_name": "binders",
+        "count": 7
+    },
+    "530": {
+        "class_name": "alarm control",
+        "count": 7
+    },
+    "533": {
+        "class_name": "niche",
+        "count": 7
+    },
+    "539": {
+        "class_name": "shower valve",
+        "count": 7
+    },
+    "544": {
+        "class_name": "dressing table",
+        "count": 7
+    },
+    "559": {
+        "class_name": "computer chair",
+        "count": 7
+    },
+    "568": {
+        "class_name": "arcade game",
+        "count": 7
+    },
+    "579": {
+        "class_name": "watch",
+        "count": 7
+    },
+    "585": {
+        "class_name": "spa bench",
+        "count": 7
+    },
+    "604": {
+        "class_name": "cabinet table",
+        "count": 7
+    },
+    "607": {
+        "class_name": "shower glass",
+        "count": 7
+    },
+    "608": {
+        "class_name": "water dispenser",
+        "count": 7
+    },
+    "614": {
+        "class_name": "coat",
+        "count": 7
+    },
+    "626": {
+        "class_name": "footstool",
+        "count": 7
+    },
+    "628": {
+        "class_name": "shutters",
+        "count": 7
+    },
+    "633": {
+        "class_name": "ceiling border",
+        "count": 7
+    },
+    "646": {
+        "class_name": "shower seat",
+        "count": 7
+    },
+    "654": {
+        "class_name": "shower cockpit",
+        "count": 7
+    },
+    "667": {
+        "class_name": "hearth",
+        "count": 7
+    },
+    "668": {
+        "class_name": "cutlery",
+        "count": 7
+    },
+    "680": {
+        "class_name": "shades",
+        "count": 7
+    },
+    "684": {
+        "class_name": "shelf / cabinet",
+        "count": 7
+    },
+    "700": {
+        "class_name": "stack of plates",
+        "count": 7
+    },
+    "714": {
+        "class_name": "dried flowers",
+        "count": 7
+    },
+    "715": {
+        "class_name": "wheel",
+        "count": 7
+    },
+    "78": {
+        "class_name": "car",
+        "count": 6
+    },
+    "103": {
+        "class_name": "button",
+        "count": 6
+    },
+    "205": {
+        "class_name": "door handle",
+        "count": 6
+    },
+    "289": {
+        "class_name": "table stand",
+        "count": 6
+    },
+    "342": {
+        "class_name": "stack of cds",
+        "count": 6
+    },
+    "355": {
+        "class_name": "treadmill",
+        "count": 6
+    },
+    "379": {
+        "class_name": "lid",
+        "count": 6
+    },
+    "400": {
+        "class_name": "shower mat",
+        "count": 6
+    },
+    "406": {
+        "class_name": "canister",
+        "count": 6
+    },
+    "412": {
+        "class_name": "electric wire casing",
+        "count": 6
+    },
+    "424": {
+        "class_name": "step stool",
+        "count": 6
+    },
+    "463": {
+        "class_name": "map",
+        "count": 6
+    },
+    "464": {
+        "class_name": "pool table",
+        "count": 6
+    },
+    "479": {
+        "class_name": "ceiling lamp hanger",
+        "count": 6
+    },
+    "488": {
+        "class_name": "dinner table",
+        "count": 6
+    },
+    "518": {
+        "class_name": "scarf",
+        "count": 6
+    },
+    "519": {
+        "class_name": "bed sheet",
+        "count": 6
+    },
+    "529": {
+        "class_name": "attic hatch",
+        "count": 6
+    },
+    "552": {
+        "class_name": "bath dial",
+        "count": 6
+    },
+    "557": {
+        "class_name": "sitting bench",
+        "count": 6
+    },
+    "567": {
+        "class_name": "safe",
+        "count": 6
+    },
+    "574": {
+        "class_name": "holder",
+        "count": 6
+    },
+    "590": {
+        "class_name": "exhibition panel",
+        "count": 6
+    },
+    "593": {
+        "class_name": "freezer",
+        "count": 6
+    },
+    "615": {
+        "class_name": "piano stool",
+        "count": 6
+    },
+    "638": {
+        "class_name": "mixer",
+        "count": 6
+    },
+    "650": {
+        "class_name": "bed curtain",
+        "count": 6
+    },
+    "653": {
+        "class_name": "phone",
+        "count": 6
+    },
+    "662": {
+        "class_name": "shop shelf",
+        "count": 6
+    },
+    "670": {
+        "class_name": "plug",
+        "count": 6
+    },
+    "675": {
+        "class_name": "statue/art",
+        "count": 6
+    },
+    "686": {
+        "class_name": "silicone tube",
+        "count": 6
+    },
+    "688": {
+        "class_name": "drawers",
+        "count": 6
+    },
+    "699": {
+        "class_name": "shisha",
+        "count": 6
+    },
+    "706": {
+        "class_name": "gift",
+        "count": 6
+    },
+    "709": {
+        "class_name": "ceiling support",
+        "count": 6
+    },
+    "716": {
+        "class_name": "star",
+        "count": 6
+    },
+    "139": {
+        "class_name": "keyboard piano",
+        "count": 5
+    },
+    "305": {
+        "class_name": "office table",
+        "count": 5
+    },
+    "312": {
+        "class_name": "decoder",
+        "count": 5
+    },
+    "344": {
+        "class_name": "slippers",
+        "count": 5
+    },
+    "397": {
+        "class_name": "hair dryer",
+        "count": 5
+    },
+    "428": {
+        "class_name": "sewing machine",
+        "count": 5
+    },
+    "436": {
+        "class_name": "shoe rack",
+        "count": 5
+    },
+    "449": {
+        "class_name": "piano bench",
+        "count": 5
+    },
+    "492": {
+        "class_name": "shelf clutter",
+        "count": 5
+    },
+    "516": {
+        "class_name": "closet area for hanging clothes",
+        "count": 5
+    },
+    "517": {
+        "class_name": "closet shelving",
+        "count": 5
+    },
+    "534": {
+        "class_name": "detergent",
+        "count": 5
+    },
+    "561": {
+        "class_name": "dishes",
+        "count": 5
+    },
+    "570": {
+        "class_name": "saw",
+        "count": 5
+    },
+    "572": {
+        "class_name": "wall top",
+        "count": 5
+    },
+    "575": {
+        "class_name": "dinnerware",
+        "count": 5
+    },
+    "584": {
+        "class_name": "massage bed",
+        "count": 5
+    },
+    "587": {
+        "class_name": "lounger",
+        "count": 5
+    },
+    "594": {
+        "class_name": "shower battery",
+        "count": 5
+    },
+    "599": {
+        "class_name": "counter door",
+        "count": 5
+    },
+    "605": {
+        "class_name": "stair handle",
+        "count": 5
+    },
+    "606": {
+        "class_name": "tree branch",
+        "count": 5
+    },
+    "616": {
+        "class_name": "stone",
+        "count": 5
+    },
+    "618": {
+        "class_name": "headboard",
+        "count": 5
+    },
+    "631": {
+        "class_name": "shelf cubby",
+        "count": 5
+    },
+    "637": {
+        "class_name": "shower stall",
+        "count": 5
+    },
+    "641": {
+        "class_name": "trinket",
+        "count": 5
+    },
+    "642": {
+        "class_name": "broomstick",
+        "count": 5
+    },
+    "652": {
+        "class_name": "fireplace sconce",
+        "count": 5
+    },
+    "656": {
+        "class_name": "music equipment stand",
+        "count": 5
+    },
+    "657": {
+        "class_name": "ukulele",
+        "count": 5
+    },
+    "660": {
+        "class_name": "clarinet",
+        "count": 5
+    },
+    "661": {
+        "class_name": "product boxes",
+        "count": 5
+    },
+    "664": {
+        "class_name": "guitar straps",
+        "count": 5
+    },
+    "672": {
+        "class_name": "decorative lamp",
+        "count": 5
+    },
+    "673": {
+        "class_name": "recessed cubby",
+        "count": 5
+    },
+    "687": {
+        "class_name": "drywall board",
+        "count": 5
+    },
+    "690": {
+        "class_name": "wall detail",
+        "count": 5
+    },
+    "693": {
+        "class_name": "exercise mat",
+        "count": 5
+    },
+    "694": {
+        "class_name": "dehumidifier",
+        "count": 5
+    },
+    "695": {
+        "class_name": "groceries",
+        "count": 5
+    },
+    "697": {
+        "class_name": "sauna bowl",
+        "count": 5
+    },
+    "711": {
+        "class_name": "elevator door",
+        "count": 5
+    },
+    "717": {
+        "class_name": "drawing",
+        "count": 5
+    },
+    "719": {
+        "class_name": "circular sofa",
+        "count": 5
+    },
+    "720": {
+        "class_name": "curtain rod cover",
+        "count": 5
+    }
+}

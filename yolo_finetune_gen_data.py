@@ -76,7 +76,7 @@ def main():
 
     class_count = json.load(open("yolo_finetune/class_count.json", "r"))
 
-    detection_model = YOLO('yolov8l-world.pt')
+    detection_model = YOLO('yolov8x-world.pt')
 
     img_height = 1280
     img_width = 1280
@@ -92,7 +92,7 @@ def main():
 
     seed = 2023
 
-    scene_path = '/home/hanyang/code/3d_project/explore-eqa/data/versioned_data/hm3d-0.2/hm3d/'
+    scene_path = '/gpfs/u/home/LMCG/LMCGnngn/scratch/multisensory/MLLM/data/hm3d'
     scene_dataset_config_path = "data/hm3d_annotated_basis.scene_dataset_config.json"
 
     dataset_save_dir = "yolo_finetune_data"
@@ -116,7 +116,7 @@ def main():
     # sort the scene ids
     all_scene_ids = sorted(all_scene_ids, key=lambda x: int(x.split("-")[0]))
 
-    for scene_id in all_scene_ids[:20]:
+    for scene_id in all_scene_ids:
         split = 'train' if int(scene_id.split("-")[0]) < 800 else 'val'
 
         scene_mesh_path = os.path.join(scene_path, split, scene_id, scene_id.split("-")[1] + ".basis.glb")

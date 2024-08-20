@@ -69,12 +69,12 @@ def select_detections(detections: sv.Detections, class_id_to_class_name: dict):
 
 
 def main():
-    class_id_to_class_name = json.load(open("data/class_id_to_class_name.json", "r"))
+    class_id_to_class_name = json.load(open("yolo_finetune/class_id_to_class_name.json", "r"))
     class_id_to_class_name = {int(k): v for k, v in class_id_to_class_name.items()}
     class_name_to_class_id = {cls: i for i, cls in class_id_to_class_name.items()}
     all_classes = list(class_id_to_class_name.values())
 
-    class_count = json.load(open("data/class_count.json", "r"))
+    class_count = json.load(open("yolo_finetune/class_count.json", "r"))
 
     detection_model = YOLO('yolov8l-world.pt')
 

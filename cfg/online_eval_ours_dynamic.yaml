@@ -1,16 +1,22 @@
 # General
 seed: 66
-exp_name: exp_patch2_rand_ego_lora_1e-06_ours_dynamic
+exp_name: exp_patch1_rand_ego_lora_4e-06_ours_dynamic_scannet200
 output_parent_dir: /work/pi_chuangg_umass_edu/yuncong/results
 scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
 scene_data_path: /work/pi_chuangg_umass_edu/yuncong/data/scene_datasets/hm3d/
-semantic_bbox_data_path: '/home/yuncongyang_umass_edu/scene_understanding/hm3d_obj_bbox_merged'
-model_path: /work/pi_chuangg_umass_edu/yuncong/ds_lora/2e-06_patch2_rand_ego_lora
+semantic_bbox_data_path: '/home/yuncongyang_umass_edu/scene_understanding/hm3d_obj_bbox_all'
+#model_path: /work/pi_chuangg_umass_edu/yuncong/ds_lora/2e-06_patch2_rand_ego_lora
+#model_path: /work/pi_chuangg_umass_edu/yuncong/ds_lora/ds_cluster_best_2.5_hm3d_4e-06_patch1_ds_rand_ego_lora
+model_path: /work/pi_chuangg_umass_edu/yuncong/ds_lora/ds_cluster_best_2.5_hm3d_remap_4e-06_patch1_ds_rand_map_rate0.5_ego_lora
 path_data_dir: exploration_data_new
 question_file_path: generated_questions/generated_questions.json
 concept_graph_config_path: "conceptgraph/hydra_configs"
 concept_graph_config_name: "rerun_realtime_mapping"
+# if detection_class_path is not "raw", the model will only consider the objects in the file
+#detection_class_path: "data/scannet200_classes.txt"
+#detection_class_path: "raw"
 detection_class_path: "data/scannet200_classes.txt"
+#detection_class_path: "data/mpcat40.txt"
 
 visual_feature_size: 24
 patch_size: 8

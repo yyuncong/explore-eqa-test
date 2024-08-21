@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH --job-name=eval_cluster
-#SBATCH -o output/cluster_merge_%j.out
-#SBATCH -e output/cluster_merge_%j.err
+#SBATCH -o output/dynamic_%j.out
+#SBATCH -e output/dynamic_%j.err
 #SBATCH --mem=128G
 #SBATCH --nodes=1
-#SBATCH --time=08:00:00
+#SBATCH --time=24:00:00
 #SBATCH -p gpu
 #SBATCH -G 1
 #SBATCH --constraint="vram40"

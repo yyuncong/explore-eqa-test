@@ -8,6 +8,7 @@ questions_list_path: 'data/generated_questions-eval.json'
 model_path: /work/pi_chuangg_umass_edu/yuncong/ds_lora/ds_cluster_best_2.5_4e-06_patch1_ds_rand_ego_lora
 concept_graph_config_path: "conceptgraph/hydra_configs"
 concept_graph_config_name: "rerun_realtime_mapping"
+detection_class_path: "data/scannet200_classes.txt"
 
 incremental: true
 visual_feature_size: 24

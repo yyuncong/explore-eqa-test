@@ -319,7 +319,7 @@ def main(args):
 
             # save the image and label
             img_save_path = os.path.join(image_save_dir, f"{total_obs_count:06d}--{scene_id}.png")
-            plt.imsave(img_save_path, annotated_image)
+            plt.imsave(img_save_path, rgb)
 
             label_save_path = os.path.join(label_save_dir, f"{total_obs_count:06d}--{scene_id}.txt")
             with open(label_save_path, 'w') as f:

@@ -1,5 +1,6 @@
 import os
 import random
+import argparse
 
 os.environ["TRANSFORMERS_VERBOSITY"] = "error"  # disable warning
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -68,7 +69,7 @@ def select_detections(detections: sv.Detections, class_id_to_class_name: dict):
 
 
 
-def main():
+def main(args):
     class_id_to_class_name = json.load(open("yolo_finetune/class_id_to_class_name.json", "r"))
     class_id_to_class_name = {int(k): v for k, v in class_id_to_class_name.items()}
     class_name_to_class_id = {cls: i for i, cls in class_id_to_class_name.items()}
@@ -90,13 +91,13 @@ def main():
     min_mask_over_bbox = 0.3
     min_center_to_edge_ratio = 0.05
 
-    seed = 2023
+    seed = args.seed
 
     scene_path = '/gpfs/u/home/LMCG/LMCGnngn/scratch/multisensory/MLLM/data/hm3d'
     scene_dataset_config_path = "data/hm3d_annotated_basis.scene_dataset_config.json"
 
     dataset_save_dir = "yolo_finetune_data"
-    num_obs_per_scene = 10
+    num_obs_per_scene = args.n_obs
 
 
 
@@ -340,7 +341,14 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # add command line arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--seed", type=int, default=2023)
+    parser.add_argument("--n_obs", type=int, required=True)
+
+    args = parser.parse_args()
+
+    main(args)
 
 
 

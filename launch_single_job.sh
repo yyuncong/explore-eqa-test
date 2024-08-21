@@ -9,4 +9,4 @@
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=4
 
-python yolo_finetune_gen_data.py --seed 2025 --n_obs 200
+python yolo_finetune_gen_data.py --seed 2025 --n_obs 400

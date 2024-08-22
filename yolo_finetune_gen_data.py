@@ -185,6 +185,10 @@ def main(args):
             all_obs_classes = list(set(all_obs_classes))
             all_obs_classes = [cls for cls in all_obs_classes if cls in all_classes]
 
+            if len(all_obs_classes) == 0:
+                scene_obs_count -= 1
+                continue
+
             # detection
             detection_model.set_classes(all_obs_classes)
             results = detection_model.predict(rgb, conf=confidence_threshold, verbose=False)

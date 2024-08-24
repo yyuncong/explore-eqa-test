@@ -181,6 +181,7 @@ def main(args):
             semantic = obs["semantic_sensor"]
 
             all_obj_id = np.unique(semantic)
+            all_obj_id = [obj_id for obj_id in all_obj_id if obj_id in obj_id_to_class_name]
             all_obs_classes = [obj_id_to_class_name[obj_id] for obj_id in all_obj_id if obj_id != 0]
             all_obs_classes = list(set(all_obs_classes))
             all_obs_classes = [cls for cls in all_obs_classes if cls in all_classes]

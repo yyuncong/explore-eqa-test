@@ -15,8 +15,8 @@ print(f"Validation images: {len(val_images)}")
 
 with open(os.path.join(data_dir, 'train.txt'), 'w') as f:
     for image in train_images:
-        f.write(f"./image/{image}\n")
+        f.write(f"./images/{image}\n")
 
 with open(os.path.join(data_dir, 'val.txt'), 'w') as f:
     for image in val_images:
-        f.write(f"./image/{image}\n")
+        f.write(f"./images/{image}\n")

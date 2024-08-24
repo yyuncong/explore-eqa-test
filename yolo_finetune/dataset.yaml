@@ -1,0 +1,729 @@
+path: /gpfs/u/home/LMCG/LMCGnngn/scratch/yanghan/3d/explore-eqa-test/yolo_finetune_data
+train: train.txt
+val: val.txt
+
+
+names:
+  0: ceiling lamp
+  1: vent
+  2: fire alarm
+  3: heater
+  4: chair
+  5: painting
+  6: picture
+  7: door
+  8: drawer
+  9: bed
+  10: pillow
+  11: sculpture
+  12: cabinet
+  13: lamp
+  14: appliance
+  15: window
+  16: sheet
+  17: desk
+  18: desk chair
+  19: folder
+  20: calculator
+  21: box
+  22: rack
+  23: decoration
+  24: printer
+  25: toy
+  26: wall panel
+  27: couch
+  28: shelf
+  29: alarm
+  30: tv
+  31: speaker
+  32: table
+  33: book rack
+  34: book
+  35: stool
+  36: basket
+  37: bathtub
+  38: shower cabin
+  39: bathroom cabinet
+  40: sink
+  41: bathroom accessory
+  42: shower hose/head
+  43: beam
+  44: mirror
+  45: wardrobe
+  46: wall lamp
+  47: stairs
+  48: balustrade
+  49: toilet
+  50: toilet paper
+  51: tap
+  52: towel
+  53: step
+  54: dining table
+  55: dining chair
+  56: candle
+  57: air conditioner
+  58: duct
+  59: display cabinet
+  60: bottles of wine
+  61: kitchen counter
+  62: refrigerator cabinet
+  63: refrigerator
+  64: kitchen cabinet
+  65: oven
+  66: countertop
+  67: kitchen countertop item
+  68: kettle
+  69: coffee machine
+  70: kitchen appliance
+  71: paper towel
+  72: stove
+  73: dishrag
+  74: kitchen extractor
+  75: mini fridge
+  76: curtain
+  77: radio
+  78: car
+  79: stuffed animal
+  80: cardboard box
+  81: globe
+  82: container
+  83: bag
+  84: clock
+  85: laptop
+  86: shoe
+  87: device
+  88: newspaper
+  89: computer mouse
+  90: doll
+  91: bath towel
+  92: platform
+  93: storage box
+  94: tissue box
+  95: bottle
+  96: bottle of soap
+  97: soap dispenser
+  98: soap
+  99: cup
+  100: shower soap shelf
+  101: soap bottle
+  102: shower
+  103: button
+  104: box of tissues
+  105: cardboard
+  106: paper towel dispenser
+  107: calendar
+  108: cart
+  109: guitar
+  110: crib
+  111: armchair
+  112: casket
+  113: ball
+  114: plush toy
+  115: blanket
+  116: hanger
+  117: backpack
+  118: pouffe
+  119: drum
+  120: curtain rod
+  121: wall clock
+  122: stovetop
+  123: kitchen top
+  124: wall cabinet
+  125: washing machine
+  126: toaster
+  127: liquid soap
+  128: microwave
+  129: vase
+  130: flowerpot
+  131: ornament
+  132: tray
+  133: case
+  134: ventilation
+  135: hat
+  136: board
+  137: paper
+  138: clutter
+  139: keyboard piano
+  140: bookshelf
+  141: tv stand
+  142: plant
+  143: stand
+  144: l-shaped sofa
+  145: vacuum cleaner
+  146: bathroom towel
+  147: bathroom shelf
+  148: shampoo
+  149: shower tap
+  150: brush
+  151: bin
+  152: jar
+  153: jacket
+  154: computer
+  155: stack of papers
+  156: computer desk
+  157: tool box
+  158: kitchen table
+  159: range hood
+  160: scale
+  161: food
+  162: handle
+  163: broom
+  164: shovel
+  165: basket of something
+  166: storage cabinet
+  167: air conditioning
+  168: desk lamp
+  169: flower
+  170: flower stand
+  171: dresser
+  172: chest
+  173: clothes
+  174: railing
+  175: bedside table
+  176: mat
+  177: flower vase
+  178: coffee table
+  179: sofa seat
+  180: floor lamp
+  181: bedside lamp
+  182: footrest
+  183: door stopper
+  184: led tv
+  185: record player
+  186: decorative plant
+  187: chandelier
+  188: light
+  189: window shutter
+  190: telephone
+  191: bed table
+  192: perfume
+  193: kitchen island
+  194: dishwasher
+  195: coffee mug
+  196: photo
+  197: doormat
+  198: decorative bowl
+  199: fruit
+  200: mug
+  201: high shelf
+  202: monitor
+  203: grill
+  204: patio chair
+  205: door handle
+  206: laundry basket
+  207: floor mat
+  208: lamp table
+  209: nightstand
+  210: trashcan
+  211: diploma
+  212: bath
+  213: box of tissue
+  214: toilet paper dispenser
+  215: hand soap
+  216: shower-bath cabinet
+  217: blinds
+  218: window glass
+  219: ceiling vent
+  220: kitchen lower cabinet
+  221: faucet
+  222: bottle of detergent
+  223: kitchen utensil
+  224: kitchen countertop items
+  225: washcloth
+  226: oven and stove
+  227: wall electronics
+  228: socket
+  229: washer-dryer
+  230: hot water/cold water knob
+  231: bathroom utensil
+  232: cabinet clutter
+  233: cosmetics
+  234: bathtub utensil
+  235: cosmetic
+  236: sink cabinet
+  237: fan
+  238: pot
+  239: wall tv
+  240: bicycle
+  241: box of something
+  242: side table
+  243: desk clutter
+  244: radiator
+  245: stairs railing
+  246: banister
+  247: wall board
+  248: curtain rail
+  249: furnace
+  250: cutting board
+  251: shower bar
+  252: toilet brush
+  253: attic door
+  254: clothes hanger
+  255: shower door
+  256: shower curtain
+  257: plunger
+  258: screen
+  259: ceiling duct
+  260: ceiling dome
+  261: handrail
+  262: stair
+  263: stair step
+  264: fluorescent light
+  265: laundry machine
+  266: toilet brush holder
+  267: pillar
+  268: bathtub platform
+  269: shower pipe
+  270: clothes rack
+  271: sofa chair
+  272: roof
+  273: ladder
+  274: bed stand
+  275: shower hose
+  276: trash can
+  277: glass
+  278: door/window
+  279: kitchen shelf
+  280: recycle bin
+  281: teapot
+  282: ceiling door
+  283: cloth
+  284: washing stuff
+  285: mop
+  286: ironing board
+  287: bowl
+  288: bar
+  289: table stand
+  290: seat
+  291: ventilation hood
+  292: fireplace
+  293: fireplace utensil
+  294: plate
+  295: plate of food
+  296: firewood
+  297: fireplace tool set
+  298: folding chair
+  299: window shutters
+  300: door window
+  301: chest of drawers
+  302: pipe
+  303: closet
+  304: office chair
+  305: office table
+  306: bath sink
+  307: showerhead
+  308: brochure
+  309: bath faucet
+  310: shower knob
+  311: bathroom counter
+  312: decoder
+  313: remote control
+  314: cooker
+  315: bar chair
+  316: elevator
+  317: can
+  318: bath tub
+  319: cushion
+  320: sensor
+  321: shower handle
+  322: towel bar
+  323: bath cabinet
+  324: weight
+  325: candlestick
+  326: antique clock
+  327: rail
+  328: window curtain
+  329: fence
+  330: bench
+  331: stack of clothes
+  332: figurine
+  333: knife holder
+  334: music player
+  335: dish
+  336: firewood holder
+  337: wood
+  338: stack of towels
+  339: soap dish
+  340: shower wall cubby
+  341: keyboard
+  342: stack of cds
+  343: alarm clock
+  344: slippers
+  345: boiler
+  346: fire extinguisher
+  347: garage door
+  348: garage door opener motor
+  349: garage door railing
+  350: tool
+  351: candle holder
+  352: closet shelf
+  353: clothes bag
+  354: fridge
+  355: treadmill
+  356: exercise equipment
+  357: tablet
+  358: sofa
+  359: window shade
+  360: amplifier
+  361: bottles
+  362: countertop item
+  363: wash cabinet
+  364: washbasin counter
+  365: washbasin
+  366: photo mount
+  367: mouse
+  368: dumbbell
+  369: yoga mat
+  370: cloth hanger
+  371: bedside cabinet
+  372: table cloth
+  373: cabinet door
+  374: tile
+  375: smoke detector
+  376: camera
+  377: trash bag
+  378: wine bottle
+  379: lid
+  380: parapet
+  381: dartboard
+  382: rope
+  383: pad
+  384: canvas
+  385: throw blanket
+  386: bucket
+  387: wreath
+  388: shade
+  389: support beam
+  390: lamp stand
+  391: rod
+  392: staircase trim
+  393: bulletin board
+  394: ceiling under stairs
+  395: toothbrush
+  396: wall soap shelf
+  397: hair dryer
+  398: wall toilet paper
+  399: shower rail
+  400: shower mat
+  401: clothes dryer
+  402: exercise ball
+  403: hanging clothes
+  404: coat hanger
+  405: storage shelving
+  406: canister
+  407: doorstep
+  408: shelf with clutter
+  409: machine
+  410: stick
+  411: partition
+  412: electric wire casing
+  413: hose
+  414: toilet cleaner
+  415: fuse box
+  416: locker
+  417: wall hanging decoration
+  418: spice rack
+  419: knife
+  420: sliding door
+  421: hook
+  422: cuddly toy
+  423: paper storage
+  424: step stool
+  425: washing machine and dryer
+  426: electric box
+  427: clothes container
+  428: sewing machine
+  429: electric outlet
+  430: sliding glass door
+  431: computer equipment
+  432: bouquet
+  433: binder
+  434: plates
+  435: worktop
+  436: shoe rack
+  437: iron
+  438: bath mat
+  439: shower curtain bar
+  440: jewelry box
+  441: bowl of fruit
+  442: coffee maker
+  443: shower curtain rod
+  444: table lamp
+  445: switch
+  446: wall sign
+  447: air vent
+  448: piano
+  449: piano bench
+  450: decorative plate
+  451: pile of magazines
+  452: handbag
+  453: motion detector
+  454: storage bin
+  455: bath utensil
+  456: curtain bar
+  457: ceiling fan
+  458: whiteboard
+  459: acoustic panel
+  460: magazine
+  461: paneling
+  462: exercise machine
+  463: map
+  464: pool table
+  465: shelving
+  466: bar cabinet
+  467: boxes
+  468: poster
+  469: document
+  470: papers
+  471: electric guitar
+  472: door knob
+  473: porcelain
+  474: ceiling lower
+  475: statue
+  476: glasses
+  477: urinal
+  478: trophy
+  479: ceiling lamp hanger
+  480: ceiling pipe
+  481: crate
+  482: fire detector
+  483: clothes hanger rod
+  484: sconce
+  485: vessel
+  486: bidet
+  487: bathrobe
+  488: dinner table
+  489: sideboard
+  490: coat rack
+  491: utensil
+  492: shelf clutter
+  493: end table
+  494: closet door
+  495: lounge chair
+  496: exercise bike
+  497: rocking chair
+  498: flag
+  499: shower tub
+  500: luggage
+  501: notes
+  502: dustbin
+  503: cap
+  504: sign
+  505: file cabinet
+  506: projector
+  507: cover
+  508: fire sprinkler
+  509: exit sign
+  510: note
+  511: keys
+  512: electrical controller
+  513: headphones
+  514: column
+  515: arch
+  516: closet area for hanging clothes
+  517: closet shelving
+  518: scarf
+  519: bed sheet
+  520: decor
+  521: tv remote
+  522: control panel
+  523: bags
+  524: binders
+  525: light switch
+  526: pc tower
+  527: shoe case
+  528: mascot
+  529: attic hatch
+  530: alarm control
+  531: electrical box
+  532: cables
+  533: niche
+  534: detergent
+  535: wall control
+  536: fruit bowl
+  537: thermostat
+  538: shower dial
+  539: shower valve
+  540: umbrella
+  541: figure
+  542: holy cross
+  543: pitcher
+  544: dressing table
+  545: shower caddy
+  546: small table/stand
+  547: bathroom art
+  548: ottoman
+  549: shower shelf
+  550: magazines
+  551: tissue
+  552: bath dial
+  553: shower bench
+  554: decorative dinnerware
+  555: kitchen cabinet lower
+  556: jug
+  557: sitting bench
+  558: panel
+  559: computer chair
+  560: stone support structure
+  561: dishes
+  562: counter
+  563: flatware
+  564: ceiling window
+  565: ceiling light
+  566: staircase handrail
+  567: safe
+  568: arcade game
+  569: shower rod
+  570: saw
+  571: box with books
+  572: wall top
+  573: kitchen decoration
+  574: holder
+  575: dinnerware
+  576: door cabinet
+  577: window /outside
+  578: highchair
+  579: watch
+  580: sunbed
+  581: closet rod
+  582: light fixture
+  583: lampshade
+  584: massage bed
+  585: spa bench
+  586: backrest
+  587: lounger
+  588: jewelry
+  589: ledge
+  590: exhibition panel
+  591: product
+  592: wall hanger
+  593: freezer
+  594: shower battery
+  595: shutter
+  596: floor vent
+  597: doorway
+  598: bed comforter
+  599: counter door
+  600: doorpost
+  601: outlet
+  602: baseboard
+  603: plumbing
+  604: cabinet table
+  605: stair handle
+  606: tree branch
+  607: shower glass
+  608: water dispenser
+  609: knob
+  610: towel ring
+  611: robe
+  612: display table
+  613: dog bed
+  614: coat
+  615: piano stool
+  616: stone
+  617: smoke alarm
+  618: headboard
+  619: basin
+  620: notebook
+  621: pen
+  622: identifier
+  623: stationery
+  624: dvd
+  625: board game
+  626: footstool
+  627: surface
+  628: shutters
+  629: sprinkler
+  630: iron board
+  631: shelf cubby
+  632: furniture
+  633: ceiling border
+  634: archway
+  635: chest drawer
+  636: ceiling light fixture connection
+  637: shower stall
+  638: mixer
+  639: artwork
+  640: media console
+  641: trinket
+  642: broomstick
+  643: door hinge
+  644: object
+  645: air duct
+  646: shower seat
+  647: oil lamp
+  648: briefcase
+  649: pool stick
+  650: bed curtain
+  651: stack of books
+  652: fireplace sconce
+  653: phone
+  654: shower cockpit
+  655: price tag
+  656: music equipment stand
+  657: ukulele
+  658: product box
+  659: violin
+  660: clarinet
+  661: product boxes
+  662: shop shelf
+  663: audio cables
+  664: guitar straps
+  665: strings
+  666: products
+  667: hearth
+  668: cutlery
+  669: lighting fixture
+  670: plug
+  671: place mat
+  672: decorative lamp
+  673: recessed cubby
+  674: wine rack
+  675: statue/art
+  676: hunting trophy
+  677: book display
+  678: heater piping
+  679: can of paint
+  680: shades
+  681: washing powder
+  682: boxes with books
+  683: gym equipment
+  684: shelf / cabinet
+  685: ceiling fan lamp
+  686: silicone tube
+  687: drywall board
+  688: drawers
+  689: security camera
+  690: wall detail
+  691: storage
+  692: tank
+  693: exercise mat
+  694: dehumidifier
+  695: groceries
+  696: separator
+  697: sauna bowl
+  698: containers
+  699: shisha
+  700: stack of plates
+  701: cabinet /otherroom
+  702: countertop /otherroom
+  703: cabinet drawer
+  704: kitchen cabinet drawer
+  705: display
+  706: gift
+  707: sheets / clothes
+  708: ceiling arch
+  709: ceiling support
+  710: exhibition window
+  711: elevator door
+  712: snack
+  713: lace doily
+  714: dried flowers
+  715: wheel
+  716: star
+  717: drawing
+  718: rafter
+  719: circular sofa
+  720: curtain rod cover
+  721: kitchen cabinet door
+  722: molding

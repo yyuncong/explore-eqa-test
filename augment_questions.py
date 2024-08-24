@@ -1,10 +1,24 @@
 import os
 import json
 
-import openai
+from openai import AzureOpenAI
 import habitat_sim
 import numpy as np
 import matplotlib.pyplot as plt
+import base64
+
+
+os.environ["TRANSFORMERS_VERBOSITY"] = "error"  # disable warning
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["HABITAT_SIM_LOG"] = (
+    "quiet"  # https://aihabitat.org/docs/habitat-sim/logging.html
+)
+os.environ["MAGNUM_LOG"] = "quiet"
+
+
+def encode_image(image_path):
+    with open(image_path, "rb") as image_file:
+        return base64.b64encode(image_file.read()).decode("utf-8")
 
 
 def make_cfg(settings):
@@ -30,6 +44,32 @@ def make_cfg(settings):
 
 
 if __name__ == "__main__":
+
+    client = AzureOpenAI(
+        azure_endpoint='https://yuncong.openai.azure.com',
+        api_key=os.getenv('AZURE_OPENAI_KEY'),
+        api_version='2024-02-15-preview',
+    )
+
+    sys_prompt = "You are an intelligent AI agent."
+    bg_prompt = "I have a question about an object at the center of an image, which I will provide with you. " + \
+           "The object the question refers to might be vague, since an object can have multiple synonyms. " + \
+           "So I need to augment the question to increase its variety for better training a model. " + \
+           "You need to paraphrase the question by replacing the name of that object with its synonym based on your observation.\n" + \
+           "For example\n" + \
+           "Question: Is there a cushion on the armchair in front of the window in the living room?\n" + \
+           "Paraphrased Question: Is there a pillow on the sofa chair in front of the window in the living room?\n" + \
+           "Question: What is the primary color of the desk chair that is in front of the white desk with shelves and various items on it?\n" + \
+           "Paraphrased Question: What is the main color of the office chair that is in front of the white desk with shelves and various items on it?\n" + \
+           "Also, in some case, there might be no synonym for the object. In that case, you can just return the same question. For example:\n" + \
+           "Question: Where is the white printer located?\n" + \
+           "Paraphrased Question: Where is the white printer located?\n" + \
+           "Question: Is the light around the mirror in the bathroom turned on?\n" + \
+           "Paraphrased Question: Is the light around the mirror in the bathroom turned on?\n" + \
+           "Also, there is another case where the question doesn't explicitly refer to an object. In that case, you can just return the same question. For example:\n" + \
+           "Question: What can I use to quickly heat up my food?\n" + \
+           "Paraphrased Question: What can I use to quickly heat up my food?\n\n" + \
+           "Now its your turn. Note that you just need to return the paraphrased question, and don't need to give any explanations.\n"
 
 
     question_file_path = 'generated_questions/generated_questions.json'
@@ -114,7 +154,7 @@ if __name__ == "__main__":
         agent = simulator.initialize_agent(sim_settings["default_agent"])
         agent_state = habitat_sim.AgentState()
 
-        for question_data in questions_per_scene[scene_id]:
+        for question_data in questions_per_scene[scene_id][:3]:
             question = question_data['question']
             answer = question_data['answer']
 
@@ -132,6 +172,42 @@ if __name__ == "__main__":
             os.makedirs(save_folder, exist_ok=True)
 
             plt.imsave(os.path.join(save_folder, 'rgb.png'), rgb)
+
+            # prompt gpt
+            content = [{"type": "text", "text": bg_prompt}]
+
+            content += [{"type": "text", "text": f"Here is the image for the question: "}]
+            content += [{
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64,{encode_image(os.path.join(save_folder, 'rgb.png'))}",
+                    "detail": "high",
+                }
+            }]
+
+            content += [{"type": "text", "text": f"Question: {question}\n"}]
+            content += [{"type": "text", "text": "Paraphrased Question: "}]
+
+            try:
+                response = client.chat.completions.create(
+                    model='gpt-4o',
+                    messages=[
+                        {"role": "system", "content": [{"type": "text", "text": sys_prompt}]},
+                        {"role": "user", "content": content},
+                    ],
+                    max_tokens=200,
+                    seed=42,
+                    temperature=0.2
+                )
+
+                output = response.choices[0].message.content
+            except Exception as e:
+                print(f"Failed to generate question for question {question_data['question_id']}")
+                print(e)
+                continue
+
+            print(f"Question: {question}")
+            print(f"Paraphrased Question: {output}")
 
 
 

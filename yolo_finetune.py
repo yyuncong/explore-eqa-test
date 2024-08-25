@@ -17,7 +17,7 @@ results = model.train(
 
 
 # # resume
-# model = YOLOWorld("/gpfs/u/home/LMCG/LMCGnngn/scratch/yanghan/3d/explore-eqa-test/runs/detect/train2/weights/last.pt")
+# model = YOLOWorld("/gpfs/u/home/LMCG/LMCGhazh/scratch/yanghan/explore-eqa-test/runs/detect/train/weights/last.pt")
 # results = model.train(
 #     data="/gpfs/u/home/LMCG/LMCGhazh/scratch/yanghan/explore-eqa-test/yolo_finetune/dataset.yaml",
 #     epochs=100,

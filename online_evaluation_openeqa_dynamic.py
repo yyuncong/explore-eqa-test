@@ -469,7 +469,7 @@ def main(cfg):
                 # choose a frontier, and set it as the explore target
                 step_dict["frontiers"] = []
 
-                if cnt_step == num_step - 20 or cnt_step == 50:
+                if False:
                     pass
                 else:
                     # since we skip the stuck frontier for input of the vlm, we need to map the
@@ -735,6 +735,96 @@ def main(cfg):
         logging.info(f"{question_idx + 1}/{total_questions}: Success rate: {success_count}/{question_idx + 1}")
         logging.info(f"Mean path length for success exploration: {np.mean(list(path_length_list.values()))}")
         # logging.info(f'Scene {scene_id} finish')
+
+        # if target not found, select images from existing snapshots for question answering
+        if not target_found:
+            if cfg.handle_target_not_found == 'none':
+                selected_snapshot_ids = []
+            elif cfg.handle_target_not_found == "random":
+                all_snapshot_ids = list(scene.snapshots.keys())
+                selected_snapshot_ids = random.sample(all_snapshot_ids, len(cfg.num_final_images))
+            elif cfg.handle_target_not_found == "with_model":
+                selected_snapshot_ids = []
+                for _ in range(len(cfg.num_final_images)):
+                    step_dict = {}
+                    # add snapshot features
+                    step_dict["snapshot_features"] = {}
+                    step_dict["snapshot_objects"] = {}
+                    snapshot_id_mapping = {}
+                    prompt_ss_idx = 0
+                    for snapshot_idx, (rgb_id, snapshot) in enumerate(scene.snapshots.items()):
+                        if rgb_id in selected_snapshot_ids:
+                            continue
+                        step_dict["snapshot_features"][rgb_id] = all_snapshot_features[rgb_id]
+                        step_dict["snapshot_objects"][rgb_id] = snapshot.cluster
+
+                        snapshot_id_mapping[prompt_ss_idx] = snapshot_idx
+                        prompt_ss_idx += 1
+
+                    # add scene graph
+                    step_dict["scene_graph"] = list(scene.objects.keys())
+                    step_dict["scene_graph"] = [int(x) for x in step_dict["scene_graph"]]
+                    step_dict["obj_map"] = object_id_to_name
+                    step_dict["position"] = np.array(pts)[None,]
+                    obj_positions_map = {
+                        str(obj_id): obj['bbox'].center
+                        for obj_id, obj in scene.objects.items()
+                    }
+                    obj_positions_map = {
+                        key: value - step_dict["position"] for key, value in obj_positions_map.items()
+                    }
+                    step_dict["obj_position_map"] = obj_positions_map
+
+                    # we don't need to add frontier for model selection
+                    step_dict["frontiers"] = []
+
+                    if cfg.egocentric_views:
+                        assert len(rgb_egocentric_views_features) == total_views
+                        rgb_egocentric_views_features = torch.cat(rgb_egocentric_views_features, dim=0)
+                        step_dict["egocentric_view_features"] = rgb_egocentric_views_features
+                        step_dict["use_egocentric_views"] = True
+
+                    if cfg.action_memory:
+                        step_dict["memory_feature"] = memory_feature
+                        step_dict["use_action_memory"] = True
+
+                    step_dict["frontier_features"] = None
+                    step_dict["frontier_positions"] = None
+                    step_dict["question"] = question
+                    step_dict["scene"] = scene_id
+                    if cfg.prefiltering:
+                        outputs, _ = inference(model, tokenizer, step_dict, cfg)
+                    else:
+                        outputs = inference(model, tokenizer, step_dict, cfg)
+                    if outputs is None:
+                        logging.info(f"Question id {question_id} target not found handling: model generation error!")
+                        continue
+                    try:
+                        target_type, target_index = outputs.split(" ")[0], outputs.split(" ")[1]
+                        logging.info(f"Prediction in target not found handling: {target_type}, {target_index}")
+                    except:
+                        logging.info(f"Wrong output format in target not found handling, failed!")
+                        continue
+
+                    if target_type != "snapshot":
+                        logging.info(f"Invalid prediction type in target not found handling: {target_type}, failed!")
+                        continue
+
+                    if int(target_index) < 0 or int(target_index) >= len(snapshot_id_mapping):
+                        logging.info(f"target index can not match real objects in target not found handling: {target_index}, failed!")
+                        continue
+                    target_index = snapshot_id_mapping[int(target_index)]
+                    pred_target_snapshot = list(scene.snapshots.values())[int(target_index)]
+
+                    assert pred_target_snapshot.image not in selected_snapshot_ids, f"{pred_target_snapshot.image} already selected"
+                    selected_snapshot_ids.append(pred_target_snapshot.image)
+                    logging.info(f"Handling target not found: choose snapshot {pred_target_snapshot.image}")
+
+            # save the selected images
+            for ss_id in selected_snapshot_ids:
+                os.system(f"cp {os.path.join(episode_snapshot_dir, ss_id)} {os.path.join(episode_object_observe_dir, f'snapshot_{ss_id}')}")
+
+
 
         # print the items in the scene graph
         snapshot_dict = {}

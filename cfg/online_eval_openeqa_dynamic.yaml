@@ -35,6 +35,10 @@ margin_h_ratio: 0.6
 save_visualization: false
 save_frontier_video: false
 
+# for handling fail case
+handle_target_not_found: none   # none, random, with_model
+num_final_images: 15
+
 # Navigation
 init_clearance: 0.3
 max_step_room_size_ratio: 7

@@ -55,11 +55,6 @@ from llava.mm_utils import get_model_name_from_path
 from easydict import EasyDict
 
 
-def set_finetuned_yolo_class(model, path='yolo_finetune/class_id_to_class_name.json'):
-    class_id_to_class_name = json.load(open(path, "r"))
-    model.set_classes(list(class_id_to_class_name.values()))
-
-
 def infer_prefilter(model, tokenizer, sample):
     # return prefiltered object list
     filter_input_ids = sample.filter_input_ids.to("cuda")
@@ -266,7 +261,6 @@ def main(cfg):
 
         # Set the classes for the detection model
         detection_model.set_classes(scene.obj_classes.get_classes_arr())
-        # set_finetuned_yolo_class(detection_model)
 
         episode_data_dir = os.path.join(str(cfg.output_dir), str(question_id))
         episode_observations_dir = os.path.join(episode_data_dir, 'observations')

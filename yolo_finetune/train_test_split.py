@@ -1,7 +1,7 @@
 import os
 import random
 
-data_dir = '/gpfs/u/home/LMCG/LMCGnngn/scratch/yanghan/3d/explore-eqa-test/yolo_finetune_data'
+data_dir = '/gpfs/u/home/LMCG/LMCGhazh/scratch/yanghan/explore-eqa-test/yolo_finetune_data'
 train_ratio = 0.9
 
 all_images = os.listdir(os.path.join(data_dir, 'images'))

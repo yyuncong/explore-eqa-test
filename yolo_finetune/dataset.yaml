@@ -1,4 +1,4 @@
-path: /gpfs/u/home/LMCG/LMCGnngn/scratch/yanghan/3d/explore-eqa-test/yolo_finetune_data
+path: /gpfs/u/home/LMCG/LMCGhazh/scratch/yanghan/explore-eqa-test/yolo_finetune_data
 train: train.txt
 val: val.txt
 

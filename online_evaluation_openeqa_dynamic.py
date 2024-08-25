@@ -20,7 +20,7 @@ import json
 import logging
 import glob
 import open_clip
-from ultralytics import YOLO, SAM
+from ultralytics import YOLO, SAM, YOLOWorld
 from hydra import initialize, compose
 from habitat_sim.utils.common import quat_to_angle_axis
 from src.habitat import (
@@ -53,6 +53,11 @@ from llava.model.builder import load_pretrained_model
 from llava.mm_utils import get_model_name_from_path
 
 from easydict import EasyDict
+
+
+def set_finetuned_yolo_class(model, path='yolo_finetune/class_id_to_class_name.json'):
+    class_id_to_class_name = json.load(open(path, "r"))
+    model.set_classes(list(class_id_to_class_name.values()))
 
 
 def infer_prefilter(model, tokenizer, sample):
@@ -190,8 +195,11 @@ def main(cfg):
 
     ## Initialize the detection models
     detection_model = measure_time(YOLO)('yolov8x-world.pt')   # yolov8x-world.pt
+    # detection_model = measure_time(YOLOWorld)('path_to_model.pt')
+
     sam_predictor = SAM('sam_l.pt')  # SAM('sam_l.pt') # UltraLytics SAM
     # sam_predictor = measure_time(get_sam_predictor)(cfg) # Normal SAM
+
     clip_model, _, clip_preprocess = open_clip.create_model_and_transforms(
         "ViT-B-32", "laion2b_s34b_b79k"  # "ViT-H-14", "laion2b_s32b_b79k"
     )
@@ -255,8 +263,10 @@ def main(cfg):
             pass
 
         scene = Scene(scene_id, cfg, cfg_cg)
+
         # Set the classes for the detection model
         detection_model.set_classes(scene.obj_classes.get_classes_arr())
+        # set_finetuned_yolo_class(detection_model)
 
         episode_data_dir = os.path.join(str(cfg.output_dir), str(question_id))
         episode_observations_dir = os.path.join(episode_data_dir, 'observations')

@@ -38,8 +38,8 @@ save_frontier_video: false
 # Navigation
 init_clearance: 0.3
 max_step_room_size_ratio: 7
-extra_view_phase_1: 4
-extra_view_angle_deg_phase_1: 60
+extra_view_phase_1: 6
+extra_view_angle_deg_phase_1: 40
 max_target_observation: 4
 
 # Semantic map

@@ -1,12 +1,12 @@
 # General
 seed: 66
-exp_name: exp_patch2_rand_ego_lora_1e-06_ours_dynamic
+exp_name: exp_ours_dynamic
 output_parent_dir: /work/pi_chuangg_umass_edu/yuncong/results
 scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
 scene_data_path: /work/pi_chuangg_umass_edu/yuncong/data/scene_datasets/hm3d/
 semantic_bbox_data_path: '/home/yuncongyang_umass_edu/scene_understanding/hm3d_obj_bbox_merged'
-model_path: /work/pi_chuangg_umass_edu/yuncong/ds_lora/2e-06_patch2_rand_ego_lora
-path_data_dir: exploration_data_new
+model_path: /work/pi_chuangg_umass_edu/yuncong/ds_lora/ds_cluster_scannet_4e-06_patch1_ds_rand_ego_lora
+path_data_dir: exploration_data
 question_file_path: generated_questions/generated_questions.json
 concept_graph_config_path: "conceptgraph/hydra_configs"
 concept_graph_config_name: "rerun_realtime_mapping"
@@ -39,9 +39,9 @@ save_frontier_video: false
 
 # Navigation
 init_clearance: 0.3
-max_step_room_size_ratio: 11
-extra_view_phase_1: 4
-extra_view_angle_deg_phase_1: 60
+max_step_room_size_ratio: 7
+extra_view_phase_1: 6
+extra_view_angle_deg_phase_1: 40
 
 # Semantic map
 explored_depth: 1.7

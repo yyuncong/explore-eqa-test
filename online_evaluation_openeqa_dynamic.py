@@ -749,7 +749,7 @@ def main(cfg):
                 selected_snapshot_ids = random.sample(all_snapshot_ids, len(cfg.num_final_images))
             elif cfg.handle_target_not_found == "with_model":
                 selected_snapshot_ids = []
-                for _ in range(len(cfg.num_final_images)):
+                for _ in range(cfg.num_final_images):
                     step_dict = {}
                     # add snapshot features
                     step_dict["snapshot_features"] = {}
@@ -764,6 +764,10 @@ def main(cfg):
 
                         snapshot_id_mapping[prompt_ss_idx] = snapshot_idx
                         prompt_ss_idx += 1
+
+                    if len(snapshot_id_mapping) == 0:
+                        logging.info(f"Question id {question_id} target not found handling: no snapshots available!")
+                        break
 
                     # add scene graph
                     step_dict["scene_graph"] = list(scene.objects.keys())
@@ -783,8 +787,6 @@ def main(cfg):
                     step_dict["frontiers"] = []
 
                     if cfg.egocentric_views:
-                        assert len(rgb_egocentric_views_features) == total_views
-                        rgb_egocentric_views_features = torch.cat(rgb_egocentric_views_features, dim=0)
                         step_dict["egocentric_view_features"] = rgb_egocentric_views_features
                         step_dict["use_egocentric_views"] = True
 

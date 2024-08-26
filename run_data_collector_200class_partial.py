@@ -37,7 +37,7 @@ from src.geom import get_cam_intr, get_scene_bnds, get_collision_distance
 from src.tsdf_clustering_200class import TSDFPlanner, Frontier, SnapShot
 from src.detection_utils import compute_recall,format_snapshot
 from inference.models import YOLOWorld
-from ultralytics import YOLO
+from ultralytics import YOLOWorld as YOLO
 
 '''
 This code generate object features online
@@ -56,11 +56,9 @@ def main(cfg):
     detection_model_yoloworld = YOLOWorld(model_id=cfg.yolo_world_model_name)
     detection_model = YOLO(cfg.yolo_model_name)  # yolov8x-world.pt
 
-    # load scannet 200 classes
-    with open('data/scannet200_classes.txt', 'r') as f:
-        scannet200_classes = [line.strip() for line in f.readlines()]
-    detection_model.set_classes(scannet200_classes)
-    scannet_class_id_to_name = {i: scannet200_classes[i] for i in range(len(scannet200_classes))}
+    # load finetuned yolo classes
+    class_id_to_name = json.load(open('yolo_finetune/class_id_to_class_name.json', 'r'))
+    detection_model.set_classes(list(class_id_to_name.values()))
 
     # Load dataset
     with open(os.path.join(cfg.question_data_path, "generated_questions.json")) as f:
@@ -340,7 +338,7 @@ def main(cfg):
                             semantic_obs=semantic_obs,
                             gt_obj_id_to_name=object_id_to_name,
                             gt_obj_id_to_bbox=object_id_to_bbox,
-                            scannet_class_id_to_name=scannet_class_id_to_name,
+                            scannet_class_id_to_name=class_id_to_name,
                             cfg=cfg.scene_graph,
                             file_name=obs_file_name,
                             obs_point=pts,
@@ -349,7 +347,7 @@ def main(cfg):
                         # save the image as 720 x 720
                         plt.imsave(
                             os.path.join(object_feature_save_dir, obs_file_name),
-                            np.asarray(Image.fromarray(rgb[..., :3]).resize((720, 720)))
+                            np.asarray(Image.fromarray(rgb[..., :3]).resize((360, 360)))
                         )
                         all_added_obj_ids += added_obj_ids
 
@@ -412,7 +410,7 @@ def main(cfg):
                             # save the image as 720 x 720
                             plt.imsave(
                                 os.path.join(episode_frontier_dir, f"{cnt_step}_{i}.png"),
-                                np.asarray(Image.fromarray(frontier_obs).resize((720, 720)))
+                                np.asarray(Image.fromarray(frontier_obs).resize((360, 360)))
                             )
                             frontier.image = f"{cnt_step}_{i}.png"
                             frontier_dict["rgb_id"] = f"{cnt_step}_{i}.png"

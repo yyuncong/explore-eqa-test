@@ -9,7 +9,7 @@ scene_data_path_val: "/gpfs/u/home/LMCG/LMCGnngn/scratch/multisensory/MLLM/data/
 semantic_bbox_data_path: '/gpfs/u/home/LMCG/LMCGnngn/scratch/multisensory/MLLM/data/hm3d/hm3d_obj_bbox_merged'
 dataset_output_dir: "exploration_data"
 yolo_world_model_name: "yolo_world/x"
-yolo_model_name: 'yolov8x-world.pt'
+yolo_model_name: '/gpfs/u/home/LMCG/LMCGhazh/scratch/yanghan/explore-eqa-test/yolov8x-world-finetuned.pt'
 
 # Sampling navigation point
 min_travel_dist: 5.0

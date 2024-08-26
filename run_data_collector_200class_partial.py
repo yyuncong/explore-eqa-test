@@ -58,6 +58,7 @@ def main(cfg):
 
     # load finetuned yolo classes
     class_id_to_name = json.load(open('yolo_finetune/class_id_to_class_name.json', 'r'))
+    class_id_to_name = {int(k): v for k, v in class_id_to_name.items()}
     detection_model.set_classes(list(class_id_to_name.values()))
 
     # Load dataset

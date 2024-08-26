@@ -544,6 +544,10 @@ def adjust_navigation_point(pos, occupied, max_dist=0.5, max_adjust_distance=0.3
         new_pos = new_pos - direction * step_size
         new_pos_int = np.round(new_pos).astype(int)
         new_occupied_point = get_nearest_true_point(new_pos_int, occupied)
+        if new_occupied_point is None:
+            # after the adjustment, the point is out of the map
+            # then just return the previous point
+            return np.round(new_pos + direction * step_size).astype(int)
         new_dist = np.linalg.norm(new_occupied_point - new_pos_int)
         if new_dist >= max_dist:
             break
@@ -773,8 +777,13 @@ def get_random_snapshot_observation_point(
         if try_count_pick > 100:
             logging.error(f"Error in get_random_snapshot_observation_point: cannot find a proper observation point! try many tries")
             break
-
-        potential_obs_point = valid_coords[np.random.choice(len(valid_coords), p=selection_weight)]
+        
+        try:
+            potential_obs_point = valid_coords[np.random.choice(len(valid_coords), p=selection_weight)]
+        except:
+            # really need to figure out why this happens
+            logging.error(f"Error in get_random_snapshot_observation_point: random choice failed!")
+            return None
 
         # we need to ensure that there is no occupied point between the observation point and the snapshot center
         direction = snapshot_center - potential_obs_point

@@ -541,8 +541,8 @@ def get_frontier_observation_and_detect_target(
     semantic_obs = obs["semantic_sensor"]
 
     detection_model.set_classes([target_obj_class])
-    results = detection_model.infer(rgb[..., :3], confidence=cfg.confidence)
-    detections = sv.Detections.from_inference(results).with_nms(threshold=cfg.nms_threshold)
+    results = detection_model.infer(rgb[..., :3], confidence=0.003)
+    detections = sv.Detections.from_inference(results).with_nms(threshold=0.1)
 
     target_detected = False
     if target_obj_id in np.unique(semantic_obs):
@@ -555,7 +555,7 @@ def get_frontier_observation_and_detect_target(
             target_x_end, target_y_end = np.argwhere(semantic_obs == target_obj_id).max(axis=0)
             obj_mask = np.zeros(semantic_obs.shape, dtype=bool)
             obj_mask[target_x_start:target_x_end, target_y_start:target_y_end] = True
-            if IoU(bbox_mask, obj_mask) > cfg.iou_threshold:
+            if IoU(bbox_mask, obj_mask) > 0.5:
                 target_detected = True
                 break
 

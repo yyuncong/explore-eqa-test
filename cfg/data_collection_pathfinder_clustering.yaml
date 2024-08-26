@@ -1,13 +1,18 @@
 # General
 seed: 66
-exp_name: vlm_exp_frontiers
+exp_name: vlm_exp_frontiers_ram_iou0.8_confidence0.02_recognize0.7
 output_parent_dir: results
 question_data_path: "generated_questions"
 scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
-scene_data_path: /home/yuncong/scene_understanding/data/versioned_data/hm3d-0.2/hm3d
-semantic_bbox_data_path: /home/yuncong/scene_understanding/data/hm3d_obj_bbox_merged
-dataset_output_dir: "exploration_data_success_incremental_merge"
+#scene_data_path: /home/yuncong/scene_understanding/data/versioned_data/hm3d-0.2/hm3d
+scene_data_path_train: /project/pi_chuangg_umass_edu/yuncong/data_v2/scene_datasets/hm3d
+scene_data_path_val: /work/pi_chuangg_umass_edu/yuncong/data/scene_datasets/hm3d
+#semantic_bbox_data_path: /home/yuncong/scene_understanding/data/hm3d_obj_bbox_merged
+semantic_bbox_data_path: '/home/yuncongyang_umass_edu/scene_understanding/hm3d_obj_bbox_merged'
+dataset_output_dir: "exploration_data_success_incremental_ram"
+#dataset_output_dir: "exploration_data_success_incremental_gt_class"
 detection_model_name: "yolo_world/s"
+recognize_model_path: /work/pi_chuangg_umass_edu/yuncong/ram_plus_swin_large_14m.pth
 
 incremental: true
 
@@ -76,3 +81,10 @@ scene_graph:
   nms_threshold: 0.1
   iou_threshold: 0.5
   obj_include_dist: 2.5
+  recognize_img_size: 384
+  recognize_confidence: 0.7
+  confidence_threshold: 0.02
+  delete_tag_list_path: RAM/ram/data/ram_tag_list_deleted_index.pkl
+  detection_measure: 'mixed'
+  use_ram: true
+  use_gt_class: false

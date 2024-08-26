@@ -33,8 +33,11 @@ from src.habitat import (
     get_frontier_observation_and_detect_target
 )
 from src.geom import get_cam_intr, get_scene_bnds, get_collision_distance
-from src.tsdf_clustering import TSDFPlanner, Frontier, SnapShot
+#from src.tsdf_clustering import TSDFPlanner, Frontier, SnapShot
+from src.tsdf_clustering_ram import TSDFPlanner, Frontier, SnapShot
+from src.detection_utils import compute_recall,format_snapshot
 from inference.models import YOLOWorld
+from RAM.ram.models import ram_plus
 
 
 '''
@@ -52,7 +55,16 @@ def main(cfg):
 
     # load object detection model
     detection_model = YOLOWorld(model_id=cfg.detection_model_name)
-
+    
+    # load object recognize model
+    with open(cfg.scene_graph.delete_tag_list_path, 'rb') as f:
+        delete_tag_index = pickle.load(f)
+    recognize_model = ram_plus(pretrained=cfg.recognize_model_path, 
+                               image_size=cfg.scene_graph.recognize_img_size, 
+                               vit='swin_l',
+                               delete_tag_index=delete_tag_index)
+    # adjust the class threshold of the recognize model
+    recognize_model.class_threshold *= cfg.scene_graph.recognize_confidence
     # Load dataset
     with open(os.path.join(cfg.question_data_path, "generated_questions.json")) as f:
         questions_data = json.load(f)
@@ -92,6 +104,10 @@ def main(cfg):
 
         # load scene
         split = "train" if int(scene_id.split("-")[0]) < 800 else "val"
+        if split == "train":
+            cfg.scene_data_path = cfg.scene_data_path_train
+        else:
+            cfg.scene_data_path = cfg.scene_data_path_val
         scene_mesh_path = os.path.join(cfg.scene_data_path, split, scene_id, scene_id.split("-")[1] + ".basis.glb")
         navmesh_path = os.path.join(cfg.scene_data_path, split, scene_id, scene_id.split("-")[1] + ".basis.navmesh")
         semantic_texture_path = os.path.join(cfg.scene_data_path, split, scene_id, scene_id.split("-")[1] + ".semantic.glb")
@@ -143,8 +159,9 @@ def main(cfg):
         for question_data in all_questions_in_scene:
             # for each question, generate several paths, starting from different starting points
             for path_idx in range(cfg.path_id_offset, cfg.path_id_offset + cfg.paths_per_question):
+                if question_ind > 2:
+                    exit(0)
                 question_ind += 1
-
                 target_obj_id = question_data['object_id']
                 target_position = question_data['position']
                 target_rotation = question_data['rotation']
@@ -154,11 +171,13 @@ def main(cfg):
                 object_feature_save_dir = os.path.join(episode_data_dir, 'object_features')
 
                 # if the data has already generated, skip
+                # bind skip for testing
+                '''
                 if os.path.exists(episode_data_dir) and os.path.exists(os.path.join(episode_data_dir, "metadata.json")):
                     logging.info(f"Question id {question_data['question_id']}-path {path_idx} already exists")
                     success_count += 1
                     continue
-
+                '''
                 if os.path.exists(episode_data_dir) and not os.path.exists(os.path.join(episode_data_dir, "metadata.json")):
                     os.system(f"rm -r {episode_data_dir}")
 
@@ -295,6 +314,7 @@ def main(cfg):
                         obs_file_name = f"{cnt_step}-view_{view_idx}.png"
                         object_added, annotated_image = tsdf_planner.update_scene_graph(
                             detection_model=detection_model,
+                            recognize_model=recognize_model,
                             rgb=rgb[..., :3],
                             semantic_obs=semantic_obs,
                             obj_id_to_name=object_id_to_name,
@@ -304,7 +324,8 @@ def main(cfg):
                             obs_point=pts,
                             return_annotated=True
                         )
-                        plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), rgb)
+                        #plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), rgb)
+                        plt.imsave(os.path.join(object_feature_save_dir, obs_file_name), annotated_image)
 
                         # TSDF fusion
                         tsdf_planner.integrate(
@@ -420,7 +441,10 @@ def main(cfg):
                     pts_normal, angle, pts_pix, fig, path_points, target_arrived = return_values
 
                     # save snapshots
-                    step_dict["snapshots"] = []
+                    # revise snapshot saving logic here
+                    #step_dict["snapshots"] = []
+                    step_dict["snapshots"] = format_snapshot(tsdf_planner.snapshots.values(), tsdf_planner.simple_scene_graph)
+                    '''
                     for snapshot in tsdf_planner.snapshots.values():
                         step_dict["snapshots"].append(
                             {
@@ -428,7 +452,8 @@ def main(cfg):
                                 "obj_ids": [int(obj_id) for obj_id in snapshot.cluster]
                              }
                         )
-
+                        step_dict["snapshots"].append(format_snapshot(snapshot, tsdf_planner.simple_scene_graph))
+                    '''
                     # # tempt
                     # step_dict["scene_graph_file2objs"] = {}
                     # for obj_id, obj in tsdf_planner.simple_scene_graph.items():
@@ -609,7 +634,7 @@ def main(cfg):
                     if cfg.del_fail_case:
                         os.system(f"rm -r {episode_data_dir}")
                     success_list.append(0)
-
+                
                 logging.info(f"{question_ind}/{total_questions}: Success rate: {success_count}/{question_ind}")
 
 
@@ -662,11 +687,9 @@ def main(cfg):
                         logging.info(f"Average success top {top_k} images: {np.mean(top_k_success_images_record):.2f} +- {np.std(top_k_success_images_record):.2f}")
                         logging.info(f"Max top {top_k} success images: {np.max(top_k_success_images_record)}, Min top {top_k} success images: {np.min(top_k_success_images_record)}")
 
-
-
-
-
-
+                # print the statistics of detection quality
+                object_detection_rate = compute_recall(tsdf_planner.simple_scene_graph,object_id_to_name)
+                logging.info(f"Object detection rate: {object_detection_rate:.2f}")
 
             logging.info(f"Question id {question_data['question_id']} finished all paths")
 

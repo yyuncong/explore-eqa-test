@@ -174,7 +174,7 @@ class TSDFPlanner:
 
         self.frontiers_weight = None
 
-    def update_scene_graph(self, detection_model, rgb, semantic_obs, obj_id_to_name, obj_id_to_bbox, cfg, target_obj_id, return_annotated=False):
+    def update_scene_graph(self, detection_model, rgb, semantic_obs, obj_id_to_name, obj_id_to_bbox, cfg, target_obj_id, obs_point, return_annotated=False):
         target_found = False
 
         unique_obj_ids = np.unique(semantic_obs)
@@ -217,6 +217,17 @@ class TSDFPlanner:
                 if IoU(bbox_mask, obj_mask) > cfg.iou_threshold:
                     # this object is counted as detected
                     # add to the scene graph
+
+                    bbox = obj_id_to_bbox[obj_id]["bbox"]
+                    bbox = np.asarray(bbox)
+                    bbox_center = np.mean(bbox, axis=0)
+                    # change to x, z, y for habitat
+                    bbox_center = bbox_center[[0, 2, 1]]
+
+                    # if the object is faraway, then just not add to the scene graph
+                    # if np.linalg.norm(np.asarray([bbox_center[0] - obs_point[0], bbox_center[2] - obs_point[2]])) > 3.5:
+                    #     continue
+
                     if obj_id not in self.simple_scene_graph.keys():
                         bbox = obj_id_to_bbox[obj_id]["bbox"]
                         bbox = np.asarray(bbox)

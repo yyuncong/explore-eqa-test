@@ -375,10 +375,7 @@ def main(cfg):
                             frame_idx=cnt_step * total_views + view_idx,
                             target_obj_mask=semantic_obs == target_obj_id,
                         )
-                        img_feature = encode(
-                            model, image_processor,
-                            np.asarray(Image.fromarray(rgb[..., :3]).resize((720, 720)))
-                        ).mean(0)
+                        img_feature = encode(model, image_processor, rgb).mean(0)
                         img_feature = merge_patches(
                             img_feature.view(cfg.visual_feature_size, cfg.visual_feature_size, -1),
                             cfg.patch_size
@@ -473,10 +470,7 @@ def main(cfg):
                             )
                         processed_rgb = rgba2rgb(frontier_obs)
                         with torch.no_grad():
-                            img_feature = encode(
-                                model, image_processor,
-                                np.asarray(Image.fromarray(processed_rgb[..., :3]).resize((720, 720)))
-                            ).mean(0)
+                            img_feature = encode(model, image_processor, processed_rgb).mean(0)
                         img_feature = merge_patches(
                             img_feature.view(cfg.visual_feature_size, cfg.visual_feature_size, -1),
                             cfg.patch_size

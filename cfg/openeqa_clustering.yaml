@@ -1,6 +1,6 @@
 # General
 seed: 66
-exp_name: clustering_106_reverse_merge_4.0
+exp_name: clustering_106_best_2.5
 output_parent_dir: /work/pi_chuangg_umass_edu/yuncong/results
 question_data_path: "generated_questions"
 scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
@@ -80,4 +80,4 @@ scene_graph:
   confidence: 0.003
   nms_threshold: 0.1
   iou_threshold: 0.5
-  obj_include_dist: 4.0
+  obj_include_dist: 2.5

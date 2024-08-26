@@ -306,9 +306,12 @@ class SceneHierarchicalClustering(BisectingKmeans):
             def key_func(x):
                 return -len(frames[x].full_obj_list), -sum([frames[x].full_obj_list[obj] for obj in obj_set])
             sorted_candidates = sorted(candidates, key=lambda x: key_func(x))
+            
+            
             for key in sorted_candidates:
                 if key in current_keys:
                     return key
+            
             return sorted_candidates[0]
 
     def fit(self, X, obj_ids, frames):

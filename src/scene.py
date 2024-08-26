@@ -59,6 +59,7 @@ class Scene:
             graph_cfg,
     ):
         self.cfg = cfg
+        # concept graph configuration
         self.cfg_cg = graph_cfg
 
         # about the loading the scene
@@ -89,8 +90,9 @@ class Scene:
         self.pathfinder.load_nav_mesh(navmesh_path)
 
         # load object classes
+        # maintain a list of object classes
         self.obj_classes = ObjectClasses(
-            classes_file_path=scene_semantic_annotation_path,
+            classes_file_path=scene_semantic_annotation_path if cfg.detection_class_path == 'raw' else cfg.detection_class_path,
             bg_classes=self.cfg_cg['bg_classes'],
             skip_bg=self.cfg_cg['skip_bg']
         )
@@ -227,7 +229,7 @@ class Scene:
             target_obj_mask=None  # the boolean mask of target object generated from the semantic sensor. If given, return the object id of the target object
     ) -> Tuple[np.ndarray, List[int], Optional[int]]:
         # return annotated image; the detected object ids in current frame; the object id of the target object (if detected)
-
+        # set up object_classes first
         obj_classes = self.obj_classes
         # Detect objects
         results = detection_model.predict(image_rgb, conf=0.1, verbose=False)

@@ -92,7 +92,7 @@ class Scene:
         # load object classes
         # maintain a list of object classes
         self.obj_classes = ObjectClasses(
-            classes_file_path=scene_semantic_annotation_path if cfg.detection_class_path == 'raw' else cfg.detection_class_path,
+            classes_file_path=scene_semantic_annotation_path,
             bg_classes=self.cfg_cg['bg_classes'],
             skip_bg=self.cfg_cg['skip_bg']
         )

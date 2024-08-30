@@ -613,9 +613,11 @@ class ObjectClasses:
         self.classes_file_path = Path(classes_file_path)
         self.bg_classes = bg_classes
         self.skip_bg = skip_bg
-        self.classes = self._load_or_create_colors()
+
         assert class_set in ['hm3d', 'scannet200', 'yolo_finetune'], f"Invalid class set: {class_set}"
         self.class_set = class_set
+
+        self.classes = self._load_or_create_colors()
 
     def _load_or_create_colors(self):
         if self.class_set == 'hm3d':

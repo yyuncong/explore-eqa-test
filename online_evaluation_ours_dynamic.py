@@ -194,11 +194,12 @@ def main(cfg):
     logging.info(f"Loaded {len(all_questions_list)} questions in {len(all_scene_list)} scenes.")
 
     ## Initialize the detection models
-    detection_model = measure_time(YOLOWorld(cfg.yolo_model_name))
+    detection_model = YOLOWorld(cfg.yolo_model_name)
     logging.info(f"Load YOLO model {cfg.yolo_model_name} successful!")
 
     sam_predictor = SAM('sam_l.pt')  # SAM('sam_l.pt') # UltraLytics SAM
     # sam_predictor = measure_time(get_sam_predictor)(cfg) # Normal SAM
+
     clip_model, _, clip_preprocess = open_clip.create_model_and_transforms(
         "ViT-B-32", "laion2b_s34b_b79k"  # "ViT-H-14", "laion2b_s32b_b79k"
     )
@@ -217,8 +218,7 @@ def main(cfg):
     if not cfg.use_deepspeed:
         load_checkpoint(model, cfg.model_path)
     else:
-        load_ds_checkpoint(model, cfg.model_path, exclude_frozen_parameters = True)
-    #print('finish checkpoint loading')
+        load_ds_checkpoint(model, cfg.model_path, exclude_frozen_parameters=True)
     model = model.to("cuda")
     # model = None
     model.eval()
@@ -263,6 +263,7 @@ def main(cfg):
             pass
 
         scene = Scene(scene_id, cfg, cfg_cg)
+
         # Set the classes for the detection model
         detection_model.set_classes(scene.obj_classes.get_classes_arr())
 
@@ -580,7 +581,7 @@ def main(cfg):
                             break
                         pred_target_snapshot = list(scene.snapshots.values())[int(target_index)]
                         logging.info(
-                            "pred_target_class: "+str(' '.join([object_id_to_name[obj_id] for obj_id in pred_target_snapshot.cluster]))
+                            "pred_target_class: " + str(' '.join([object_id_to_name[obj_id] for obj_id in pred_target_snapshot.cluster]))
                         )
 
                         logging.info(f"Next choice Snapshot of {pred_target_snapshot.image}")

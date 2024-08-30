@@ -189,7 +189,7 @@ def main(cfg):
     print("question path: ", cfg.questions_list_path)
 
     ## Initialize the detection models
-    detection_model = measure_time(YOLOWorld(cfg.yolo_model_name))
+    detection_model = YOLOWorld(cfg.yolo_model_name)
     logging.info(f"Load YOLO model {cfg.yolo_model_name} successful!")
 
     sam_predictor = SAM('sam_l.pt')  # SAM('sam_l.pt') # UltraLytics SAM
@@ -243,7 +243,7 @@ def main(cfg):
         # Extract question
         scene_id = question_data["episode_history"]
 
-        if '00852' in scene_id:
+        if '00853' in scene_id:
             logging.info(f"Skip scene 00852")
             continue
 
@@ -263,12 +263,10 @@ def main(cfg):
         detection_model.set_classes(scene.obj_classes.get_classes_arr())
 
         episode_data_dir = os.path.join(str(cfg.output_dir), str(question_id))
-        episode_observations_dir = os.path.join(episode_data_dir, 'observations')
         episode_object_observe_dir = os.path.join(episode_data_dir, 'object_observations')
         episode_frontier_dir = os.path.join(episode_data_dir, "frontier_rgb")
         episode_snapshot_dir = os.path.join(episode_data_dir, 'snapshot')
         os.makedirs(episode_data_dir, exist_ok=True)
-        os.makedirs(episode_observations_dir, exist_ok=True)
         os.makedirs(episode_object_observe_dir, exist_ok=True)
         os.makedirs(episode_frontier_dir, exist_ok=True)
         os.makedirs(episode_snapshot_dir, exist_ok=True)
@@ -343,10 +341,6 @@ def main(cfg):
                 cam_pose_normal = pose_habitat_to_normal(cam_pose)
                 cam_pose_tsdf = pose_normal_to_tsdf(cam_pose_normal)
 
-                plt.imsave(
-                    os.path.join(episode_observations_dir, "{}.png".format(cnt_step)), rgb
-                )
-
                 # collect all view features
                 obs_file_name = f"{cnt_step}-view_{view_idx}.png"
                 with torch.no_grad():
@@ -359,17 +353,14 @@ def main(cfg):
                         frame_idx=cnt_step * total_views + view_idx,
                         target_obj_mask=None,
                     )
-                    img_feature = encode(
-                        model, image_processor,
-                        np.asarray(Image.fromarray(rgb[..., :3]).resize((720, 720)))
-                    ).mean(0)
+                    img_feature = encode(model, image_processor, rgb).mean(0)
                     img_feature = merge_patches(
                         img_feature.view(cfg.visual_feature_size, cfg.visual_feature_size, -1),
                         cfg.patch_size
                     )
                     all_snapshot_features[obs_file_name] = img_feature.to("cpu")
                     rgb_egocentric_views_features.append(img_feature.to("cpu"))
-                    if cfg.save_frontier_video or cfg.save_visualization:
+                    if cfg.save_visualization or cfg.save_frontier_video:
                         plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), annotated_rgb)
                     else:
                         plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), rgb)
@@ -451,10 +442,7 @@ def main(cfg):
                         )
                     processed_rgb = rgba2rgb(frontier_obs)
                     with torch.no_grad():
-                        img_feature = encode(
-                            model, image_processor,
-                            np.asarray(Image.fromarray(processed_rgb[..., :3]).resize((720, 720)))
-                        ).mean(0)
+                        img_feature = encode(model, image_processor, processed_rgb).mean(0)
                     img_feature = merge_patches(
                         img_feature.view(cfg.visual_feature_size, cfg.visual_feature_size, -1),
                         cfg.patch_size
@@ -472,34 +460,30 @@ def main(cfg):
             if tsdf_planner.max_point is None and tsdf_planner.target_point is None:
                 # choose a frontier, and set it as the explore target
                 step_dict["frontiers"] = []
+                # since we skip the stuck frontier for input of the vlm, we need to map the
+                # vlm output frontier id to the tsdf planner frontier id
+                ft_id_to_vlm_id = {}
+                vlm_id_count = 0
+                for i, frontier in enumerate(tsdf_planner.frontiers):
+                    frontier_dict = {}
+                    pos_voxel = frontier.position
+                    pos_world = pos_voxel * tsdf_planner._voxel_size + tsdf_planner._vol_origin[:2]
+                    pos_world = pos_normal_to_habitat(np.append(pos_world, floor_height))
+                    frontier_dict["coordinate"] = pos_world.tolist()
+                    assert frontier.image is not None and frontier.feature is not None
+                    frontier_dict["rgb_feature"] = frontier.feature
+                    frontier_dict["rgb_id"] = frontier.image
 
-                if False:
-                    pass
-                else:
-                    # since we skip the stuck frontier for input of the vlm, we need to map the
-                    # vlm output frontier id to the tsdf planner frontier id
-                    ft_id_to_vlm_id = {}
-                    vlm_id_count = 0
-                    for i, frontier in enumerate(tsdf_planner.frontiers):
-                        frontier_dict = {}
-                        pos_voxel = frontier.position
-                        pos_world = pos_voxel * tsdf_planner._voxel_size + tsdf_planner._vol_origin[:2]
-                        pos_world = pos_normal_to_habitat(np.append(pos_world, floor_height))
-                        frontier_dict["coordinate"] = pos_world.tolist()
-                        assert frontier.image is not None and frontier.feature is not None
-                        frontier_dict["rgb_feature"] = frontier.feature
-                        frontier_dict["rgb_id"] = frontier.image
+                    step_dict["frontiers"].append(frontier_dict)
 
-                        step_dict["frontiers"].append(frontier_dict)
-
-                        ft_id_to_vlm_id[i] = vlm_id_count
-                        vlm_id_count += 1
-                    vlm_id_to_ft_id = {v: k for k, v in ft_id_to_vlm_id.items()}
+                    ft_id_to_vlm_id[i] = vlm_id_count
+                    vlm_id_count += 1
+                vlm_id_to_ft_id = {v: k for k, v in ft_id_to_vlm_id.items()}
 
                 if cfg.egocentric_views:
                     assert len(rgb_egocentric_views_features) == total_views
-                    rgb_egocentric_views_features = torch.cat(rgb_egocentric_views_features, dim=0)
-                    step_dict["egocentric_view_features"] = rgb_egocentric_views_features
+                    rgb_egocentric_views_features_tensor = torch.cat(rgb_egocentric_views_features, dim=0)
+                    step_dict["egocentric_view_features"] = rgb_egocentric_views_features_tensor
                     step_dict["use_egocentric_views"] = True
 
                 if cfg.action_memory:
@@ -787,7 +771,7 @@ def main(cfg):
                     step_dict["frontiers"] = []
 
                     if cfg.egocentric_views:
-                        step_dict["egocentric_view_features"] = rgb_egocentric_views_features
+                        step_dict["egocentric_view_features"] = rgb_egocentric_views_features_tensor
                         step_dict["use_egocentric_views"] = True
 
                     if cfg.action_memory:
@@ -847,14 +831,6 @@ def main(cfg):
             logging.info(f"{snapshot_id}:")
             for obj_str in obj_list:
                 logging.info(f"\t{obj_str}")
-
-        # ensure that the observation dir has at most 50 images
-        all_img_paths = glob.glob(os.path.join(episode_observations_dir, "*.png"))
-        if len(all_img_paths) > 50:
-            selected_img_paths = random.sample(all_img_paths, 50)
-            for path in all_img_paths:
-                if path not in selected_img_paths:
-                    os.remove(path)
 
         with open(os.path.join(str(cfg.output_dir), "success_list.pkl"), "wb") as f:
             pickle.dump(success_list, f)

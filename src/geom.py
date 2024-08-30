@@ -829,26 +829,33 @@ def get_near_navigable_point(p, pathfinder, radius=0.2):
     # p: [3] array in habitat coordinate
     # radius: the radius for searching the navigable point
 
-    try_count = 0
-    while True:
-        try_count += 1
-        if try_count > 100:
-            logging.error(f"Error in get_near_navigable_point: cannot find a navigable point! try many tries")
-            return None
+    # try_count = 0
+    # while True:
+    #     try_count += 1
+    #     if try_count > 100:
+    #         logging.error(f"Error in get_near_navigable_point: cannot find a navigable point! try many tries")
+    #         return None
+    #
+    #     try:
+    #         target_navigable_point = pathfinder.get_random_navigable_point_near(
+    #             circle_center=p,
+    #             radius=radius,
+    #         )
+    #     except:
+    #         logging.error(f"Error in get_near_navigable_point: pathfinder failed to find a navigable point!")
+    #         continue
+    #     if np.isnan(target_navigable_point).any():
+    #         logging.error(f"Error in get_near_navigable_point: pathfinder returned nan point!")
+    #         continue
+    #     if abs(target_navigable_point[1] - p[1]) < 0.1:
+    #         return target_navigable_point
 
-        try:
-            target_navigable_point = pathfinder.get_random_navigable_point_near(
-                circle_center=p,
-                radius=radius,
-            )
-        except:
-            logging.error(f"Error in get_near_navigable_point: pathfinder failed to find a navigable point!")
-            continue
-        if np.isnan(target_navigable_point).any():
-            logging.error(f"Error in get_near_navigable_point: pathfinder returned nan point!")
-            continue
-        if abs(target_navigable_point[1] - p[1]) < 0.1:
-            return target_navigable_point
+
+    snap_point = pathfinder.snap_point(p)
+    if np.isnan(snap_point).any():
+        logging.error(f"Error in get_near_navigable_point: pathfinder failed to snap the point!")
+        return None
+    return snap_point
 
 
 

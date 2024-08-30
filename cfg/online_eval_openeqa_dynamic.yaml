@@ -22,6 +22,10 @@ use_deepspeed: true #false
 
 add_positional_encodings: false
 
+# about detection model
+yolo_model_name: /home/yuncongyang_umass_edu/scene_understanding/yanghan/explore-eqa-test/yolov8x-world-finetuned.pt  # yolov8x-world.pt
+class_set: yolo_finetune  # hm3d, yolo_finetune, scannet200
+
 # Camera, image
 camera_height: 1.5
 camera_tilt_deg: -30

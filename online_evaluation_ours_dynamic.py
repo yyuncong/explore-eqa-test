@@ -19,7 +19,7 @@ import json
 import logging
 import glob
 import open_clip
-from ultralytics import YOLO, SAM
+from ultralytics import YOLOWorld, SAM
 from hydra import initialize, compose
 from src.habitat import (
     pos_normal_to_habitat,
@@ -194,7 +194,9 @@ def main(cfg):
     logging.info(f"Loaded {len(all_questions_list)} questions in {len(all_scene_list)} scenes.")
 
     ## Initialize the detection models
-    detection_model = measure_time(YOLO)('yolov8x-world.pt')   # yolov8x-world.pt
+    detection_model = measure_time(YOLOWorld(cfg.yolo_model_name))
+    logging.info(f"Load YOLO model {cfg.yolo_model_name} successful!")
+
     sam_predictor = SAM('sam_l.pt')  # SAM('sam_l.pt') # UltraLytics SAM
     # sam_predictor = measure_time(get_sam_predictor)(cfg) # Normal SAM
     clip_model, _, clip_preprocess = open_clip.create_model_and_transforms(

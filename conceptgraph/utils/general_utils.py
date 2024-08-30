@@ -609,42 +609,45 @@ class ObjectClasses:
         model.set_classes(obj_classes.get_classes_arr())
         some_class_color = obj_classes.get_class_color(index or class_name)
     """
-    def __init__(self, classes_file_path, bg_classes, skip_bg):
+    def __init__(self, classes_file_path, bg_classes, skip_bg, class_set):
         self.classes_file_path = Path(classes_file_path)
         self.bg_classes = bg_classes
         self.skip_bg = skip_bg
         self.classes = self._load_or_create_colors()
+        assert class_set in ['hm3d', 'scannet200', 'yolo_finetune'], f"Invalid class set: {class_set}"
+        self.class_set = class_set
 
     def _load_or_create_colors(self):
-        # # normally load hm3d class
-        # with open(self.classes_file_path, "r") as f:
-        #     all_lines = [cls.strip() for cls in f.readlines()][1:]
-        #     all_classes = [line.split(',')[2].replace("\"", "") for line in all_lines]
-        #     all_classes = list(set(all_classes))
-        #     all_classes = [cls for cls in all_classes if cls != "unknown"]
-        #     logging.info(f"Loaded {len(all_classes)} classes from hm3d: {self.classes_file_path}!!!")
+        if self.class_set == 'hm3d':
+            # normally load hm3d class
+            with open(self.classes_file_path, "r") as f:
+                all_lines = [cls.strip() for cls in f.readlines()][1:]
+                all_classes = [line.split(',')[2].replace("\"", "") for line in all_lines]
+                all_classes = list(set(all_classes))
+                all_classes = [cls for cls in all_classes if cls != "unknown"]
+                logging.info(f"Loaded {len(all_classes)} classes from hm3d: {self.classes_file_path}!!!")
 
-        # load scannet 200 class
-        self.classes_file_path = Path('data/scannet200_classes.txt')
-        with open(self.classes_file_path, "r") as f:
-            all_lines = [cls.strip() for cls in f.readlines()]
-            all_classes = list(set(all_lines))
-            all_classes = [cls for cls in all_classes if cls != "unknown"]
-            logging.info(f"Loaded {len(all_classes)} classes from scannet 200: {self.classes_file_path}!!!")
+            # Filter classes based on the skip_bg parameter
+            if self.skip_bg:
+                all_classes = [cls for cls in all_classes if cls not in self.bg_classes]
 
-        # # load finetuned yolo class
-        # self.classes_file_path = 'yolo_finetune/class_id_to_class_name.json'
-        # class_id_to_class_name = json.load(open(self.classes_file_path, 'r'))
-        # all_classes = list(class_id_to_class_name.values())
-        # logging.info(f"Loaded {len(all_classes)} classes from yolo finetune class: {self.classes_file_path}!!!")
-        
-        # Filter classes based on the skip_bg parameter
-        if self.skip_bg:
-            classes = [cls for cls in all_classes if cls not in self.bg_classes]
+        elif self.class_set == 'scannet200':
+            # load scannet 200 class
+            self.classes_file_path = Path('data/scannet200_classes.txt')
+            with open(self.classes_file_path, "r") as f:
+                all_lines = [cls.strip() for cls in f.readlines()]
+                all_classes = list(set(all_lines))
+                all_classes = [cls for cls in all_classes if cls != "unknown"]
+                logging.info(f"Loaded {len(all_classes)} classes from scannet 200: {self.classes_file_path}!!!")
+
         else:
-            classes = all_classes
+            # load finetune yolo class
+            self.classes_file_path = 'yolo_finetune/class_id_to_class_name.json'
+            class_id_to_class_name = json.load(open(self.classes_file_path, 'r'))
+            all_classes = list(class_id_to_class_name.values())
+            logging.info(f"Loaded {len(all_classes)} classes from yolo finetune class: {self.classes_file_path}!!!")
 
-        return classes
+        return all_classes
 
     def get_classes_arr(self):
         """

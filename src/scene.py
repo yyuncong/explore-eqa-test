@@ -94,7 +94,8 @@ class Scene:
         self.obj_classes = ObjectClasses(
             classes_file_path=scene_semantic_annotation_path,
             bg_classes=self.cfg_cg['bg_classes'],
-            skip_bg=self.cfg_cg['skip_bg']
+            skip_bg=self.cfg_cg['skip_bg'],
+            class_set=self.cfg['class_set'],
         )
 
         logging.info(f"Load scene {scene_id} successfully")

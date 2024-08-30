@@ -20,7 +20,7 @@ import json
 import logging
 import glob
 import open_clip
-from ultralytics import YOLO, SAM, YOLOWorld
+from ultralytics import SAM, YOLOWorld
 from hydra import initialize, compose
 from habitat_sim.utils.common import quat_to_angle_axis
 from src.habitat import (
@@ -189,8 +189,8 @@ def main(cfg):
     print("question path: ", cfg.questions_list_path)
 
     ## Initialize the detection models
-    detection_model = measure_time(YOLO)('yolov8x-world.pt')   # yolov8x-world.pt
-    # detection_model = measure_time(YOLOWorld)('path_to_model.pt')
+    detection_model = measure_time(YOLOWorld(cfg.yolo_model_name))
+    logging.info(f"Load YOLO model {cfg.yolo_model_name} successful!")
 
     sam_predictor = SAM('sam_l.pt')  # SAM('sam_l.pt') # UltraLytics SAM
     # sam_predictor = measure_time(get_sam_predictor)(cfg) # Normal SAM

@@ -403,7 +403,7 @@ class TSDFPlannerBase:
 
         # if path not found, then try to find a path to a near point of p1 and p2
         p1_habitat_near = get_near_navigable_point(p1_habitat, pathfinder, radius=0.2)
-        p2_habitat_near = get_near_navigable_point(p2_habitat, pathfinder, radius=0.2)
+        p2_habitat_near = get_near_navigable_point(p2_habitat, pathfinder, radius=0.4)
 
         if p1_habitat_near is not None and p2_habitat_near is not None:
             path.requested_start = p1_habitat_near

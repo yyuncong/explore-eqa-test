@@ -315,7 +315,7 @@ def main(cfg):
 
             logging.info(f"\n========\nQuestion id {question_id}")
 
-            episode_object_observe_dir = os.path.join(episode_data_dir, question_id, 'object_observations')
+            episode_object_observe_dir = os.path.join(str(cfg.output_dir), question_id, 'object_observations')
             os.makedirs(episode_object_observe_dir, exist_ok=True)
 
             if len(os.listdir(episode_object_observe_dir)) > 0:

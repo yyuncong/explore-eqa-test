@@ -318,7 +318,7 @@ def main(cfg):
 
             for question_data in questions_in_scene:
                 if finished_question_count == cfg.clear_up_scene_interval or len(scene.snapshots) > cfg.max_snapshot_threshold:
-                    logging.info(f"Clear up the scene after {cfg.clear_up_scene_interval} questions, or {cfg.max_snapshot_threshold} snapshots")
+                    logging.info(f"Clear up the scene after {cfg.clear_up_scene_interval} questions, or {len(scene.snapshots)} snapshots")
                     break
 
                 question_id = question_data['question_id']

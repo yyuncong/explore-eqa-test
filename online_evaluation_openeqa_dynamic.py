@@ -246,7 +246,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
         scene_id = question_data["episode_history"]
 
         if '00853' in scene_id:
-            logging.info(f"Skip scene 00852")
+            logging.info(f"Skip scene 00853")
             continue
 
         init_pts = question_data["position"]

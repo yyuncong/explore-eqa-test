@@ -12,6 +12,7 @@ from itertools import chain
 import random
 import numpy as np
 import math
+import logging
 
 # Need to reorganize this file
 
@@ -422,6 +423,9 @@ def construct_selection_prompt(
     text += "Answer: "
     # print("snapshot", tokenizer.encode("snapshot"))
     # print("placeholder", tokenizer.encode("placeholder"))
+
+    logging.info(f"#####\n{text}\n#####")
+
     text = tokenizer(
         text,
         return_tensors="pt",

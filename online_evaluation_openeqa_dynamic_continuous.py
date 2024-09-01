@@ -253,6 +253,7 @@ def main(cfg):
         while True:
             if len(finished_questions) == len(questions_in_scene):
                 logging.info(f"Scene {scene_id} finished!")
+                break
 
             logging.info(f"Loading scene {scene_id}")
 
@@ -323,10 +324,11 @@ def main(cfg):
                 question_id = question_data['question_id']
                 question = question_data['question']
                 answer = question_data['answer']
-                question_idx += 1
 
                 if question_id in finished_questions:
                     continue
+
+                question_idx += 1
 
                 logging.info(f"\n========\nQuestion id {question_id}")
 

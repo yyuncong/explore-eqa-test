@@ -187,8 +187,8 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
     questions_list = questions_list[int(start_ratio * total_questions):int(end_ratio * total_questions)]
     # shuffle the data
     # random.shuffle(questions_list)
-    logging.info("number of questions after splitting: ", len(questions_list))
-    logging.info("question path: ", cfg.questions_list_path)
+    logging.info(f"number of questions after splitting: {len(questions_list)}")
+    logging.info(f"question path: {cfg.questions_list_path}")
 
     ## Initialize the detection models
     detection_model = YOLOWorld(cfg.yolo_model_name)

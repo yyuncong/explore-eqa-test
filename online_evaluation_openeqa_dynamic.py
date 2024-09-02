@@ -222,13 +222,13 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
     logging.info(f"Load VLM successful!")
 
     # load success list and path length list
-    if os.path.exists(os.path.join(str(cfg.output_dir), f"success_list_{start_ratio}.pkl")):
-        with open(os.path.join(str(cfg.output_dir), f"success_list_{start_ratio}.pkl"), "rb") as f:
+    if os.path.exists(os.path.join(str(cfg.output_dir), f"success_list_{start_ratio}_{end_ratio}.pkl")):
+        with open(os.path.join(str(cfg.output_dir), f"success_list_{start_ratio}_{end_ratio}.pkl"), "rb") as f:
             success_list = pickle.load(f)
     else:
         success_list = []
-    if os.path.exists(os.path.join(str(cfg.output_dir), f"path_length_list_{start_ratio}.pkl")):
-        with open(os.path.join(str(cfg.output_dir), f"path_length_list_{start_ratio}.pkl"), "rb") as f:
+    if os.path.exists(os.path.join(str(cfg.output_dir), f"path_length_list_{start_ratio}_{end_ratio}.pkl")):
+        with open(os.path.join(str(cfg.output_dir), f"path_length_list_{start_ratio}_{end_ratio}.pkl"), "rb") as f:
             path_length_list = pickle.load(f)
     else:
         path_length_list = {}
@@ -834,14 +834,14 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             for obj_str in obj_list:
                 logging.info(f"\t{obj_str}")
 
-        with open(os.path.join(str(cfg.output_dir), f"success_list_{start_ratio}.pkl"), "wb") as f:
+        with open(os.path.join(str(cfg.output_dir), f"success_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
             pickle.dump(success_list, f)
-        with open(os.path.join(str(cfg.output_dir), f"path_length_list_{start_ratio}.pkl"), "wb") as f:
+        with open(os.path.join(str(cfg.output_dir), f"path_length_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
             pickle.dump(path_length_list, f)
 
-    with open(os.path.join(str(cfg.output_dir), f"success_list_{start_ratio}.pkl"), "wb") as f:
+    with open(os.path.join(str(cfg.output_dir), f"success_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
         pickle.dump(success_list, f)
-    with open(os.path.join(str(cfg.output_dir), f"path_length_list_{start_ratio}.pkl"), "wb") as f:
+    with open(os.path.join(str(cfg.output_dir), f"path_length_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
         pickle.dump(path_length_list, f)
 
     logging.info(f'All scenes finish')

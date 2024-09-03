@@ -73,9 +73,6 @@ def main(cfg):
 
     success_list = []
     total_images_record = []
-    top_k_images_record = {5: [], 10: [], 15: [], 20: []}
-    top_k_correct_count = {5: 0, 10: 0, 15: 0, 20: 0}
-
 
     # for each scene, answer each question
     question_ind = 0
@@ -186,16 +183,56 @@ def main(cfg):
                 else:
                     prev_start_positions = np.asarray(prev_start_positions)
 
+                task = random.choice(['object', 'image', 'description'])
+                logging.info(f"Question id {question_data['question_id']}-path {path_idx} task type: {task}")
+
                 # get a navigation start point
                 floor_height = target_position[1]
                 tsdf_bnds, scene_size = get_scene_bnds(pathfinder, floor_height)
                 scene_length = (tsdf_bnds[:2, 1] - tsdf_bnds[:1, 0]).mean()
                 min_dist = cfg.min_travel_dist
                 pathfinder.seed(random.randint(0, 1000000))
-                start_position, path_points, travel_dist = get_navigable_point_to_new(
-                    target_position, pathfinder, max_search=1000, min_dist=min_dist, max_dist=min_dist + 5,
-                    prev_start_positions=prev_start_positions
-                )
+                if task in ['image', 'description']:
+                    start_position, path_points, travel_dist = get_navigable_point_to_new(
+                        target_position, pathfinder, max_search=1000, min_dist=min_dist, max_dist=min_dist + 5,
+                        prev_start_positions=prev_start_positions
+                    )
+                else:
+                    # get all objects in the same class
+                    obj_same_class = [q_data for q_data in all_questions_in_scene if q_data['class'] == question_data['class'] and q_data['question_id'] != question_data['question_id']]
+                    obj_same_class_pos = [q_data['position'] for q_data in obj_same_class]
+                    obj_same_class_pos.append(target_position)
+                    start_position, path_points, travel_dist = None, None, None
+                    start_pos_found = False
+                    for _ in range(500):
+                        start_position, path_points, travel_dist = get_navigable_point_to_new(
+                            target_position, pathfinder, max_search=1000, min_dist=min_dist, max_dist=min_dist + 5,
+                            prev_start_positions=prev_start_positions
+                        )
+                        if start_position is None or path_points is None:
+                            continue
+                        # ensure that the starting point is the closest to the target object than any other objects
+                        if len(obj_same_class_pos) == 1:
+                            # there is no other object in the same class
+                            break
+                        all_dists = []
+                        for end_pos in obj_same_class_pos:
+                            path = habitat_sim.ShortestPath()
+                            path.requested_start = start_position
+                            path.requested_end = end_pos
+                            found_path = pathfinder.find_path(path)
+                            if found_path:
+                                all_dists.append(path.geodesic_distance)
+                            else:
+                                all_dists.append(np.inf)
+                        if all_dists[-1] == np.min(all_dists):
+                            start_pos_found = True
+                            break
+
+                    if not start_pos_found:
+                        logging.info(f"Cannot find a starting point that is nearer than other objects in the same class for question {question_data['question_id']}-path {path_idx}!")
+                        continue
+
                 if start_position is None or path_points is None:
                     logging.info(f"Cannot find a navigable path to the target object in question {question_data['question_id']}-path {path_idx}!")
                     continue
@@ -241,7 +278,10 @@ def main(cfg):
                 metadata["init_pts"] = pts.tolist()
                 metadata["init_angle"] = angle
                 metadata["target_obj_id"] = target_obj_id
+
+                metadata["task_type"] = task
                 metadata["target_obj_class"] = question_data["class"]
+                metadata["image_path"] = question_data["image"]
 
                 # run steps
                 target_found = False

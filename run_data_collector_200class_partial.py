@@ -62,7 +62,7 @@ def main(cfg):
     detection_model.set_classes(list(class_id_to_name.values()))
 
     # Load dataset
-    with open(os.path.join(cfg.question_data_path, "generated_questions.json")) as f:
+    with open(os.path.join(cfg.question_data_path)) as f:
         questions_data = json.load(f)
     questions_data = sorted(questions_data, key=lambda x: x["episode_history"])
     questions_data = questions_data[int(args.start * len(questions_data)):int(args.end * len(questions_data))]
@@ -159,7 +159,6 @@ def main(cfg):
                 question_ind += 1
                 target_obj_id = question_data['object_id']
                 target_position = question_data['position']
-                target_rotation = question_data['rotation']
                 episode_data_dir = os.path.join(str(cfg.dataset_output_dir), f"{question_data['question_id']}_path_{path_idx}")
                 episode_frontier_dir = os.path.join(episode_data_dir, "frontier_rgb")
                 object_feature_save_dir = os.path.join(episode_data_dir, 'object_features')
@@ -704,30 +703,30 @@ def main(cfg):
                     logging.info(f"Max total success images: {np.max(total_success_images_record)}, Min total success images: {np.min(total_success_images_record)}")
 
 
-                filter_rank_all = json.load(open('data/selected_candidates.json', 'r'))
-                filter_rank = filter_rank_all[question_data['question'] + '_' + scene_id]
-                for top_k in [5, 10, 15, 20]:
-                    top_k_classes = filter_rank[:top_k]
-                    if object_id_to_name[target_obj_id] in top_k_classes:
-                        top_k_correct_count[top_k] += 1
-
-                    total_images = 0
-                    for obj_list in img_dict.values():
-                        for obj_id in obj_list:
-                            if object_id_to_name[obj_id] in top_k_classes:
-                                total_images += 1
-                                break
-                    top_k_images_record[top_k].append(total_images)
-                    top_k_success_images_record = [top_k_images_record[top_k][i] for i, s in enumerate(success_list) if s == 1]
-                    logging.info('\n')
-                    logging.info(top_k_images_record[top_k])
-                    logging.info(f"{question_data['question_id']}-path {path_idx} top {top_k} images: {total_images}")
-                    logging.info(f"Average top {top_k} images: {np.mean(top_k_images_record[top_k]):.2f} +- {np.std(top_k_images_record[top_k]):.2f}")
-                    logging.info(f"Max top {top_k} images: {np.max(top_k_images_record[top_k])}, Min top {top_k} images: {np.min(top_k_images_record[top_k])}")
-                    logging.info(f"Top {top_k} correct count: {top_k_correct_count[top_k]}/{question_ind}")
-                    if len(top_k_success_images_record) > 0:
-                        logging.info(f"Average success top {top_k} images: {np.mean(top_k_success_images_record):.2f} +- {np.std(top_k_success_images_record):.2f}")
-                        logging.info(f"Max top {top_k} success images: {np.max(top_k_success_images_record)}, Min top {top_k} success images: {np.min(top_k_success_images_record)}")
+                # filter_rank_all = json.load(open('data/selected_candidates.json', 'r'))
+                # filter_rank = filter_rank_all[question_data['question'] + '_' + scene_id]
+                # for top_k in [5, 10, 15, 20]:
+                #     top_k_classes = filter_rank[:top_k]
+                #     if object_id_to_name[target_obj_id] in top_k_classes:
+                #         top_k_correct_count[top_k] += 1
+                #
+                #     total_images = 0
+                #     for obj_list in img_dict.values():
+                #         for obj_id in obj_list:
+                #             if object_id_to_name[obj_id] in top_k_classes:
+                #                 total_images += 1
+                #                 break
+                #     top_k_images_record[top_k].append(total_images)
+                #     top_k_success_images_record = [top_k_images_record[top_k][i] for i, s in enumerate(success_list) if s == 1]
+                #     logging.info('\n')
+                #     logging.info(top_k_images_record[top_k])
+                #     logging.info(f"{question_data['question_id']}-path {path_idx} top {top_k} images: {total_images}")
+                #     logging.info(f"Average top {top_k} images: {np.mean(top_k_images_record[top_k]):.2f} +- {np.std(top_k_images_record[top_k]):.2f}")
+                #     logging.info(f"Max top {top_k} images: {np.max(top_k_images_record[top_k])}, Min top {top_k} images: {np.min(top_k_images_record[top_k])}")
+                #     logging.info(f"Top {top_k} correct count: {top_k_correct_count[top_k]}/{question_ind}")
+                #     if len(top_k_success_images_record) > 0:
+                #         logging.info(f"Average success top {top_k} images: {np.mean(top_k_success_images_record):.2f} +- {np.std(top_k_success_images_record):.2f}")
+                #         logging.info(f"Max top {top_k} success images: {np.max(top_k_success_images_record)}, Min top {top_k} success images: {np.min(top_k_success_images_record)}")
 
                 # print the statistics of detection quality
                 object_detection_rate = compute_recall(tsdf_planner.simple_scene_graph,object_id_to_name)

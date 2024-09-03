@@ -46,7 +46,7 @@ def main():
     semantic_bbox_data_path = '/gpfs/u/home/LMCG/LMCGnngn/scratch/multisensory/MLLM/data/hm3d/hm3d_obj_bbox_merged'
     goat_bench_data_dir = '/gpfs/u/home/LMCG/LMCGhazh/scratch/yanghan/goatbench/data'
 
-    save_dir = 'goat_bench_data'
+    save_dir = '/gpfs/u/home/LMCG/LMCGhazh/scratch/yanghan/explore-eqa-test/goat_bench_data'
     os.makedirs(save_dir, exist_ok=True)
 
     random.seed(0)
@@ -74,6 +74,7 @@ def main():
         if os.path.exists(data_save_path):
             generated_data = json.load(open(data_save_path, 'r'))
             generated_question_ids = [data['question_id'] for data in generated_data]
+            print(f"Loaded previous {len(generated_data)} questions")
         else:
             generated_data = []
             generated_question_ids = []
@@ -138,6 +139,7 @@ def main():
                     position = item['view_points'][0]['agent_state']['position']
 
                     if question_id in generated_question_ids:
+                        print(f"{dataset_split}, {scene_id}: {question_id} already exists")
                         continue
 
                     question_data = {}
@@ -166,7 +168,7 @@ def main():
                     generated_data.append(question_data)
                     generated_question_ids.append(question_id)
 
-                    print(f"{dataset_split}: generated {len(generated_data)} questions")
+                    print(f"{dataset_split}, {scene_id}: generated {len(generated_data)} questions")
 
             with open(data_save_path, 'w') as f:
                 json.dump(generated_data, f, indent=4)

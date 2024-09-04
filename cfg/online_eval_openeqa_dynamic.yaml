@@ -45,6 +45,7 @@ num_final_images: 15
 
 # for continuous exploration
 clear_up_scene_interval: 3
+max_snapshot_threshold: 45
 
 # Navigation
 init_clearance: 0.3

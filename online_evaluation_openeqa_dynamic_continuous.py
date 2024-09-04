@@ -935,6 +935,8 @@ if __name__ == "__main__":
     cfg = OmegaConf.load(args.cfg_file)
     OmegaConf.resolve(cfg)
 
+    os.system(f"cp {args.cfg_file} {cfg.output_dir}")
+
     # Set up logging
     cfg.output_dir = os.path.join(cfg.output_parent_dir, cfg.exp_name)
     if not os.path.exists(cfg.output_dir):

@@ -12,6 +12,7 @@ os.environ["MAGNUM_LOG"] = "quiet"
 import numpy as np
 import torch
 import math
+import time
 from PIL import Image
 
 np.set_printoptions(precision=3)
@@ -882,6 +883,24 @@ if __name__ == "__main__":
     if not os.path.exists(cfg.output_dir):
         os.makedirs(cfg.output_dir, exist_ok=True)  # recursive
     logging_path = os.path.join(str(cfg.output_dir), f"log_{args.start_ratio:.2f}_{args.end_ratio:.2f}.log")
+
+    os.system(f"cp {args.cfg_file} {cfg.output_dir}")
+
+    class ElapsedTimeFormatter(logging.Formatter):
+        def __init__(self, fmt=None, datefmt=None):
+            super().__init__(fmt, datefmt)
+            self.start_time = time.time()
+
+        def formatTime(self, record, datefmt=None):
+            elapsed_seconds = record.created - self.start_time
+            hours, remainder = divmod(elapsed_seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            return f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
+
+
+    # Set up the logging configuration
+    formatter = ElapsedTimeFormatter(fmt="%(asctime)s - %(message)s")
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(message)s",
@@ -890,6 +909,10 @@ if __name__ == "__main__":
             logging.StreamHandler(),
         ],
     )
+
+    # Set the custom formatter
+    for handler in logging.getLogger().handlers:
+        handler.setFormatter(formatter)
 
     # run
     logging.info(f"***** Running {cfg.exp_name} *****")

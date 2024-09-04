@@ -138,6 +138,7 @@ def inference(model, tokenizer, step_dict, cfg):
 
     if cfg.prefiltering:
         filter_outputs = infer_prefilter(model,tokenizer,sample)
+        logging.info(f"prefiltering output: {filter_outputs}")
         if filter_outputs is None:
             return None
         selection_dict = sample.selection_dict[0]

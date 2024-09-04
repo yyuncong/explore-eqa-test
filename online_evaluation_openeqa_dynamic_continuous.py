@@ -935,14 +935,13 @@ if __name__ == "__main__":
     cfg = OmegaConf.load(args.cfg_file)
     OmegaConf.resolve(cfg)
 
-    os.system(f"cp {args.cfg_file} {cfg.output_dir}")
-
     # Set up logging
     cfg.output_dir = os.path.join(cfg.output_parent_dir, cfg.exp_name)
     if not os.path.exists(cfg.output_dir):
         os.makedirs(cfg.output_dir, exist_ok=True)  # recursive
     logging_path = os.path.join(str(cfg.output_dir), f"log_{args.start_ratio:.2f}_{args.end_ratio:.2f}.log")
 
+    os.system(f"cp {args.cfg_file} {cfg.output_dir}")
 
     class ElapsedTimeFormatter(logging.Formatter):
         def __init__(self, fmt=None, datefmt=None):

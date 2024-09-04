@@ -241,13 +241,13 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
     logging.info(f"Load VLM successful!")
 
     # load success list and path length list
-    if os.path.exists(os.path.join(str(cfg.output_dir), "success_list.pkl")):
-        with open(os.path.join(str(cfg.output_dir), "success_list.pkl"), "rb") as f:
+    if os.path.exists(os.path.join(str(cfg.output_dir), f"success_list_{start_ratio}_{end_ratio}.pkl")):
+        with open(os.path.join(str(cfg.output_dir), f"success_list_{start_ratio}_{end_ratio}.pkl"), "rb") as f:
             success_list = pickle.load(f)
     else:
         success_list = []
-    if os.path.exists(os.path.join(str(cfg.output_dir), "path_length_list.pkl")):
-        with open(os.path.join(str(cfg.output_dir), "path_length_list.pkl"), "rb") as f:
+    if os.path.exists(os.path.join(str(cfg.output_dir), f"path_length_list_{start_ratio}_{end_ratio}.pkl")):
+        with open(os.path.join(str(cfg.output_dir), f"path_length_list_{start_ratio}_{end_ratio}.pkl"), "rb") as f:
             path_length_list = pickle.load(f)
     else:
         path_length_list = {}
@@ -889,20 +889,37 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     for obj_str in obj_list:
                         logging.info(f"\t{obj_str}")
 
-                with open(os.path.join(str(cfg.output_dir), "success_list.pkl"), "wb") as f:
+                with open(os.path.join(str(cfg.output_dir), f"success_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
                     pickle.dump(success_list, f)
-                with open(os.path.join(str(cfg.output_dir), "path_length_list.pkl"), "wb") as f:
+                with open(os.path.join(str(cfg.output_dir), f"path_length_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
                     pickle.dump(path_length_list, f)
 
                 finished_questions.append(question_id)
                 finished_question_count += 1
 
+    with open(os.path.join(str(cfg.output_dir), f"success_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
+        pickle.dump(success_list, f)
+    with open(os.path.join(str(cfg.output_dir), f"path_length_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
+        pickle.dump(path_length_list, f)
+
+    logging.info(f'All scenes finish')
+
+    # aggregate the results into a single file
+    success_list = []
+    path_length_list = {}
+    all_success_list_paths = glob.glob(os.path.join(str(cfg.output_dir), "success_list_*.pkl"))
+    all_path_length_list_paths = glob.glob(os.path.join(str(cfg.output_dir), "path_length_list_*.pkl"))
+    for success_list_path in all_success_list_paths:
+        with open(success_list_path, "rb") as f:
+            success_list += pickle.load(f)
+    for path_length_list_path in all_path_length_list_paths:
+        with open(path_length_list_path, "rb") as f:
+            path_length_list.update(pickle.load(f))
+
     with open(os.path.join(str(cfg.output_dir), "success_list.pkl"), "wb") as f:
         pickle.dump(success_list, f)
     with open(os.path.join(str(cfg.output_dir), "path_length_list.pkl"), "wb") as f:
         pickle.dump(path_length_list, f)
-
-    logging.info(f'All scenes finish')
 
 
 if __name__ == "__main__":
@@ -922,7 +939,7 @@ if __name__ == "__main__":
     cfg.output_dir = os.path.join(cfg.output_parent_dir, cfg.exp_name)
     if not os.path.exists(cfg.output_dir):
         os.makedirs(cfg.output_dir, exist_ok=True)  # recursive
-    logging_path = os.path.join(str(cfg.output_dir), "log.log")
+    logging_path = os.path.join(str(cfg.output_dir), f"log_{args.start_ratio:.2f}_{args.end_ratio:.2f}.log")
 
 
     class ElapsedTimeFormatter(logging.Formatter):

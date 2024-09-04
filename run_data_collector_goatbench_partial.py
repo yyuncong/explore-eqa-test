@@ -197,7 +197,7 @@ def main(cfg):
                 min_dist = cfg.min_travel_dist
                 pathfinder.seed(random.randint(0, 1000000))
                 start_position, path_points, travel_dist = get_navigable_point_to_new(
-                    target_position, pathfinder, max_search=1000, min_dist=min_dist, max_dist=min_dist + 5,
+                    target_position, pathfinder, max_search=1000, min_dist=min_dist, max_dist=min_dist + 25,
                     prev_start_positions=prev_start_positions
                 )
                 if start_position is None or path_points is None:

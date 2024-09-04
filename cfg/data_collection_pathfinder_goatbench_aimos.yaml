@@ -13,7 +13,6 @@ yolo_model_name: '/gpfs/u/home/LMCG/LMCGhazh/scratch/yanghan/explore-eqa-test/yo
 
 # Sampling navigation point
 min_travel_dist: 5.0
-min_travel_dist_ratio: 0.8
 
 # Camera, image
 camera_height: 1.5

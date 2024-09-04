@@ -419,7 +419,7 @@ def construct_selection_prompt(
     )
     
     text = text_before_snapshot + snapshot_text + frontier_text
-    print("test token number", text)
+    #print("test token number", text)
     scene_feature = feature_before_snapshot + [snapshot_features] + [frontier_features]
     scene_feature = [f for f in scene_feature if f is not None]
     scene_feature = torch.cat(scene_feature, dim=0)

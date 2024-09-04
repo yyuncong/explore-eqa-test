@@ -12,6 +12,7 @@ os.environ["MAGNUM_LOG"] = "quiet"
 import numpy as np
 import torch
 import math
+import time
 from PIL import Image
 
 np.set_printoptions(precision=3)
@@ -166,7 +167,7 @@ def inference(model, tokenizer, step_dict, cfg):
         return outputs
 
 
-def main(cfg):
+def main(cfg, start_ratio=0.0, end_ratio=1.0):
     # use hydra to load concept graph related configs
     with initialize(config_path="conceptgraph/hydra_configs", job_name="app"):
         cfg_cg = compose(config_name=cfg.concept_graph_config_name)
@@ -197,8 +198,15 @@ def main(cfg):
         if scene_id not in scene_id_to_questions:
             scene_id_to_questions[scene_id] = []
         scene_id_to_questions[scene_id].append(question_data)
-    logging.info(f"Number of scenes: {len(scene_id_to_questions)}")
-    logging.info(f"Number of questions: {len(questions_list)}")
+    logging.info(f"Number of scenes in total: {len(scene_id_to_questions)}")
+    logging.info(f"Number of questions in total: {len(questions_list)}")
+
+    # split the test data by scene
+    scene_id_split = list(scene_id_to_questions.keys())[int(start_ratio * len(scene_id_to_questions)):int(end_ratio * len(scene_id_to_questions))]
+    questions_list = [question_data for question_data in questions_list if question_data["episode_history"] in scene_id_split]
+    scene_id_to_questions = {scene_id: question_data for scene_id, question_data in scene_id_to_questions.items() if scene_id in scene_id_split}
+    logging.info(f"Number of scenes in split: {len(scene_id_to_questions)}")
+    logging.info(f"Number of questions in split: {len(questions_list)}")
 
     ## Initialize the detection models
     detection_model = YOLOWorld(cfg.yolo_model_name)
@@ -903,6 +911,8 @@ if __name__ == "__main__":
     # get config path
     parser = argparse.ArgumentParser()
     parser.add_argument("-cf", "--cfg_file", help="cfg file path", default="", type=str)
+    parser.add_argument("--start_ratio", help="start ratio", default=0.0, type=float)
+    parser.add_argument("--end_ratio", help="end ratio", default=1.0, type=float)
     args = parser.parse_args()
     cfg = OmegaConf.load(args.cfg_file)
     OmegaConf.resolve(cfg)
@@ -912,6 +922,23 @@ if __name__ == "__main__":
     if not os.path.exists(cfg.output_dir):
         os.makedirs(cfg.output_dir, exist_ok=True)  # recursive
     logging_path = os.path.join(str(cfg.output_dir), "log.log")
+
+
+    class ElapsedTimeFormatter(logging.Formatter):
+        def __init__(self, fmt=None, datefmt=None):
+            super().__init__(fmt, datefmt)
+            self.start_time = time.time()
+
+        def formatTime(self, record, datefmt=None):
+            elapsed_seconds = record.created - self.start_time
+            hours, remainder = divmod(elapsed_seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            return f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
+
+
+    # Set up the logging configuration
+    formatter = ElapsedTimeFormatter(fmt="%(asctime)s - %(message)s")
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(message)s",
@@ -921,6 +948,10 @@ if __name__ == "__main__":
         ],
     )
 
+    # Set the custom formatter
+    for handler in logging.getLogger().handlers:
+        handler.setFormatter(formatter)
+
     # run
     logging.info(f"***** Running {cfg.exp_name} *****")
-    main(cfg)
+    main(cfg, start_ratio=args.start_ratio, end_ratio=args.end_ratio)

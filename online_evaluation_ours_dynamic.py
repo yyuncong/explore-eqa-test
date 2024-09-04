@@ -31,6 +31,7 @@ from src.habitat import (
 from src.geom import get_cam_intr, get_scene_bnds
 from src.tsdf_new_cg import TSDFPlanner, Frontier, SnapShot
 from src.scene import Scene
+# from src.eval_utils_prompt import (
 from src.eval_utils_snapshot_new import (
     prepare_step_dict, 
     get_item, 

@@ -196,47 +196,10 @@ def main(cfg):
                 scene_length = (tsdf_bnds[:2, 1] - tsdf_bnds[:1, 0]).mean()
                 min_dist = cfg.min_travel_dist
                 pathfinder.seed(random.randint(0, 1000000))
-                if task in ['image', 'description']:
-                    start_position, path_points, travel_dist = get_navigable_point_to_new(
-                        target_position, pathfinder, max_search=1000, min_dist=min_dist, max_dist=min_dist + 5,
-                        prev_start_positions=prev_start_positions
-                    )
-                else:
-                    # get all objects in the same class
-                    obj_same_class = [q_data for q_data in all_questions_in_scene if q_data['class'] == question_data['class'] and q_data['question_id'] != question_data['question_id']]
-                    obj_same_class_pos = [q_data['position'] for q_data in obj_same_class]
-                    obj_same_class_pos.append(target_position)
-                    start_position, path_points, travel_dist = None, None, None
-                    start_pos_found = False
-                    for _ in range(500):
-                        start_position, path_points, travel_dist = get_navigable_point_to_new(
-                            target_position, pathfinder, max_search=1000, min_dist=min_dist, max_dist=min_dist + 5,
-                            prev_start_positions=prev_start_positions
-                        )
-                        if start_position is None or path_points is None:
-                            continue
-                        # ensure that the starting point is the closest to the target object than any other objects
-                        if len(obj_same_class_pos) == 1:
-                            # there is no other object in the same class
-                            break
-                        all_dists = []
-                        for end_pos in obj_same_class_pos:
-                            path = habitat_sim.ShortestPath()
-                            path.requested_start = start_position
-                            path.requested_end = end_pos
-                            found_path = pathfinder.find_path(path)
-                            if found_path:
-                                all_dists.append(path.geodesic_distance)
-                            else:
-                                all_dists.append(np.inf)
-                        if all_dists[-1] < np.min(all_dists) + 0.3:
-                            start_pos_found = True
-                            break
-
-                    if not start_pos_found:
-                        logging.info(f"Cannot find a starting point that is nearer than other objects in the same class for question {question_data['question_id']}-path {path_idx}!")
-                        continue
-
+                start_position, path_points, travel_dist = get_navigable_point_to_new(
+                    target_position, pathfinder, max_search=1000, min_dist=min_dist, max_dist=min_dist + 5,
+                    prev_start_positions=prev_start_positions
+                )
                 if start_position is None or path_points is None:
                     logging.info(f"Cannot find a navigable path to the target object in question {question_data['question_id']}-path {path_idx}!")
                     continue
@@ -307,6 +270,62 @@ def main(cfg):
                     cnt_step += 1
 
                     if cnt_step == initialize_step and state == 'initialize':
+                        # change the navigation target if task is object
+                        if task == 'object':
+                            # find all objects in the same class as the target object
+                            obj_same_class = [q_data for q_data in all_questions_in_scene if q_data['class'] == question_data['class']]
+                            obj_same_class_id = [q_data['object_id'] for q_data in obj_same_class]
+
+                            logging.info(f"For object class target, question data changed from\n{question_data}\nto")
+                            if np.any([(obj_id in tsdf_planner.simple_scene_graph and tsdf_planner.simple_scene_graph[obj_id].image is not None) for obj_id in obj_same_class_id]):
+                                # if any object in the same class is already in the scene, choose the nearest one
+                                obj_same_class = [q_data for q_data in obj_same_class if q_data['object_id'] in tsdf_planner.simple_scene_graph]
+                                obj_same_class_pos = [q_data['position'] for q_data in obj_same_class]
+                                all_dists = []
+                                for end_pos in obj_same_class_pos:
+                                    path = habitat_sim.ShortestPath()
+                                    path.requested_start = pts
+                                    path.requested_end = end_pos
+                                    found_path = pathfinder.find_path(path)
+                                    if not found_path:
+                                        all_dists.append(np.inf)
+                                    else:
+                                        all_dists.append(path.geodesic_distance)
+                                if np.min(all_dists) == np.inf:
+                                    logging.info(f"Question id {question_data['question_id']}-path {path_idx} invalid: nearest same class object in scene graph is unreachable!")
+                                    break
+                                question_data = obj_same_class[np.argmin(all_dists)]
+                            else:
+                                # if no object in the same class is in the scene, choose the nearest one from the same class
+                                obj_same_class_pos = [q_data['position'] for q_data in obj_same_class]
+                                all_dists = []
+                                for end_pos in obj_same_class_pos:
+                                    path = habitat_sim.ShortestPath()
+                                    path.requested_start = pts
+                                    path.requested_end = end_pos
+                                    found_path = pathfinder.find_path(path)
+                                    if not found_path:
+                                        all_dists.append(np.inf)
+                                    else:
+                                        all_dists.append(path.geodesic_distance)
+                                if np.min(all_dists) == np.inf:
+                                    logging.info(f"Question id {question_data['question_id']}-path {path_idx} invalid: nearest object in the same class is unreachable!")
+                                    break
+                                question_data = obj_same_class[np.argmin(all_dists)]
+                            logging.info(f"{question_data}")
+
+                            # update relevant metadata
+                            target_obj_id = question_data['object_id']
+                            target_position = question_data['position']
+
+                            metadata["question"] = question_data["question"]
+                            metadata["answer"] = question_data["answer"]
+                            metadata["target_obj_id"] = target_obj_id
+                            metadata["image_path"] = question_data["image"]
+
+                        metadata["init_pts"] = pts.tolist()
+                        metadata["init_angle"] = angle
+
                         # at the end of initialization, reset the path points to the target
                         path = habitat_sim.ShortestPath()
                         path.requested_start = pts

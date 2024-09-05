@@ -131,10 +131,15 @@ class Scene:
         self.snapshots = {}
         self.frames = {}
 
-    def get_observation(self, pts, angle):
+    def get_observation(self, pts, angle=None, rotation=None):
+        assert (angle is None) ^ (rotation is None), "Only one of angle and rotation should be specified"
+
         agent_state = habitat_sim.AgentState()
         agent_state.position = pts
-        agent_state.rotation = get_quaternion(angle, 0)
+        if angle is not None:
+            agent_state.rotation = get_quaternion(angle, 0)
+        else:
+            agent_state.rotation = rotation
         self.agent.set_state(agent_state)
 
         obs = self.simulator.get_sensor_observations()

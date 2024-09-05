@@ -288,12 +288,21 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
         scene_data = json.load(open(os.path.join(cfg.test_data_dir, scene_data_file), "r"))
         total_episodes = len(scene_data["episodes"])
 
+        navigation_goals = scene_data["goals"]  # obj_id to obj_data, apply for all episodes in this scene
+
         for episode_idx, episode in enumerate(scene_data["episodes"]):
             logging.info(f"Episode {episode_idx + 1}/{total_episodes}")
             logging.info(f"Loading scene {scene_id}")
             episode_id = episode["episode_id"]
 
-            navigation_goals = episode["goals"]  # obj_id to obj_data
+            # check whether this episode has been processed
+            finished_subtask_ids = list(success_by_snapshot.keys())
+            finished_episode_subtask = [subtask_id for subtask_id in finished_subtask_ids if subtask_id.startswith(f"{scene_id}_{episode_id}_")]
+            if len(finished_episode_subtask) > 3:
+                # there will at least be 5 subtask for each episode. Considering that some subtask will be filtered out,
+                # 3 is a reasonable threshold to determine whether the episode has been processed
+                logging.info(f"Scene {scene_id} Episode {episode_id} already done!")
+                continue
 
             # load scene
             try:
@@ -441,17 +450,33 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 logging.info(f"\nScene {scene_id} Episode {episode_id} Subtask {subtask_idx + 1}/{len(all_subtask_goals)}")
 
                 subtask_object_observe_dir = os.path.join(str(cfg.output_dir), f"{subtask_id}", 'object_observations')
-                os.makedirs(subtask_object_observe_dir, exist_ok=True)
+                if os.path.exists(subtask_object_observe_dir):
+                    os.system(f"rm -r {subtask_object_observe_dir}")
+                os.makedirs(subtask_object_observe_dir, exist_ok=False)
 
-                if len(os.listdir(subtask_object_observe_dir)) > 0:
-                    logging.info(f"Scene {scene_id} Episode {episode_id} Subtask {subtask_idx} already done!")
-                    assert subtask_id in success_by_snapshot, f"{subtask_id} not in {success_by_snapshot.keys()}"
-                    assert subtask_id in spl_by_snapshot, f"{subtask_id} not in {spl_by_snapshot.keys()}"
-                    assert subtask_id in success_by_distance, f"{subtask_id} not in {success_by_distance.keys()}"
-                    assert subtask_id in spl_by_distance, f"{subtask_id} not in {spl_by_distance.keys()}"
-                    continue
+                # Prepare metadata for the subtask
+                subtask_metadata = {
+                    "question_id": subtask_id,
+                    "episode_history": scene_id,
+                    "category": "object localization",
+                    "question": None,
+                    "answer": goal_category,
+                    "object_id": goal_obj_ids,  # this is a list of obj id, since for object class type, there will be multiple target objects
+                    "class": goal_category,
+                    "position": goal_positions  # also a list of positions for possible multiple objects
+                }
+                # add language description if existed
+                if 'lang_desc' in subtask_goal[0]:
+                    subtask_metadata['question'] = f"Could you find the object described as \'{subtask_goal[0]['lang_desc']}\'?"
+                # get a ramdom image goal
+                if "view_points" in subtask_goal[0]:
+                    view_pos_dict = random.choice(subtask_goal[0]["view_points"])
+                    obs = scene.get_observation(pts=view_pos_dict["position"], rotation=view_pos_dict["rotation"])
+                    plt.imsave(os.path.join(str(cfg.output_dir), f"{subtask_id}", "image_goal.png"), obs["color_sensor"])
+                    subtask_metadata["image"] = f"{cfg.output_dir}/{subtask_id}/image_goal.png"
+                else:
+                    subtask_metadata["image"] = None
 
-                # TODO: here, use the goal_type, goal_category and goal_obj_ids to construct questions
                 
                 # record the history of the agent's path
                 pts_pixs = np.empty((0, 2))
@@ -485,7 +510,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     rgb_egocentric_views_features = []
                     all_added_obj_ids = []
                     for view_idx, ang in enumerate(all_angles):
-                        obs, cam_pose = scene.get_observation(pts, ang)
+                        obs, cam_pose = scene.get_observation(pts, angle=ang)
                         rgb = obs["color_sensor"]
                         depth = obs["depth_sensor"]
                         semantic_obs = obs["semantic_sensor"]
@@ -865,7 +890,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
 
                     if type(max_point_choice) == SnapShot and target_arrived:
                         # get an observation and break
-                        obs, _ = scene.get_observation(pts, angle)
+                        obs, _ = scene.get_observation(pts, angle=angle)
                         rgb = obs["color_sensor"]
 
                         plt.imsave(os.path.join(subtask_object_observe_dir, f"target.png"), rgb)
@@ -942,24 +967,24 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     for obj_str in obj_list:
                         logging.info(f"\t{obj_str}")
 
-                # save the results
-                assert len(success_by_snapshot) == len(spl_by_snapshot) == len(success_by_distance) == len(
-                    spl_by_distance), f"{len(success_by_snapshot)} != {len(spl_by_snapshot)} != {len(success_by_distance)} != {len(spl_by_distance)}"
-                assert sum([len(task_res) for task_res in success_by_task.values()]) == sum(
-                    [len(task_res) for task_res in spl_by_task.values()]) == len(
-                    success_by_snapshot), f"{sum([len(task_res) for task_res in success_by_task.values()])} != {sum([len(task_res) for task_res in spl_by_task.values()])} != {len(success_by_snapshot)}"
-                with open(os.path.join(str(cfg.output_dir), f"success_by_snapshot_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
-                    pickle.dump(success_by_snapshot, f)
-                with open(os.path.join(str(cfg.output_dir), f"spl_by_snapshot_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
-                    pickle.dump(spl_by_snapshot, f)
-                with open(os.path.join(str(cfg.output_dir), f"success_by_distance_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
-                    pickle.dump(success_by_distance, f)
-                with open(os.path.join(str(cfg.output_dir), f"spl_by_distance_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
-                    pickle.dump(spl_by_distance, f)
-                with open(os.path.join(str(cfg.output_dir), f"success_by_task_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
-                    pickle.dump(success_by_task, f)
-                with open(os.path.join(str(cfg.output_dir), f"spl_by_task_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
-                    pickle.dump(spl_by_task, f)
+            # save the results at the end of each episode
+            assert len(success_by_snapshot) == len(spl_by_snapshot) == len(success_by_distance) == len(
+                spl_by_distance), f"{len(success_by_snapshot)} != {len(spl_by_snapshot)} != {len(success_by_distance)} != {len(spl_by_distance)}"
+            assert sum([len(task_res) for task_res in success_by_task.values()]) == sum(
+                [len(task_res) for task_res in spl_by_task.values()]) == len(
+                success_by_snapshot), f"{sum([len(task_res) for task_res in success_by_task.values()])} != {sum([len(task_res) for task_res in spl_by_task.values()])} != {len(success_by_snapshot)}"
+            with open(os.path.join(str(cfg.output_dir), f"success_by_snapshot_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
+                pickle.dump(success_by_snapshot, f)
+            with open(os.path.join(str(cfg.output_dir), f"spl_by_snapshot_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
+                pickle.dump(spl_by_snapshot, f)
+            with open(os.path.join(str(cfg.output_dir), f"success_by_distance_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
+                pickle.dump(success_by_distance, f)
+            with open(os.path.join(str(cfg.output_dir), f"spl_by_distance_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
+                pickle.dump(spl_by_distance, f)
+            with open(os.path.join(str(cfg.output_dir), f"success_by_task_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
+                pickle.dump(success_by_task, f)
+            with open(os.path.join(str(cfg.output_dir), f"spl_by_task_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
+                pickle.dump(spl_by_task, f)
 
 
     # save the results

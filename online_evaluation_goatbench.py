@@ -24,6 +24,7 @@ import open_clip
 from ultralytics import SAM, YOLOWorld
 from hydra import initialize, compose
 from habitat_sim.utils.common import quat_to_angle_axis
+import habitat_sim
 from src.habitat import (
     pos_normal_to_habitat,
     pos_habitat_to_normal,
@@ -33,7 +34,7 @@ from src.habitat import (
 )
 from src.geom import get_cam_intr, get_scene_bnds
 from src.tsdf_new_cg import TSDFPlanner, Frontier, SnapShot
-from src.scene import Scene
+from src.scene_goatbench import Scene
 from src.eval_utils_snapshot_new import (
     prepare_step_dict,
     get_item,
@@ -181,33 +182,20 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
     np.random.seed(cfg.seed)
 
     # Load dataset
-    questions_list = json.load(open(cfg.questions_list_path, "r"))
-    total_questions = len(questions_list)
-    # sort the data according to the question id
-    # questions_list = sorted(questions_list, key=lambda x: x['question_id'])
-    # shuffle the data
-    random.shuffle(questions_list)
-
-    scene_id_to_questions = {}
-    for question_data in questions_list:
-        scene_id = question_data["episode_history"]
-
-        if '00853' in scene_id:
-            logging.info(f"Skip scene 00853")
-            continue
-
-        if scene_id not in scene_id_to_questions:
-            scene_id_to_questions[scene_id] = []
-        scene_id_to_questions[scene_id].append(question_data)
-    logging.info(f"Number of scenes in total: {len(scene_id_to_questions)}")
-    logging.info(f"Number of questions in total: {len(questions_list)}")
+    scene_data_list = os.listdir(cfg.test_data_dir)
+    num_scene = len(scene_data_list)
+    random.shuffle(scene_data_list)
 
     # split the test data by scene
-    scene_id_split = list(scene_id_to_questions.keys())[int(start_ratio * len(scene_id_to_questions)):int(end_ratio * len(scene_id_to_questions))]
-    questions_list = [question_data for question_data in questions_list if question_data["episode_history"] in scene_id_split]
-    scene_id_to_questions = {scene_id: question_data for scene_id, question_data in scene_id_to_questions.items() if scene_id in scene_id_split}
-    logging.info(f"Number of scenes in split: {len(scene_id_to_questions)}")
-    logging.info(f"Number of questions in split: {len(questions_list)}")
+    scene_data_list = scene_data_list[int(start_ratio * num_scene):int(end_ratio * num_scene)]
+    num_episode = 0
+    for scene_data_file in scene_data_list:
+        with open(os.path.join(cfg.test_data_dir, scene_data_file), 'r') as f:
+            num_episode += len(json.load(f)['episodes'])
+    logging.info(f"Total number of episodes: {num_episode}")
+    logging.info(f"Total number of scenes: {len(scene_data_list)}")
+
+    all_scene_ids = os.listdir(cfg.scene_data_path + '/train') + os.listdir(cfg.scene_data_path + '/val')
 
     ## Initialize the detection models
     detection_model = YOLOWorld(cfg.yolo_model_name)
@@ -240,31 +228,59 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
     model.eval()
     logging.info(f"Load VLM successful!")
 
-    # load success list and path length list
-    if os.path.exists(os.path.join(str(cfg.output_dir), f"success_list_{start_ratio}_{end_ratio}.pkl")):
-        with open(os.path.join(str(cfg.output_dir), f"success_list_{start_ratio}_{end_ratio}.pkl"), "rb") as f:
-            success_list = pickle.load(f)
+    # load result stats
+    if os.path.exists(os.path.join(str(cfg.output_dir), f"success_by_snapshot_{start_ratio}_{end_ratio}.pkl")):
+        success_by_snapshot = pickle.load(
+            open(os.path.join(str(cfg.output_dir), f"success_by_snapshot_{start_ratio}_{end_ratio}.pkl"), "rb")
+        )
     else:
-        success_list = []
-    if os.path.exists(os.path.join(str(cfg.output_dir), f"path_length_list_{start_ratio}_{end_ratio}.pkl")):
-        with open(os.path.join(str(cfg.output_dir), f"path_length_list_{start_ratio}_{end_ratio}.pkl"), "rb") as f:
-            path_length_list = pickle.load(f)
+        success_by_snapshot = {}  # subtask_id -> success
+    if os.path.exists(os.path.join(str(cfg.output_dir), f"success_by_distance_{start_ratio}_{end_ratio}.pkl")):
+        success_by_distance = pickle.load(
+            open(os.path.join(str(cfg.output_dir), f"success_by_distance_{start_ratio}_{end_ratio}.pkl"), "rb")
+        )
     else:
-        path_length_list = {}
+        success_by_distance = {}  # subtask id -> success
+    if os.path.exists(os.path.join(str(cfg.output_dir), f"spl_by_snapshot_{start_ratio}_{end_ratio}.pkl")):
+        spl_by_snapshot = pickle.load(
+            open(os.path.join(str(cfg.output_dir), f"spl_by_snapshot_{start_ratio}_{end_ratio}.pkl"), "rb")
+        )
+    else:
+        spl_by_snapshot = {}  # subtask id -> spl
+    if os.path.exists(os.path.join(str(cfg.output_dir), f"spl_by_distance_{start_ratio}_{end_ratio}.pkl")):
+        spl_by_distance = pickle.load(
+            open(os.path.join(str(cfg.output_dir), f"spl_by_distance_{start_ratio}_{end_ratio}.pkl"), "rb")
+        )
+    else:
+        spl_by_distance = {}  # subtask id -> spl
+    if os.path.exists(os.path.join(str(cfg.output_dir), f"success_by_task_{start_ratio}_{end_ratio}.pkl")):
+        success_by_task = pickle.load(
+            open(os.path.join(str(cfg.output_dir), f"success_by_task_{start_ratio}_{end_ratio}.pkl"), "rb")
+        )
+    else:
+        success_by_task = {}  # task type -> success
+    if os.path.exists(os.path.join(str(cfg.output_dir), f"spl_by_task_{start_ratio}_{end_ratio}.pkl")):
+        spl_by_task = pickle.load(
+            open(os.path.join(str(cfg.output_dir), f"spl_by_task_{start_ratio}_{end_ratio}.pkl"), "rb")
+        )
+    else:
+        spl_by_task = {}  # task type -> spl
+    assert len(success_by_snapshot) == len(spl_by_snapshot) == len(success_by_distance) == len(spl_by_distance), f"{len(success_by_snapshot)} != {len(spl_by_snapshot)} != {len(success_by_distance)} != {len(spl_by_distance)}"
+    assert sum([len(task_res) for task_res in success_by_task.values()]) == sum([len(task_res) for task_res in spl_by_task.values()]) == len(success_by_snapshot), f"{sum([len(task_res) for task_res in success_by_task.values()])} != {sum([len(task_res) for task_res in spl_by_task.values()])} != {len(success_by_snapshot)}"
 
-    success_count = 0
-    max_target_observation = cfg.max_target_observation
     question_idx = -1
+    for scene_data_file in scene_data_list:
+        scene_name = scene_data_file.split(".")[0]
+        scene_id = [scene_id for scene_id in all_scene_ids if scene_name in scene_id][0]
+        scene_data = json.load(open(os.path.join(cfg.test_data_dir, scene_data_file), "r"))
+        total_episodes = len(scene_data["episodes"])
 
-    for scene_id, questions_in_scene in scene_id_to_questions.items():
-        finished_questions = []
-
-        while True:
-            if len(finished_questions) == len(questions_in_scene):
-                logging.info(f"Scene {scene_id} finished!")
-                break
-
+        for episode_idx, episode in enumerate(scene_data["episodes"]):
+            logging.info(f"Episode {episode_idx + 1}/{total_episodes}")
             logging.info(f"Loading scene {scene_id}")
+            episode_id = episode["episode_id"]
+
+            navigation_goals = episode["goals"]  # obj_id to obj_data
 
             # load scene
             try:
@@ -277,20 +293,15 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             # Set the classes for the detection model
             detection_model.set_classes(scene.obj_classes.get_classes_arr())
 
-            episode_data_dir = os.path.join(str(cfg.output_dir), f"{scene_id}_0")
-            episode_data_dir_count = 0
-            while os.path.exists(episode_data_dir):
-                episode_data_dir_count += 1
-                episode_data_dir = os.path.join(str(cfg.output_dir), f"{scene_id}_{episode_data_dir_count}")
-
+            episode_data_dir = os.path.join(str(cfg.output_dir), f"{scene_id}_ep_{episode_id}")
             episode_frontier_dir = os.path.join(episode_data_dir, "frontier_rgb")
             episode_snapshot_dir = os.path.join(episode_data_dir, 'snapshot')
             os.makedirs(episode_data_dir, exist_ok=True)
             os.makedirs(episode_frontier_dir, exist_ok=True)
             os.makedirs(episode_snapshot_dir, exist_ok=True)
 
-            init_pts = questions_in_scene[0]["position"]
-            init_quat = quaternion.quaternion(*questions_in_scene[0]["rotation"])
+            init_pts = episode["start_position"]
+            init_quat = episode["start_rotation"]
 
             pts = np.asarray(init_pts)
             angle, axis = quat_to_angle_axis(init_quat)
@@ -320,42 +331,114 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
 
             logging.info(f'\n\nScene {scene_id} initialization successful!')
 
+            # filter the task according to goatbench
+            filtered_tasks = []
+            for goal in episode["tasks"]:
+                goal_type = goal[1]
+                goal_category = goal[0]
+                goal_inst_id = goal[2]
+
+                dset_same_cat_goals = [
+                    x
+                    for x in navigation_goals.values()
+                    if x[0]["object_category"] == goal_category
+                ]
+
+                if goal_type == "description":
+                    goal_inst = [
+                        x
+                        for x in dset_same_cat_goals[0]
+                        if x["object_id"] == goal_inst_id
+                    ]
+                    if len(goal_inst[0]["lang_desc"].split(" ")) <= 55:
+                        filtered_tasks.append(goal)
+                else:
+                    filtered_tasks.append(goal)
+
+            all_subtask_goals = []
+            for goal in filtered_tasks:
+                goal_type = goal[1]
+                goal_category = goal[0]
+                goal_inst_id = goal[2]
+
+                dset_same_cat_goals = [
+                    x
+                    for x in navigation_goals.values()
+                    if x[0]["object_category"] == goal_category
+                ]
+                children_categories = dset_same_cat_goals[0][0][
+                    "children_object_categories"
+                ]
+                for child_category in children_categories:
+                    goal_key = f"{scene_name}.basis.glb_{child_category}"
+                    if goal_key not in navigation_goals:
+                        print(f"!!! {goal_key} not in navigation_goals")
+                        continue
+                    print(f"!!! {goal_key} added")
+                    dset_same_cat_goals[0].extend(navigation_goals[goal_key])
+
+                assert (
+                        len(dset_same_cat_goals) == 1
+                ), f"more than 1 goal categories for {goal_category}"
+
+                if goal_type == "object":
+                    all_subtask_goals.append(dset_same_cat_goals[0])
+                else:
+                    goal_inst = [
+                        x
+                        for x in dset_same_cat_goals[0]
+                        if x["object_id"] == goal_inst_id
+                    ]
+                    all_subtask_goals.append(goal_inst)
+
             # run questions in the scene
             global_step = -1
             all_snapshot_features = {}
-            finished_question_count = 0
 
-            for question_data in questions_in_scene:
-                if finished_question_count == cfg.clear_up_scene_interval or len(scene.snapshots) > cfg.max_snapshot_threshold:
-                    logging.info(f"Clear up the scene after {cfg.clear_up_scene_interval} questions, or {len(scene.snapshots)} snapshots")
-                    break
+            for subtask_idx, subtask_goal in enumerate(all_subtask_goals):
+                subtask_id = f"{scene_id}_{episode_id}_{subtask_idx}"
 
-                question_id = question_data['question_id']
-                question = question_data['question']
-                answer = question_data['answer']
+                # determine the navigation goals
+                goal_type = subtask_goal[0]["goal_type"]
+                goal_category = subtask_goal[0]["object_category"]
+                goal_obj_ids = [x["object_id"] for x in subtask_goal]
+                if goal_type != "object":
+                    assert len(goal_obj_ids) == 1, f"{len(goal_obj_ids)} != 1"
 
-                if question_id in finished_questions:
+                goal_positions = [x["position"] for x in subtask_goal]
+                goal_positions_voxel = [tsdf_planner.world2vox(pos_habitat_to_normal(p)) for p in goal_positions]
+                goal_obj_ids_mapping = {obj_id: [] for obj_id in goal_obj_ids}
+
+                viewpoints = [
+                    view_point["agent_state"]["position"] for goal in subtask_goal for view_point in goal["view_points"]
+                ]
+                # get the shortest distance from current position to the viewpoints
+                all_distances = []
+                for viewpoint in viewpoints:
+                    path = habitat_sim.ShortestPath()
+                    path.requested_start = pts
+                    path.requested_end = viewpoint
+                    found_path = scene.pathfinder.find_path(path)
+                    if not found_path:
+                        all_distances.append(np.inf)
+                    else:
+                        all_distances.append(path.geodesic_distance)
+                start_end_subtask_distance = min(all_distances)
+
+                logging.info(f"\nScene {scene_id} Episode {episode_id} Subtask {subtask_idx + 1}/{len(all_subtask_goals)}")
+
+                subtask_object_observe_dir = os.path.join(str(cfg.output_dir), f"{subtask_id}", 'object_observations')
+                os.makedirs(subtask_object_observe_dir, exist_ok=True)
+
+                if len(os.listdir(subtask_object_observe_dir)) > 0:
+                    logging.info(f"Scene {scene_id} Episode {episode_id} Subtask {subtask_idx} already done!")
+                    assert subtask_id in success_by_snapshot, f"{subtask_id} not in {success_by_snapshot.keys()}"
+                    assert subtask_id in spl_by_snapshot, f"{subtask_id} not in {spl_by_snapshot.keys()}"
+                    assert subtask_id in success_by_distance, f"{subtask_id} not in {success_by_distance.keys()}"
+                    assert subtask_id in spl_by_distance, f"{subtask_id} not in {spl_by_distance.keys()}"
                     continue
 
-                question_idx += 1
-
-                logging.info(f"\n========\nQuestion id {question_id}")
-
-                episode_object_observe_dir = os.path.join(str(cfg.output_dir), question_id, 'object_observations')
-                os.makedirs(episode_object_observe_dir, exist_ok=True)
-
-                if len(os.listdir(episode_object_observe_dir)) > 0:
-                    logging.info(f"Question id {question_id} already has enough target observations!")
-                    success_count += 1
-                    finished_questions.append(question_id)
-                    continue
-
-                # init the start point
-                pts = np.asarray(question_data["position"])
-                angle, axis = quat_to_angle_axis(quaternion.quaternion(*question_data["rotation"]))
-                angle = angle * axis[1] / np.abs(axis[1])
-                rotation = get_quaternion(angle, 0)
-                pts_normal = pos_habitat_to_normal(pts)
+                # TODO: here, use the goal_type, goal_category and goal_obj_ids to construct questions
 
                 # record the history of the agent's path
                 pts_pixs = np.empty((0, 2))
@@ -363,10 +446,10 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
 
                 # run steps
                 target_found = False
-                explore_dist = 0.0
+                subtask_explore_dist = 0.0
                 cnt_step = -1
-                target_observation_count = 0
                 memory_feature = None
+                question_idx += 1
 
                 # reset tsdf planner
                 tsdf_planner.max_point = None
@@ -401,14 +484,15 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         # collect all view features
                         obs_file_name = f"{global_step}-view_{view_idx}.png"
                         with torch.no_grad():
-                            annotated_rgb, added_obj_ids, target_obj_id_det = scene.update_scene_graph(
+                            annotated_rgb, added_obj_ids, target_obj_id_mapping = scene.update_scene_graph(
                                 image_rgb=rgb[..., :3], depth=depth, intrinsics=cam_intr, cam_pos=cam_pose,
                                 detection_model=detection_model, sam_predictor=sam_predictor, clip_model=clip_model,
                                 clip_preprocess=clip_preprocess, clip_tokenizer=clip_tokenizer,
                                 pts=pts, pts_voxel=tsdf_planner.habitat2voxel(pts),
                                 img_path=obs_file_name,
                                 frame_idx=cnt_step * total_views + view_idx,
-                                target_obj_mask=None,
+                                semantic_obs=semantic_obs,
+                                gt_target_obj_ids=goal_obj_ids,
                             )
                             img_feature = encode(model, image_processor, rgb).mean(0)
                             img_feature = merge_patches(
@@ -421,10 +505,16 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                                 plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), annotated_rgb)
                             else:
                                 plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), rgb)
+                            # update the mapping of hm3d object id to our detected object id
+                            for gt_goal_id, det_goal_id in target_obj_id_mapping.items():
+                                goal_obj_ids_mapping[gt_goal_id].append(det_goal_id)
                             all_added_obj_ids += added_obj_ids
 
                         # clean up or merge redundant objects periodically
-                        scene.periodic_cleanup_objects(frame_idx=cnt_step * total_views + view_idx, pts=pts)
+                        scene.periodic_cleanup_objects(
+                            frame_idx=cnt_step * total_views + view_idx, pts=pts,
+                            goal_obj_ids_mapping=goal_obj_ids_mapping
+                        )
 
                         # TSDF fusion
                         tsdf_planner.integrate(
@@ -514,6 +604,15 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                             tsdf_planner.max_point = None
                             tsdf_planner.target_point = None
 
+                    logging.info(f"Goal object mapping: {goal_obj_ids_mapping}")
+
+                    # use the most common id in the mapped ids as the detected target object id
+                    target_obj_ids_estimate = []
+                    for obj_id, det_ids in goal_obj_ids_mapping.items():
+                        if len(det_ids) == 0:
+                            continue
+                        target_obj_ids_estimate.append(max(set(det_ids), key=det_ids.count))
+
                     if tsdf_planner.max_point is None and tsdf_planner.target_point is None:
                         # choose a frontier, and set it as the explore target
                         step_dict["frontiers"] = []
@@ -586,7 +685,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                             break
 
                         if target_type == "snapshot":
-                            # TODO: the problem needed to be fixed here
                             if snapshot_id_mapping is not None:
                                 if int(target_index) < 0 or int(target_index) >= len(snapshot_id_mapping):
                                     logging.info(f"target index can not match real objects: {target_index}, failed!")
@@ -603,7 +701,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
 
                             logging.info(f"Next choice Snapshot of {pred_target_snapshot.image}")
                             tsdf_planner.frontiers_weight = np.zeros((len(tsdf_planner.frontiers)))
-                            # TODO: where to go if snapshot?
                             max_point_choice = pred_target_snapshot
 
                             # print the items in the scene graph
@@ -629,7 +726,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                             tsdf_planner.frontiers_weight = np.zeros((len(tsdf_planner.frontiers)))
                             max_point_choice = tsdf_planner.frontiers[target_index]
 
-                            # TODO: modify this: update memory feature only in frontiers (for now)
                             memory_feature = tsdf_planner.frontiers[target_index].feature.to("cpu")
 
                         if max_point_choice is None:
@@ -642,7 +738,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                             objects=scene.objects,
                             cfg=cfg.planner,
                             pathfinder=scene.pathfinder,
-                            random_position=False if target_observation_count == 0 else True  # use the best observation point for the first observation, and random for the rest
                         )
                         if not update_success:
                             logging.info(f"Question id {question_id} invalid: set_next_navigation_point failed!")
@@ -704,6 +799,15 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         ax5.plot(pts_pixs[:, 1], pts_pixs[:, 0], linewidth=5, color="black")
                         ax5.scatter(pts_pixs[0, 1], pts_pixs[0, 0], c="white", s=50)
 
+                        # add target object bbox
+                        for goal_id, goal_pos_voxel in zip(goal_obj_ids, goal_positions_voxel):
+                            color = 'green' if len(goal_obj_ids_mapping[goal_id]) > 0 else 'red'
+                            ax5.scatter(goal_pos_voxel[1], goal_pos_voxel[0], c=color, s=120)
+                            ax1, ax2, ax4 = fig.axes[0], fig.axes[1], fig.axes[3]
+                            ax4.scatter(goal_pos_voxel[1], goal_pos_voxel[0], c=color, s=120)
+                            ax1.scatter(goal_pos_voxel[1], goal_pos_voxel[0], c=color, s=120)
+                            ax2.scatter(goal_pos_voxel[1], goal_pos_voxel[0], c=color, s=120)
+
                         fig.tight_layout()
                         plt.savefig(os.path.join(visualization_path, f"{global_step}_{question_id}"))
                         plt.close()
@@ -742,136 +846,72 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     pts_normal = np.append(pts_normal, floor_height)
                     pts = pos_normal_to_habitat(pts_normal)
                     rotation = get_quaternion(angle, 0)
-                    explore_dist += np.linalg.norm(pts_pixs[-1] - pts_pixs[-2]) * tsdf_planner._voxel_size
+                    subtask_explore_dist += np.linalg.norm(pts_pixs[-1] - pts_pixs[-2]) * tsdf_planner._voxel_size
 
-                    logging.info(f"Current position: {pts}, {explore_dist:.3f}")
+                    logging.info(f"Current position: {pts}, {subtask_explore_dist:.3f}")
 
                     if type(max_point_choice) == SnapShot and target_arrived:
                         # get an observation and break
                         obs, _ = scene.get_observation(pts, angle)
                         rgb = obs["color_sensor"]
 
-                        plt.imsave(
-                            os.path.join(episode_object_observe_dir, f"target_{target_observation_count}.png"), rgb
-                        )
+                        plt.imsave(os.path.join(subtask_object_observe_dir, f"target.png"), rgb)
                         # also, save the snapshot image itself
                         snapshot_filename = max_point_choice.image.split(".")[0]
-                        os.system(f"cp {os.path.join(episode_snapshot_dir, max_point_choice.image)} {os.path.join(episode_object_observe_dir, f'snapshot_{snapshot_filename}.png')}")
+                        os.system(f"cp {os.path.join(episode_snapshot_dir, max_point_choice.image)} {os.path.join(subtask_object_observe_dir, f'snapshot_{snapshot_filename}.png')}")
 
-                        target_observation_count += 1
-                        if target_observation_count >= max_target_observation:
-                            target_found = True
-                            break
+                        target_found = True
+                        break
 
-                # here once the model has chosen one snapshot, we count it as a success
-                if target_observation_count > 0:
-                    target_found = True
-
-                if target_found:
-                    success_count += 1
-                    # We only consider samples that model predicts object (use baseline results other samples for now)
-                    # TODO: you can save path_length in the same format as you did for the baseline
-                    if question_id not in success_list:
-                        success_list.append(question_id)
-                    path_length_list[question_id] = explore_dist
-                    logging.info(f"Question id {question_id} finish with {cnt_step} steps, {explore_dist} length")
+                # get some statistics
+                # check whether the target objects are in the selected snapshot
+                if target_found and np.any([obj_id in max_point_choice.cluster for obj_id in target_obj_ids_estimate]):
+                    success_by_snapshot[subtask_id] = 1.0
+                    logging.info(f"Success: {target_obj_ids_estimate} in chosen snapshot {max_point_choice.image}!")
                 else:
-                    logging.info(f"Question id {question_id} failed, {explore_dist} length")
-                logging.info(f"{question_idx + 1}/{total_questions}: Success rate: {success_count}/{question_idx + 1}")
-                logging.info(f"Mean path length for success exploration: {np.mean(list(path_length_list.values()))}")
-                # logging.info(f'Scene {scene_id} finish')
+                    success_by_snapshot[subtask_id] = 0.0
+                    logging.info(f"Fail: {target_obj_ids_estimate} not in chosen snapshot {max_point_choice.image}!")
 
-                # if target not found, select images from existing snapshots for question answering
-                if not target_found:
-                    if cfg.handle_target_not_found == 'none':
-                        selected_snapshot_ids = []
-                    elif cfg.handle_target_not_found == "random":
-                        all_snapshot_ids = list(scene.snapshots.keys())
-                        selected_snapshot_ids = random.sample(all_snapshot_ids, len(cfg.num_final_images))
-                    elif cfg.handle_target_not_found == "with_model":
-                        selected_snapshot_ids = []
-                        for _ in range(cfg.num_final_images):
-                            step_dict = {}
-                            # add snapshot features
-                            step_dict["snapshot_features"] = {}
-                            step_dict["snapshot_objects"] = {}
-                            snapshot_id_mapping = {}
-                            prompt_ss_idx = 0
-                            for snapshot_idx, (rgb_id, snapshot) in enumerate(scene.snapshots.items()):
-                                if rgb_id in selected_snapshot_ids:
-                                    continue
-                                step_dict["snapshot_features"][rgb_id] = all_snapshot_features[rgb_id]
-                                step_dict["snapshot_objects"][rgb_id] = snapshot.cluster
+                # calculate the distance to the nearest view point
+                all_distances = []
+                for viewpoint in viewpoints:
+                    path = habitat_sim.ShortestPath()
+                    path.requested_start = pts
+                    path.requested_end = viewpoint
+                    found_path = scene.pathfinder.find_path(path)
+                    if not found_path:
+                        all_distances.append(np.inf)
+                    else:
+                        all_distances.append(path.geodesic_distance)
+                agent_subtask_distance = min(all_distances)
+                if agent_subtask_distance < cfg.success_distance:
+                    success_by_distance[subtask_id] = 1.0
+                    logging.info(f"Success: agent reached the target viewpoint at distance {agent_subtask_distance}!")
+                else:
+                    success_by_distance[subtask_id] = 0.0
+                    logging.info(f"Fail: agent failed to reach the target viewpoint at distance {agent_subtask_distance}!")
 
-                                snapshot_id_mapping[prompt_ss_idx] = snapshot_idx
-                                prompt_ss_idx += 1
+                # calculate the spl
+                spl_by_snapshot[subtask_id] = (success_by_snapshot[subtask_id] * start_end_subtask_distance /
+                                               max(start_end_subtask_distance, subtask_explore_dist))
+                spl_by_distance[subtask_id] = (success_by_distance[subtask_id] * start_end_subtask_distance /
+                                               max(start_end_subtask_distance, subtask_explore_dist))
 
-                            if len(snapshot_id_mapping) == 0:
-                                logging.info(f"Question id {question_id} target not found handling: no snapshots available!")
-                                break
+                success_by_task[goal_type].append(success_by_snapshot[subtask_id])
+                spl_by_task[goal_type].append(spl_by_snapshot[subtask_id])
 
-                            # add scene graph
-                            step_dict["scene_graph"] = list(scene.objects.keys())
-                            step_dict["scene_graph"] = [int(x) for x in step_dict["scene_graph"]]
-                            step_dict["obj_map"] = object_id_to_name
-                            step_dict["position"] = np.array(pts)[None,]
-                            obj_positions_map = {
-                                str(obj_id): obj['bbox'].center
-                                for obj_id, obj in scene.objects.items()
-                            }
-                            obj_positions_map = {
-                                key: value - step_dict["position"] for key, value in obj_positions_map.items()
-                            }
-                            step_dict["obj_position_map"] = obj_positions_map
+                logging.info(f"Subtask {subtask_id} finished with {cnt_step} steps, {subtask_explore_dist} length")
+                logging.info(f"Subtask spl by snapshot: {spl_by_snapshot[subtask_id]}, spl by distance: {spl_by_distance[subtask_id]}")
 
-                            # we don't need to add frontier for model selection
-                            step_dict["frontiers"] = []
+                logging.info(f"Success rate by snapshot: {100 * np.mean(np.asarray(success_by_snapshot.values())):.2f}")
+                logging.info(f"Success rate by distance: {100 * np.mean(np.asarray(success_by_distance.values())):.2f}")
+                logging.info(f"SPL by snapshot: {np.mean(np.asarray(spl_by_snapshot.values())):.2f}")
+                logging.info(f"SPL by distance: {np.mean(np.asarray(spl_by_distance.values())):.2f}")
 
-                            if cfg.egocentric_views:
-                                step_dict["egocentric_view_features"] = rgb_egocentric_views_features_tensor
-                                step_dict["use_egocentric_views"] = True
-
-                            if cfg.action_memory:
-                                step_dict["memory_feature"] = memory_feature
-                                step_dict["use_action_memory"] = True
-
-                            step_dict["frontier_features"] = None
-                            step_dict["frontier_positions"] = None
-                            step_dict["question"] = question
-                            step_dict["scene"] = scene_id
-                            if cfg.prefiltering:
-                                outputs, _ = inference(model, tokenizer, step_dict, cfg)
-                            else:
-                                outputs = inference(model, tokenizer, step_dict, cfg)
-                            if outputs is None:
-                                logging.info(f"Question id {question_id} target not found handling: model generation error!")
-                                continue
-                            try:
-                                target_type, target_index = outputs.split(" ")[0], outputs.split(" ")[1]
-                                logging.info(f"Prediction in target not found handling: {target_type}, {target_index}")
-                            except:
-                                logging.info(f"Wrong output format in target not found handling, failed!")
-                                continue
-
-                            if target_type != "snapshot":
-                                logging.info(f"Invalid prediction type in target not found handling: {target_type}, failed!")
-                                continue
-
-                            if int(target_index) < 0 or int(target_index) >= len(snapshot_id_mapping):
-                                logging.info(f"target index can not match real objects in target not found handling: {target_index}, failed!")
-                                continue
-                            target_index = snapshot_id_mapping[int(target_index)]
-                            pred_target_snapshot = list(scene.snapshots.values())[int(target_index)]
-
-                            assert pred_target_snapshot.image not in selected_snapshot_ids, f"{pred_target_snapshot.image} already selected"
-                            selected_snapshot_ids.append(pred_target_snapshot.image)
-                            logging.info(f"Handling target not found: choose snapshot {pred_target_snapshot.image}")
-
-                    # save the selected images
-                    for ss_id in selected_snapshot_ids:
-                        os.system(f"cp {os.path.join(episode_snapshot_dir, ss_id)} {os.path.join(episode_object_observe_dir, f'snapshot_{ss_id}')}")
-
-
+                for task_name, success_list in success_by_task.items():
+                    logging.info(f"Success rate for {task_name}: {100 * np.mean(np.asarray(success_list)):.2f}")
+                for task_name, spl_list in spl_by_task.items():
+                    logging.info(f"SPL for {task_name}: {np.mean(np.asarray(spl_list)):.2f}")
 
                 # print the items in the scene graph
                 snapshot_dict = {}
@@ -889,37 +929,73 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     for obj_str in obj_list:
                         logging.info(f"\t{obj_str}")
 
-                with open(os.path.join(str(cfg.output_dir), f"success_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
-                    pickle.dump(success_list, f)
-                with open(os.path.join(str(cfg.output_dir), f"path_length_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
-                    pickle.dump(path_length_list, f)
+                # save the results
+                assert len(success_by_snapshot) == len(spl_by_snapshot) == len(success_by_distance) == len(
+                    spl_by_distance), f"{len(success_by_snapshot)} != {len(spl_by_snapshot)} != {len(success_by_distance)} != {len(spl_by_distance)}"
+                assert sum([len(task_res) for task_res in success_by_task.values()]) == sum(
+                    [len(task_res) for task_res in spl_by_task.values()]) == len(
+                    success_by_snapshot), f"{sum([len(task_res) for task_res in success_by_task.values()])} != {sum([len(task_res) for task_res in spl_by_task.values()])} != {len(success_by_snapshot)}"
+                with open(os.path.join(str(cfg.output_dir), f"success_by_snapshot_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
+                    pickle.dump(success_by_snapshot, f)
+                with open(os.path.join(str(cfg.output_dir), f"spl_by_snapshot_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
+                    pickle.dump(spl_by_snapshot, f)
+                with open(os.path.join(str(cfg.output_dir), f"success_by_distance_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
+                    pickle.dump(success_by_distance, f)
+                with open(os.path.join(str(cfg.output_dir), f"spl_by_distance_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
+                    pickle.dump(spl_by_distance, f)
+                with open(os.path.join(str(cfg.output_dir), f"success_by_task_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
+                    pickle.dump(success_by_task, f)
+                with open(os.path.join(str(cfg.output_dir), f"spl_by_task_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
+                    pickle.dump(spl_by_task, f)
 
-                finished_questions.append(question_id)
-                finished_question_count += 1
 
-    with open(os.path.join(str(cfg.output_dir), f"success_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
-        pickle.dump(success_list, f)
-    with open(os.path.join(str(cfg.output_dir), f"path_length_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
-        pickle.dump(path_length_list, f)
+    # save the results
+    assert len(success_by_snapshot) == len(spl_by_snapshot) == len(success_by_distance) == len(
+        spl_by_distance), f"{len(success_by_snapshot)} != {len(spl_by_snapshot)} != {len(success_by_distance)} != {len(spl_by_distance)}"
+    assert sum([len(task_res) for task_res in success_by_task.values()]) == sum(
+        [len(task_res) for task_res in spl_by_task.values()]) == len(
+        success_by_snapshot), f"{sum([len(task_res) for task_res in success_by_task.values()])} != {sum([len(task_res) for task_res in spl_by_task.values()])} != {len(success_by_snapshot)}"
+    with open(os.path.join(str(cfg.output_dir), f"success_by_snapshot_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
+        pickle.dump(success_by_snapshot, f)
+    with open(os.path.join(str(cfg.output_dir), f"spl_by_snapshot_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
+        pickle.dump(spl_by_snapshot, f)
+    with open(os.path.join(str(cfg.output_dir), f"success_by_distance_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
+        pickle.dump(success_by_distance, f)
+    with open(os.path.join(str(cfg.output_dir), f"spl_by_distance_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
+        pickle.dump(spl_by_distance, f)
+    with open(os.path.join(str(cfg.output_dir), f"success_by_task_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
+        pickle.dump(success_by_task, f)
+    with open(os.path.join(str(cfg.output_dir), f"spl_by_task_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
+        pickle.dump(spl_by_task, f)
 
     logging.info(f'All scenes finish')
 
     # aggregate the results into a single file
-    success_list = []
-    path_length_list = {}
-    all_success_list_paths = glob.glob(os.path.join(str(cfg.output_dir), "success_list_*.pkl"))
-    all_path_length_list_paths = glob.glob(os.path.join(str(cfg.output_dir), "path_length_list_*.pkl"))
-    for success_list_path in all_success_list_paths:
-        with open(success_list_path, "rb") as f:
-            success_list += pickle.load(f)
-    for path_length_list_path in all_path_length_list_paths:
-        with open(path_length_list_path, "rb") as f:
-            path_length_list.update(pickle.load(f))
-
-    with open(os.path.join(str(cfg.output_dir), "success_list.pkl"), "wb") as f:
-        pickle.dump(success_list, f)
-    with open(os.path.join(str(cfg.output_dir), "path_length_list.pkl"), "wb") as f:
-        pickle.dump(path_length_list, f)
+    filenames_to_merge = ['success_by_snapshot', 'spl_by_snapshot', 'success_by_distance', 'spl_by_distance']
+    for filename in filenames_to_merge:
+        all_results = {}
+        all_results_paths = glob.glob(os.path.join(str(cfg.output_dir), f"{filename}_*.pkl"))
+        for results_path in all_results_paths:
+            with open(results_path, "rb") as f:
+                all_results.update(pickle.load(f))
+        logging.info(f"Total {filename} results: {100 * np.mean(list(all_results.values())):.2f}")
+        with open(os.path.join(str(cfg.output_dir), f"{filename}.pkl"), "wb") as f:
+            pickle.dump(all_results, f)
+    filenames_to_merge = ['success_by_task', 'spl_by_task']
+    for filename in filenames_to_merge:
+        all_results = {}
+        all_results_paths = glob.glob(os.path.join(str(cfg.output_dir), f"{filename}_*.pkl"))
+        for results_path in all_results_paths:
+            with open(results_path, "rb") as f:
+                separate_stat = pickle.load(f)
+                for task_name, task_res in separate_stat.items():
+                    if task_name not in all_results:
+                        all_results[task_name] = []
+                    all_results[task_name] += task_res
+        for task_name, task_res in all_results.items():
+            logging.info(f"Total {filename} results for {task_name}: {100 * np.mean(task_res):.2f}")
+        with open(os.path.join(str(cfg.output_dir), f"{filename}.pkl"), "wb") as f:
+            pickle.dump(all_results, f)
 
 
 if __name__ == "__main__":

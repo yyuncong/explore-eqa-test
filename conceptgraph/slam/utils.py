@@ -589,6 +589,7 @@ def merge_overlap_objects(
     dbscan_min_points: int,
     spatial_sim_type: str,
     device: str,
+    goal_obj_ids_mapping: tp.Dict[int, tp.List[int]] = None,
 ):
     x, y = overlap_matrix.nonzero()
     overlap_ratio = overlap_matrix[x, y]
@@ -640,6 +641,14 @@ def merge_overlap_objects(
                     )
                     # Remove object i from the list of objects
                     objects.pop(obj_i)
+
+                    # Update the goal_obj_ids_mapping if it exists
+                    if goal_obj_ids_mapping is not None:
+                        for goal_obj_id, mapped_obj_ids in goal_obj_ids_mapping.items():
+                            while obj_i in mapped_obj_ids:
+                                mapped_obj_ids.remove(obj_i)
+                                mapped_obj_ids.append(obj_j)
+                            goal_obj_ids_mapping[goal_obj_id] = mapped_obj_ids
 
         else:
             break  # Stop processing if the current overlap ratio is below the threshold
@@ -721,6 +730,7 @@ def merge_objects(
     dbscan_min_points: int,
     spatial_sim_type: str,
     device: str,
+    goal_obj_ids_mapping: dict = None,
 ):
     if len(objects) == 0:
         return objects
@@ -748,6 +758,7 @@ def merge_objects(
         dbscan_min_points=dbscan_min_points,
         spatial_sim_type=spatial_sim_type,
         device=device,
+        goal_obj_ids_mapping=goal_obj_ids_mapping,
     )
     print("After merging:", len(objects))
 

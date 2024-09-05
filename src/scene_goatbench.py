@@ -227,9 +227,12 @@ class Scene:
             detection_model, sam_predictor, clip_model, clip_preprocess, clip_tokenizer,
             pts, pts_voxel,
             img_path, frame_idx,
-            target_obj_mask=None  # the boolean mask of target object generated from the semantic sensor. If given, return the object id of the target object
-    ) -> Tuple[np.ndarray, List[int], Optional[int]]:
+            semantic_obs=Optional[np.ndarray],
+            gt_target_obj_ids=Optional[List[int]]
+    ) -> Tuple[np.ndarray, List[int], Dict[int, int]]:
         # return annotated image; the detected object ids in current frame; the object id of the target object (if detected)
+        assert not ((semantic_obs is None) ^ (gt_target_obj_ids is None)), "semantic_obs and gt_target_obj_ids should be both None or both not None"
+
         # set up object_classes first
         obj_classes = self.obj_classes
         # Detect objects
@@ -261,7 +264,7 @@ class Scene:
 
         if len(curr_det) == 0:  # no detections, skip
             logging.debug("No detections in this frame")
-            return image_rgb, [], None
+            return image_rgb, [], {}
 
         # filter the detection by removing overlapping detections
         curr_det, labels = filter_detections(
@@ -275,7 +278,7 @@ class Scene:
         )
         if curr_det is None:
             logging.debug("No detections left after filter_detections")
-            return image_rgb, [], None
+            return image_rgb, [], {}
 
         image_crops, image_feats, text_feats = compute_clip_features_batched(
             image_rgb, curr_det, clip_model, clip_preprocess, clip_tokenizer, obj_classes.get_classes_arr(), self.cfg_cg.device)
@@ -309,7 +312,7 @@ class Scene:
 
         if len(gobs['mask']) == 0: # no detections in this frame
             logging.debug("No detections left after filter_gobs")
-            return image_rgb, [], None
+            return image_rgb, [], {}
 
         # this helps make sure things like pillows on couches are separate objects
         gobs['mask'] = mask_subtract_contained(gobs['xyxy'], gobs['mask'])
@@ -342,7 +345,7 @@ class Scene:
         # if the list is all None, then skip
         if all([obj is None for obj in obj_pcds_and_bboxes]):
             logging.debug("All objects are None in obj_pcds_and_bboxes")
-            return image_rgb, [], None
+            return image_rgb, [], {}
 
         # add pcds and bboxes to gobs
         gobs['bbox'] = [obj["bbox"] if obj is not None else None for obj in obj_pcds_and_bboxes]
@@ -357,26 +360,26 @@ class Scene:
 
         if len(detection_list) == 0:  # no detections, skip
             logging.debug("No detections left after make_detection_list_from_pcd_and_gobs")
-            return image_rgb, [], None
+            return image_rgb, [], {}
 
         # compare the detections with the target object mask to see whether the target object is detected
-        target_obj_id = None
-        if target_obj_mask is not None and np.sum(target_obj_mask) / (target_obj_mask.shape[0] * target_obj_mask.shape[1]) > 0.0001:
-            assert len(detection_list) == len(gobs['mask']), f"Error in update_scene_graph: {len(detection_list)} != {len(gobs['mask'])}"  # sanity check
-
-            # loop through the detected objects to find the highest IoU with the target object
-            max_iou = -1
-            max_iou_obj_id = None
-            for idx, obj_id in enumerate(detection_list.keys()):
-                detected_mask = gobs['mask'][idx]
-                iou_score = IoU(detected_mask, target_obj_mask)
-                if iou_score > max_iou:
-                    max_iou = iou_score
-                    max_iou_obj_id = obj_id
-            if max_iou > self.cfg.scene_graph.target_obj_iou_threshold:
-                target_obj_id = max_iou_obj_id
-                logging.info(f"Target object {target_obj_id} {detection_list[target_obj_id]['class_name']} detected with IoU {max_iou} in {img_path}!!!")
-
+        target_obj_id_mapping = {}
+        if semantic_obs is not None:
+            for target_gt_id in gt_target_obj_ids:
+                target_obj_mask = semantic_obs == target_gt_id
+                if np.sum(target_obj_mask) / (target_obj_mask.shape[0] * target_obj_mask.shape[1]) > 0.0001:
+                    # loop through the detected objects to find the highest IoU with the target object
+                    max_iou = -1
+                    max_iou_obj_id = None
+                    for idx, obj_id in enumerate(detection_list.keys()):
+                        detected_mask = gobs['mask'][idx]
+                        iou_score = IoU(detected_mask, target_obj_mask)
+                        if iou_score > max_iou:
+                            max_iou = iou_score
+                            max_iou_obj_id = obj_id
+                    if max_iou > self.cfg.scene_graph.target_obj_iou_threshold:
+                        target_obj_id_mapping[target_gt_id] = max_iou_obj_id
+                        logging.info(f"Target object {target_gt_id} detected with IoU {max_iou} in {img_path}!!!")
 
         # if there exists object detected in this frame, create a snapshot
         frame = SnapShot(
@@ -428,12 +431,12 @@ class Scene:
             )
 
             # Now merge the detected objects into the existing objects based on the match indices
-            visualize_captions, target_obj_id, added_obj_ids = self.merge_obj_matches(
+            visualize_captions, target_obj_id_mapping, added_obj_ids = self.merge_obj_matches(
                 detection_list=detection_list,
                 match_indices=match_indices,
                 obj_classes=obj_classes,
                 snapshot=frame,
-                target_obj_id=target_obj_id
+                target_obj_id_mapping=target_obj_id_mapping
             )
 
             # add the snapshot into the snapshot list
@@ -452,7 +455,7 @@ class Scene:
             annotated_image = BOUNDING_BOX_ANNOTATOR.annotate(annotated_image, det_visualize)
             annotated_image = LABEL_ANNOTATOR.annotate(annotated_image, det_visualize)
 
-        return annotated_image, added_obj_ids, target_obj_id
+        return annotated_image, added_obj_ids, target_obj_id_mapping
 
 
     def filter_gobs_with_distance(self, pts, gobs):
@@ -488,8 +491,8 @@ class Scene:
         match_indices: List[Tuple[int, Optional[int]]],
         obj_classes: ObjectClasses,
         snapshot: SnapShot,
-        target_obj_id: Optional[int] = None  # if given, then track whether the target object is merged into a previous object (so the id would change)
-    ) -> Tuple[List[str], Optional[int], List[int]]:
+        target_obj_id_mapping: Dict[int, int]
+    ) -> Tuple[List[str], Dict[int, int], List[int]]:
         visualize_captions = []
         added_obj_ids = []
         for idx, (detected_obj_id, existing_obj_match_id) in enumerate(match_indices):
@@ -530,11 +533,12 @@ class Scene:
                     f"{existing_obj_match_id} {self.objects[existing_obj_match_id]['class_name']} {detected_obj['conf']:.3f} {merged_obj['num_detections']}"
                 )
 
-                # if current object is the target object, and it is merged into an existing object, then change the target object id to the existing object id
-                if target_obj_id == detected_obj_id:
-                    target_obj_id = existing_obj_match_id
+                # update the mapping of target object id
+                for gt_id, mapped_id in target_obj_id_mapping.items():
+                    if mapped_id == detected_obj_id:
+                        target_obj_id_mapping[gt_id] = existing_obj_match_id
 
-        return visualize_captions, target_obj_id, added_obj_ids
+        return visualize_captions, target_obj_id_mapping, added_obj_ids
 
     def make_detection_list_from_pcd_and_gobs(
             self, gobs, image_path, obj_classes
@@ -641,7 +645,7 @@ class Scene:
             else:
                 assert obj['image'] is not None, f"{obj_id} has no image"
 
-    def periodic_cleanup_objects(self, frame_idx, pts):
+    def periodic_cleanup_objects(self, frame_idx, pts, goal_obj_ids_mapping=None):
         ### Perform post-processing periodically if told so
 
         # Denoising
@@ -696,6 +700,7 @@ class Scene:
                 dbscan_min_points=self.cfg_cg["dbscan_min_points"],
                 spatial_sim_type=self.cfg_cg["spatial_sim_type"],
                 device=self.cfg_cg["device"],
+                goal_obj_ids_mapping=goal_obj_ids_mapping,
             )
 
         # update the object list in snapshots, since some objects may have been removed
@@ -707,14 +712,10 @@ class Scene:
                 frame_to_pop.append(filename)
         for filename in frame_to_pop:
             self.frames.pop(filename)
-        # snapshot_to_pop = []
-        # for filename, ss in self.snapshots.items():
-        #     ss.cluster = [obj_id for obj_id in ss.cluster if obj_id in self.objects.keys()]
-        #     ss.full_obj_list = {obj_id: conf for obj_id, conf in ss.full_obj_list.items() if obj_id in self.objects.keys()}
-        #     if len(ss.full_obj_list) == 0 or len(ss.cluster) == 0:
-        #         snapshot_to_pop.append(filename)
-        # for filename in snapshot_to_pop:
-        #     self.snapshots.pop(filename)
+
+        # update the goal object ids mapping to remove the objects that have been removed
+        for goal_obj_id, mapped_obj_ids in goal_obj_ids_mapping.items():
+            goal_obj_ids_mapping[goal_obj_id] = [obj_id for obj_id in mapped_obj_ids if obj_id in self.objects.keys()]
 
 
 

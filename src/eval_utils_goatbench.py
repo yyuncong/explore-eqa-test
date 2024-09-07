@@ -398,8 +398,6 @@ def prepare_prefiltering_prompt(
 def prepare_question_prompt(
     step
 ):
-    image_prompt_visual_feature_size = step["image_prompt_visual_feature_size"],
-    image_prompt_patch_size = step["image_prompt_patch_size"]
     text,question_feature = '', None
     if "task_type" not in step.keys() or step["task_type"] == "description":
         question = step["question"]
@@ -410,6 +408,8 @@ def prepare_question_prompt(
             image_feature = torch.load(step["image_path"].replace(".png","_full.pt"), map_location="cpu")
         except:
             return None,None
+        image_prompt_visual_feature_size = step["img_prompt_visual_feature_size"],
+        image_prompt_patch_size = step["img_prompt_patch_size"]
         num_tokens = (image_prompt_visual_feature_size // image_prompt_patch_size) ** 2
         question_feature = merge_patches(
             image_feature.view(

@@ -35,7 +35,9 @@ from src.habitat import (
 from src.geom import get_cam_intr, get_scene_bnds
 from src.tsdf_new_cg import TSDFPlanner, Frontier, SnapShot
 from src.scene_goatbench import Scene
-from src.eval_utils_snapshot_new import (
+
+#from src.eval_utils_snapshot_new import (
+from src.eval_utils_goatbench import (
     prepare_step_dict,
     get_item,
     encode,
@@ -58,6 +60,15 @@ from easydict import EasyDict
 
 
 def infer_prefilter(model, tokenizer, sample):
+    # load prefilter features
+    if sample.filter_feature.shape[1] == 0:
+        feature_dict = None
+    else:
+        feature_dict = EasyDict(
+            scene_feature = sample.filter_feature.to("cuda"),
+            scene_insert_loc = sample.filter_insert_loc,
+            scene_length = sample.filter_length,
+        )
     # return prefiltered object list
     filter_input_ids = sample.filter_input_ids.to("cuda")
     if len(torch.where(sample.filter_input_ids==22550)[1]) == 0:
@@ -73,7 +84,7 @@ def infer_prefilter(model, tokenizer, sample):
         with torch.inference_mode() and torch.autocast(device_type="cuda"):
             filter_output_ids = model.generate(
                 filter_input_ids,
-                feature_dict=None,
+                feature_dict=feature_dict,
                 do_sample=False,
                 max_new_tokens=100,
             )
@@ -128,6 +139,8 @@ def inference(model, tokenizer, step_dict, cfg):
 
     num_visual_tokens = (cfg.visual_feature_size // cfg.patch_size) ** 2
     step_dict["num_visual_tokens"] = num_visual_tokens
+    setp_dict["img_prompt_visual_feature_size"] = cfg.img_prompt_visual_feature_size
+    step_dict["img_prompt_patch_size"] = cfg.img_prompt_patch_size
     # print("pos", step_dict["add_positional_encodings"])
     # try:
     sample = get_item(
@@ -439,7 +452,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     continue
 
                 # TODO: here, use the goal_type, goal_category and goal_obj_ids to construct questions
-
+                
                 # record the history of the agent's path
                 pts_pixs = np.empty((0, 2))
                 pts_pixs = np.vstack((pts_pixs, tsdf_planner.habitat2voxel(pts)[:2]))

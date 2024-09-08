@@ -527,7 +527,7 @@ def get_item(tokenizer, step_dict):
             )
         )
         snapshot_index += 1
-
+    seen_classes = sorted(list(seen_classes))
     if step.get("add_positional_encodings") is True:
         snapshot_features = [
             sum_positional_encodings(
@@ -552,7 +552,7 @@ def get_item(tokenizer, step_dict):
         filter_input_ids, filter_length, filter_attention_mask = prepare_prefiltering_prompt(
             step["question"],
             tokenizer,
-            list(seen_classes),
+            seen_classes,
             2048,
             step["top_k_categories"],
         )

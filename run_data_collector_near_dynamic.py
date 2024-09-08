@@ -161,6 +161,10 @@ def main(cfg):
                 object_feature_save_dir = os.path.join(episode_data_dir, 'object_features')
 
                 # if the data has already generated, skip
+                if os.path.exists(os.path.join(episode_data_dir, "metadata.json")):
+                    logging.info(f"Question id {question_data['question_id']}-path {path_idx} already exists!")
+                    success_count += 1
+                    continue
                 if os.path.exists(episode_data_dir) and not os.path.exists(os.path.join(episode_data_dir, "metadata.json")):
                     os.system(f"rm -r {episode_data_dir}")
 
@@ -595,7 +599,7 @@ def main(cfg):
                         break
 
                 if target_found:
-                    metadata["episode_length"] = cnt_step
+                    metadata["episode_length"] = cnt_step + 1
                     with open(os.path.join(episode_data_dir, "metadata.json"), "w") as f:
                         json.dump(metadata, f, indent=4)
                     logging.info(f"Question id {question_data['question_id']}-path {path_idx} finish with {cnt_step} steps")

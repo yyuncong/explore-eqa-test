@@ -892,7 +892,7 @@ def main(cfg):
                     break
 
             if target_found:
-                metadata["episode_length"] = cnt_step
+                metadata["episode_length"] = cnt_step + 1
                 with open(os.path.join(episode_data_dir, "metadata.json"), "w") as f:
                     json.dump(metadata, f, indent=4)
                 logging.info(f"Question id {question_data['question_id']}-path {path_idx} finish with {cnt_step} steps")

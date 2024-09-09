@@ -49,12 +49,13 @@ def call_openai_api(client, sys_prompt, contents):
             break
         except openai.RateLimitError as e:
             print("Rate limit error, waiting for 60s")
-            time.sleep(60)
+            time.sleep(30)
             retry_count += 1
             continue
         except Exception as e:
             print("Error: ", e)
-            exit(0)
+            time.sleep(60)
+            retry_count += 1
     # print('openai api response {}'.format(completion))
     return completion.choices[0].message.content
 
@@ -169,7 +170,7 @@ def format_explore_prompt(
     text = "Please provide your answer in the following format: 'Snapshot i' or 'Frontier i', where i is the index of the snapshot or frontier you choose."
     text += "For example, if you choose the first snapshot, please type 'Snapshot 0'.\n"
     text += "You can explain the reason for your choice, but put it in a new line after the choice.\n"
-    text += "Answer: "
+    #text += "Answer: "
     content.append((text,))
     return sys_prompt, content
 
@@ -216,6 +217,7 @@ def get_prefiltering_classes(
     prefiltering_sys,prefiltering_content = format_prefiltering_prompt(
         question, sorted(list(seen_classes)))
     response = call_openai_api(client, prefiltering_sys,prefiltering_content)
+    print("Prefiltering response: ", response)
     # parse the response and return the top_k objects
     selected_classes = response.split('\n')
     selected_classes = [cls for cls in selected_classes if cls in seen_classes]
@@ -237,7 +239,7 @@ def prefiltering(
     print("snapshot classes before filtering: ", snapshot_classes)
     snapshot_classes = [snapshot_classes[i] for i in keep_index]
     print("snapshot classes after filtering: ", snapshot_classes)
-    snapshot_classes = [sorted(list(set(s_cls)&ranking)) for s_cls in snapshot_classes]
+    snapshot_classes = [sorted(list(set(s_cls)&set(selected_classes))) for s_cls in snapshot_classes]
     print("snapshot classes after class-wise filtering",snapshot_classes)
     return snapshot_classes, keep_index
    
@@ -266,7 +268,11 @@ def explore_step(step, cfg):
             response = response.split("\n")
             response, reason = response[0], response[-1]
         response = response.lower()
-        choice_type, choice_id = response.split(" ")
+        try:
+            choice_type, choice_id = response.split(" ")
+        except:
+            print(response)
+            exit(0)
         if choice_type == "snapshot" and 0 <= int(choice_id) < len(snapshot_imgs):
             valid_response = True
         elif choice_type == "frontier" and 0 <= int(choice_id) < len(frontier_imgs):

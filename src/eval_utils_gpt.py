@@ -116,7 +116,7 @@ def format_explore_prompt(
     egocentric_view = False,
     use_snapshot_class = True
 ):
-    sys_prompt = "Task: You are an agent in an indoor scene tasked with answering quesions by observing the surroundings and exploring the environment. To answer the question, you are required to choose either a snapshot or a frontier based on the egocentric views of your surroundings.\n"
+    sys_prompt = "Task: You are an agent in an indoor scene tasked with answering quesions by observing the surroundings and exploring the environment. To answer the question, you are required to choose either a Snapshot or a Frontier image as the direction to explore.\n"
     # TODO: format interleaved text and images
     # a list of (text, image) tuples, if theres no image, use (text,)
     content = []
@@ -130,7 +130,7 @@ def format_explore_prompt(
     # uppercase?
     # 2 here is the question
     text += f"Question:{question}\n"
-    text += "Select the frontier/snapshot that would help find the answer of the question.\n"
+    text += "Select the Frontier/Snapshot that would help find the answer of the question.\n"
     # add the text to the content
     content.append((text,))
     # TODO: only use 1 egocentric view
@@ -148,26 +148,26 @@ def format_explore_prompt(
     text += "So you still need to utilize the images to make the decision.\n"
     content.append((text,))
     if len(snapshot_imgs) == 0:
-        content.append(("No snapshot is available\n",))
+        content.append(("No Snapshot is available\n",))
     else:
         for i in range(len(snapshot_imgs)):
-            content.append((f"SNAPSHOT {i} ", snapshot_imgs[i]))
+            content.append((f"Snapshot {i} ", snapshot_imgs[i]))
             if use_snapshot_class:
                 text = ", ".join(snapshot_classes[i])
                 content.append((text,))
             content.append(("\n",))
     # 4 here is the frontier images
-    text = "Below are all the frontiers that we can explore\n"
+    text = "Below are all the Frontiers that we can explore\n"
     content.append((text,))
     if len(frontier_imgs) == 0:
-        content.append(("No frontier is available\n",))
+        content.append(("No Frontier is available\n",))
     else:
         for i in range(len(frontier_imgs)):
-            content.append((f"FRONTIER {i} ", frontier_imgs[i]))
+            content.append((f"Frontier {i} ", frontier_imgs[i]))
             content.append(("\n",))
     # 5 here is the format of the answer
-    text = "Please provide your answer in the following format: 'snapshot i' or 'frontier i', where i is the index of the snapshot or frontier you choose."
-    text += "For example, if you choose the first snapshot, please type 'snapshot 0'."
+    text = "Please provide your answer in the following format: 'Snapshot i' or 'Frontier i', where i is the index of the snapshot or frontier you choose."
+    text += "For example, if you choose the first snapshot, please type 'Snapshot 0'."
     text += "You can explain the reason for your choice, but put it in a new line after the choice."
     content.append((text,))
     return sys_prompt, content
@@ -177,32 +177,34 @@ def format_prefiltering_prompt(
     class_list,
     top_k = 10
 ):
-    sys_prompt = "You are an object selector, part of an AI agent in a 3D indoor scene.\n"
+    sys_prompt = "You are an AI agent in a 3D indoor scene.\n"
     prompt = "The goal of the AI agent is to answer questions about the scene through exploration.\n"
-    prompt += "In order to efficiently solve the problem, you should rank objects in the scene based on their importance.\n"
-    prompt += "More important objects should be more helpful in answering the question, and should be ranked higher and first explored.\n"
-    prompt += f"Only the top {top_k} ranked objects should be included in the response.\n"
-    prompt += "If there are not enough objects, you only need to rank the objects and return all of them in ranked order.\n" 
-    prompt += "Following is the rules for the task.\n"
-    prompt += "RULES:\n"
+    prompt += "To efficiently solve the problem, you should first rank objects in the scene based on their importance.\n"
+    # prompt += "You should rank the objects based on how well they can help you answer the question.\n"
+    # prompt += "More important objects should be more helpful in answering the question, and should be ranked higher and first explored.\n"
+    # prompt += f"Only the top {top_k} ranked objects should be included in the response.\n"
+    # prompt += "If there are not enough objects, you only need to rank the objects and return all of them in ranked order.\n" 
+    prompt += "These are the rules for the task.\n"
+    # prompt += "RULES:\n"
     prompt += "1. Read through the whole object list.\n"
     prompt += "2. Rank objects in the list based on how well they can help you answer the question.\n"
     prompt += f"3. Reprint the name of top {top_k} objects. "
     prompt += "If there are not enough objects, reprint all of them in ranked order. Each object should be printed on a new line.\n"
     prompt += "4. Do not print any object not included in the list or include any additional information in your response.\n"
     #------------------format an example-------------------------
-    prompt += "Here is an example"
-    prompt += "EXAMPLE: select top 3 ranked objects\n"
-    prompt += "Given question: What can I use to watch my favorite shows and movies?"
+    prompt += "Here is an example of selecting top 3 ranked objects"
+    # prompt += "EXAMPLE: select top 3 ranked objects\n"
+    prompt += "Question: What can I use to watch my favorite shows and movies?"
     prompt += "Following is a list of objects that you can choose, each object one line\n"
     prompt += "painting\nspeaker\nbox\ncabinet\nlamp\ncouch\npillow\ncabinet\ntv\nbook rack\nwall panel\npainting\nstool\ntv stand\n"
-    prompt += "Your answer should be:tv\ntv stand\nspeaker"
+    prompt += "Answer: tv\ntv stand\nspeaker"
     #------------------Task to solve----------------------------
-    prompt += "Following is the concrete content of the task\n"
-    prompt += f"Given question: {question}\n"
+    prompt += f"Following is the concrete content of the task and you should retrieve top {top_k} objects\n"
+    prompt += f"Question: {question}\n"
     prompt += "Following is a list of objects that you can choose, each object one line\n"
     for i, cls in enumerate(class_list):
         prompt += f"{cls}\n"
+    prompt += "Answer: "
     return sys_prompt,[(prompt,)]
 
 def get_prefiltering_classes(

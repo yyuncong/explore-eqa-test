@@ -167,8 +167,9 @@ def format_explore_prompt(
             content.append(("\n",))
     # 5 here is the format of the answer
     text = "Please provide your answer in the following format: 'Snapshot i' or 'Frontier i', where i is the index of the snapshot or frontier you choose."
-    text += "For example, if you choose the first snapshot, please type 'Snapshot 0'."
-    text += "You can explain the reason for your choice, but put it in a new line after the choice."
+    text += "For example, if you choose the first snapshot, please type 'Snapshot 0'.\n"
+    text += "You can explain the reason for your choice, but put it in a new line after the choice.\n"
+    text += "Answer: "
     content.append((text,))
     return sys_prompt, content
 
@@ -264,6 +265,7 @@ def explore_step(step, cfg):
         if "\n" in response:
             response = response.split("\n")
             response, reason = response[0], response[-1]
+        response = response.lower()
         choice_type, choice_id = response.split(" ")
         if choice_type == "snapshot" and 0 <= int(choice_id) < len(snapshot_imgs):
             valid_response = True

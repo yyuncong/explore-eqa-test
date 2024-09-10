@@ -34,139 +34,15 @@ from src.habitat import (
 from src.geom import get_cam_intr, get_scene_bnds
 from src.tsdf_new_cg import TSDFPlanner, Frontier, SnapShot
 from src.scene import Scene
-from src.eval_utils_snapshot_new import (
-    prepare_step_dict,
-    get_item,
-    encode,
-    load_scene_features,
-    rgba2rgb,
-    load_checkpoint,
-    collate_wrapper,
-    construct_selection_prompt,
-    merge_patches,
-    load_ds_checkpoint
-)
+from src.eval_utils_snapshot_new import rgba2rgb
 from src.eval_utils_gpt import explore_step
-from src.eval_utils_snapshot_new import SCENE_TOKEN
-
-from conceptgraph.utils.general_utils import measure_time
-
-from llava.model.builder import load_pretrained_model
-from llava.mm_utils import get_model_name_from_path
-
-from easydict import EasyDict
 
 
-def infer_prefilter(model, tokenizer, sample):
-    # return prefiltered object list
-    filter_input_ids = sample.filter_input_ids.to("cuda")
-    if len(torch.where(sample.filter_input_ids==22550)[1]) == 0:
-        logging.info(f"invalid: no token 'answer'!")
-        return None
-    answer_ind = torch.where(sample.filter_input_ids==22550)[1][0].item()
-    filter_input_ids = filter_input_ids[:, :answer_ind+2]
-    # logging.info('prefiltering prompt')
-    # logging.info(
-    #     tokenizer.decode(filter_input_ids[0][filter_input_ids[0] != tokenizer.pad_token_id])
-    # )
-    with torch.no_grad():
-        with torch.inference_mode() and torch.autocast(device_type="cuda"):
-            filter_output_ids = model.generate(
-                filter_input_ids,
-                feature_dict=None,
-                do_sample=False,
-                max_new_tokens=100,
-            )
-    # parse the prefilter output
-        filter_outputs = tokenizer.decode(filter_output_ids[0, filter_input_ids.shape[1]:]).replace("</s>", "").strip()
-    # print("the output of prefiltering", filter_outputs)
-    # logging.info(f"prefiltering output: {filter_outputs}")
-    if filter_outputs == "No object available":
-        return []
-    else:
-        filter_outputs = filter_outputs.split("\n")
-        # print("parsed output of prefiltering", filter_outputs)
-        return filter_outputs
-
-def infer_selection(model, tokenizer, sample):
-    feature_dict = EasyDict(
-        scene_feature = sample.scene_feature.to("cuda"),
-        scene_insert_loc = sample.scene_insert_loc,
-        scene_length = sample.scene_length,
-    )
-    input_ids = sample.input_ids.to("cuda")
-    # logging.info('final input to the model')
-    # logging.info(
-    #     tokenizer.decode(input_ids[0][input_ids[0] != tokenizer.pad_token_id])
-    # )
-    # input()
-    # the loss of : exists in infer_selection
-    # but in final prompt
-    if len(torch.where(sample.input_ids==22550)[1]) == 0:
-        logging.info(f"invalid: no token 'answer'!")
-        return None
-        eixt(0)  # ???
-    answer_ind = torch.where(sample.input_ids==22550)[1][0].item()
-    input_ids = input_ids[:, :answer_ind+2]
-    with torch.no_grad():
-        with torch.inference_mode() and torch.autocast(device_type="cuda"):
-            output_ids = model.generate(
-                input_ids,
-                feature_dict=feature_dict,
-                do_sample=False,
-                max_new_tokens=10,
-            )
-        outputs = tokenizer.decode(output_ids[0, input_ids.shape[1]:]).replace("</s>", "").strip()
-    return outputs
-
-def inference(model, tokenizer, step_dict, cfg):
-    step_dict["use_prefiltering"] = cfg.prefiltering
-    #step_dict["use_egocentric_views"] = cfg.egocentric_views
-    #step_dict["use_action_memory"] = cfg.action_memory
-    step_dict["top_k_categories"] = cfg.top_k_categories
-    step_dict["add_positional_encodings"] = cfg.add_positional_encodings
-
-    num_visual_tokens = (cfg.visual_feature_size // cfg.patch_size) ** 2
-    step_dict["num_visual_tokens"] = num_visual_tokens
-    # print("pos", step_dict["add_positional_encodings"])
-    # try:
-    sample = get_item(
-        tokenizer, step_dict
-    )
-    # except:
-    #     logging.info(f"Get item failed! (most likely no frontiers and no objects)")
-    #     return None
-
-    if cfg.prefiltering:
-        filter_outputs = infer_prefilter(model,tokenizer,sample)
-        logging.info(f"prefiltering output: {filter_outputs}")
-        if filter_outputs is None:
-            return None
-        selection_dict = sample.selection_dict[0]
-        selection_input, snapshot_id_mapping = construct_selection_prompt(
-            tokenizer, 
-            selection_dict.text_before_snapshot,
-            selection_dict.feature_before_snapshot,
-            selection_dict.frontier_text,
-            selection_dict.frontier_features,
-            selection_dict.snapshot_info_dict,
-            4096,
-            True,
-            filter_outputs,
-            cfg.top_k_categories,
-            num_visual_tokens
-        )
-        sample = collate_wrapper([selection_input])
-        outputs = infer_selection(model,tokenizer,sample)
-        return outputs, snapshot_id_mapping
-    else:
-        # already loss Answer/:
-        #print('before input into inference')
-        #print(
-        #    tokenizer.decode(sample.input_ids[0][sample.input_ids[0] != tokenizer.pad_token_id])
-        #)
-        outputs = infer_selection(model,tokenizer,sample)
-        return outputs
+def resize_image(image, target_h, target_w):
+    # image: np.array, h, w, c
+    image = Image.fromarray(image)
+    image = image.resize((target_w, target_h))
+    return np.array(image)
 
 
 def main(cfg, start_ratio=0.0, end_ratio=1.0):
@@ -222,24 +98,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
     )
     clip_model = clip_model.to(cfg_cg.device)
     clip_tokenizer = open_clip.get_tokenizer("ViT-B-32")
-
-    logging.info(f"Load VLM!")
-    # Initialize LLaVA model
-    # model_path = "liuhaotian/llava-v1.5-7b"
-    model_path = "/work/pi_chuangg_umass_edu/yuncong/llava-v1.5-7b"
-    model_name = get_model_name_from_path(model_path)
-    tokenizer, model, image_processor, context_len = load_pretrained_model(
-        model_path, None, model_name, device_map=None, add_multisensory_token=True
-    )
-    # model = model.to("cuda")
-    if not cfg.use_deepspeed:
-        load_checkpoint(model, cfg.model_path)
-    else:
-        load_ds_checkpoint(model, cfg.model_path, exclude_frozen_parameters=True)
-    model = model.to("cuda")
-    # model = None
-    model.eval()
-    logging.info(f"Load VLM successful!")
 
     # load success list and path length list
     if os.path.exists(os.path.join(str(cfg.output_dir), f"success_list_{start_ratio}_{end_ratio}.pkl")):
@@ -323,7 +181,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
 
             # run questions in the scene
             global_step = -1
-            all_snapshot_features = {}
             all_snapshots = {}
             finished_question_count = 0
 
@@ -368,7 +225,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 explore_dist = 0.0
                 cnt_step = -1
                 target_observation_count = 0
-                memory_feature = None
 
                 # reset tsdf planner
                 tsdf_planner.max_point = None
@@ -388,10 +244,8 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     all_angles.append(main_angle)
 
                     # observe and update the TSDF
-                    rgb_egocentric_views_features = []
-                    all_added_obj_ids = []
-                    # save the egocentric view images
                     rgb_egocentric_views = []
+                    all_added_obj_ids = []
                     for view_idx, ang in enumerate(all_angles):
                         obs, cam_pose = scene.get_observation(pts, ang)
                         rgb = obs["color_sensor"]
@@ -413,17 +267,10 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                                 img_path=obs_file_name,
                                 frame_idx=cnt_step * total_views + view_idx,
                                 target_obj_mask=None,
-                            )  
-                            img_feature = encode(model, image_processor, rgb).mean(0)
-                            img_feature = merge_patches(
-                                img_feature.view(cfg.visual_feature_size, cfg.visual_feature_size, -1),
-                                cfg.patch_size
                             )
-                            all_snapshot_features[obs_file_name] = img_feature.to("cpu")
-                            rgb_egocentric_views_features.append(img_feature.to("cpu"))
-                            # add images
-                            rgb_egocentric_views.append(rgb)
-                            all_snapshots[obs_file_name] = rgb
+                            resized_rgb = resize_image(rgb, cfg.prompt_h, cfg.prompt_w)
+                            all_snapshots[obs_file_name] = resized_rgb
+                            rgb_egocentric_views.append(resized_rgb)
                             if cfg.save_visualization or cfg.save_frontier_video:
                                 plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), annotated_rgb)
                             else:
@@ -456,30 +303,13 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
 
                     # update the mapping of object id to class name, since the objects have been updated
                     object_id_to_name = {obj_id: obj["class_name"] for obj_id, obj in scene.objects.items()}
+                    step_dict["obj_map"] = object_id_to_name
 
-                    step_dict["snapshot_features"] = {}
                     step_dict["snapshot_objects"] = {}
                     step_dict["snapshot_imgs"] = {}
                     for rgb_id, snapshot in scene.snapshots.items():
-                        step_dict["snapshot_features"][rgb_id] = all_snapshot_features[rgb_id]
-                        step_dict["snapshot_imgs"][rgb_id] = all_snapshots[rgb_id]
                         step_dict["snapshot_objects"][rgb_id] = snapshot.cluster
-                    # print(step_dict["snapshot_objects"])
-                    # input()
-
-                    # record current scene graph
-                    step_dict["scene_graph"] = list(scene.objects.keys())
-                    step_dict["scene_graph"] = [int(x) for x in step_dict["scene_graph"]]
-                    step_dict["obj_map"] = object_id_to_name
-                    step_dict["position"] = np.array(pts)[None,]
-                    obj_positions_map = {
-                        str(obj_id): obj['bbox'].center
-                        for obj_id, obj in scene.objects.items()
-                    }
-                    obj_positions_map = {
-                        key: value - step_dict["position"] for key, value in obj_positions_map.items()
-                    }
-                    step_dict["obj_position_map"] = obj_positions_map
+                        step_dict["snapshot_imgs"][rgb_id] = all_snapshots[rgb_id]
 
                     update_success = tsdf_planner.update_frontier_map(pts=pts_normal, cfg=cfg.planner)
                     if not update_success:
@@ -506,17 +336,9 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                                     os.path.join(episode_frontier_dir, f"{global_step}_{i}.png"),
                                     frontier_obs,
                                 )
-                            processed_rgb = rgba2rgb(frontier_obs)
-                            with torch.no_grad():
-                                img_feature = encode(model, image_processor, processed_rgb).mean(0)
-                            img_feature = merge_patches(
-                                img_feature.view(cfg.visual_feature_size, cfg.visual_feature_size, -1),
-                                cfg.patch_size
-                            )
-                            assert img_feature is not None
+                            processed_rgb = resize_image(rgba2rgb(frontier_obs), cfg.prompt_h, cfg.prompt_w)
                             frontier.image = f"{global_step}_{i}.png"
-                            frontier.feature = img_feature
-                            frontier.img = processed_rgb
+                            frontier.feature = processed_rgb
 
                     if cfg.choose_every_step:
                         if tsdf_planner.max_point is not None and type(tsdf_planner.max_point) == Frontier:
@@ -533,14 +355,9 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         vlm_id_count = 0
                         for i, frontier in enumerate(tsdf_planner.frontiers):
                             frontier_dict = {}
-                            pos_voxel = frontier.position
-                            pos_world = pos_voxel * tsdf_planner._voxel_size + tsdf_planner._vol_origin[:2]
-                            pos_world = pos_normal_to_habitat(np.append(pos_world, floor_height))
-                            frontier_dict["coordinate"] = pos_world.tolist()
                             assert frontier.image is not None and frontier.feature is not None
-                            frontier_dict["rgb_feature"] = frontier.feature
                             frontier_dict["rgb_id"] = frontier.image
-                            frontier_dict["img"] = frontier.img
+                            frontier_dict["img"] = frontier.feature
 
                             step_dict["frontiers"].append(frontier_dict)
 
@@ -549,43 +366,17 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         vlm_id_to_ft_id = {v: k for k, v in ft_id_to_vlm_id.items()}
 
                         if cfg.egocentric_views:
-                            assert len(rgb_egocentric_views_features) == total_views
-                            rgb_egocentric_views_features_tensor = torch.cat(rgb_egocentric_views_features, dim=0)
-                            step_dict["egocentric_view_features"] = rgb_egocentric_views_features_tensor
                             step_dict["egocentric_views"] = rgb_egocentric_views
                             step_dict["use_egocentric_views"] = True
 
-                        if cfg.action_memory:
-                            step_dict["memory_feature"] = memory_feature
-                            step_dict["use_action_memory"] = True
-
                         # add model prediction here
                         if len(step_dict["frontiers"]) > 0:
-                            step_dict["frontier_features"] = torch.cat(
-                                [
-                                    frontier["rgb_feature"] for frontier in step_dict["frontiers"]
-                                ],
-                                dim=0
-                            ).to("cpu")
-                            step_dict["frontier_positions"] = np.array(
-                                [f["coordinate"] for f in step_dict["frontiers"]]
-                            ) - step_dict["position"]
-                            step_dict["frontier_imgs"] = [
-                                frontier["img"] for frontier in step_dict["frontiers"]
-                            ]
+                            step_dict["frontier_imgs"] = [frontier["img"] for frontier in step_dict["frontiers"]]
                         else:
-                            step_dict["frontier_features"] = None
-                            step_dict["frontier_positions"] = None
                             step_dict["frontier_imgs"] = []
                         step_dict["question"] = question
                         step_dict["scene"] = scene_id
-                        '''
-                        if cfg.prefiltering:
-                            outputs, snapshot_id_mapping = inference(model, tokenizer, step_dict, cfg)
-                        else:
-                            outputs = inference(model, tokenizer, step_dict, cfg)
-                            snapshot_id_mapping = None
-                        '''
+
                         outputs, snapshot_id_mapping = explore_step(step_dict, cfg)
                         if outputs is None:
                             # encounter generation error
@@ -647,9 +438,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                             logging.info(f"Next choice: Frontier at {target_point}")
                             tsdf_planner.frontiers_weight = np.zeros((len(tsdf_planner.frontiers)))
                             max_point_choice = tsdf_planner.frontiers[target_index]
-
-                            # TODO: modify this: update memory feature only in frontiers (for now)
-                            memory_feature = tsdf_planner.frontiers[target_index].feature.to("cpu")
 
                         if max_point_choice is None:
                             logging.info(f"Question id {question_id} invalid: no valid choice!")
@@ -812,7 +600,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         for _ in range(cfg.num_final_images):
                             step_dict = {}
                             # add snapshot features
-                            step_dict["snapshot_features"] = {}
                             step_dict["snapshot_objects"] = {}
                             step_dict["snapshot_imgs"] = {}
                             snapshot_id_mapping = {}
@@ -820,7 +607,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                             for snapshot_idx, (rgb_id, snapshot) in enumerate(scene.snapshots.items()):
                                 if rgb_id in selected_snapshot_ids:
                                     continue
-                                step_dict["snapshot_features"][rgb_id] = all_snapshot_features[rgb_id]
                                 step_dict["snapshot_objects"][rgb_id] = snapshot.cluster
                                 step_dict["snapshot_imgs"] = all_snapshots[rgb_id]
 
@@ -832,42 +618,19 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                                 break
 
                             # add scene graph
-                            step_dict["scene_graph"] = list(scene.objects.keys())
-                            step_dict["scene_graph"] = [int(x) for x in step_dict["scene_graph"]]
                             step_dict["obj_map"] = object_id_to_name
-                            step_dict["position"] = np.array(pts)[None,]
-                            obj_positions_map = {
-                                str(obj_id): obj['bbox'].center
-                                for obj_id, obj in scene.objects.items()
-                            }
-                            obj_positions_map = {
-                                key: value - step_dict["position"] for key, value in obj_positions_map.items()
-                            }
-                            step_dict["obj_position_map"] = obj_positions_map
 
                             # we don't need to add frontier for model selection
                             step_dict["frontiers"] = []
 
                             if cfg.egocentric_views:
-                                step_dict["egocentric_view_features"] = rgb_egocentric_views_features_tensor
                                 step_dict["use_egocentric_views"] = True
                                 step_dict["egocentric_imgs"] = rgb_egocentric_views
 
-                            if cfg.action_memory:
-                                step_dict["memory_feature"] = memory_feature
-                                step_dict["use_action_memory"] = True
-
-                            step_dict["frontier_features"] = None
-                            step_dict["frontier_positions"] = None
                             step_dict["frontier_imgs"] = []
                             step_dict["question"] = question
                             step_dict["scene"] = scene_id
-                            '''
-                            if cfg.prefiltering:
-                                outputs, _ = inference(model, tokenizer, step_dict, cfg)
-                            else:
-                                outputs = inference(model, tokenizer, step_dict, cfg)
-                            '''
+
                             outputs, snapshot_id_mapping = explore_step(step_dict, cfg)
                             if outputs is None:
                                 logging.info(f"Question id {question_id} target not found handling: model generation error!")
@@ -892,6 +655,8 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                             assert pred_target_snapshot.image not in selected_snapshot_ids, f"{pred_target_snapshot.image} already selected"
                             selected_snapshot_ids.append(pred_target_snapshot.image)
                             logging.info(f"Handling target not found: choose snapshot {pred_target_snapshot.image}")
+                    else:
+                        raise ValueError(f"Invalid target not found handling method: {cfg.handle_target_not_found}")
 
                     # save the selected images
                     for ss_id in selected_snapshot_ids:

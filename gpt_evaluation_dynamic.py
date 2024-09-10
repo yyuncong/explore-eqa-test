@@ -555,7 +555,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                             continue
                         step_dict["snapshot_objects"][rgb_id] = snapshot.cluster
                         step_dict["snapshot_imgs"] = all_snapshots[rgb_id]
-                        
+
                         snapshot_id_mapping[prompt_ss_idx] = snapshot_idx
                         prompt_ss_idx += 1
 

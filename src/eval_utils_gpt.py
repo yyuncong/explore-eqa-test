@@ -1,13 +1,15 @@
-from src.keys import api_key
 import openai
 from openai import AzureOpenAI
 from PIL import Image
 import base64
 from io import BytesIO
+import os
+import time
+from typing import Optional
 
 client = AzureOpenAI(
     azure_endpoint="https://yuncong.openai.azure.com/",
-    api_key=api_key,
+    api_key=os.getenv('AZURE_OPENAI_KEY'),
     api_version="2024-02-15-preview",
 )
 
@@ -17,16 +19,18 @@ def format_content(contents):
         formated_content.append({"type": "text", "text": c[0]})
         if len(c) == 2:
             formated_content.append(
-                {"type": "image_url", 
-                 "image_url": {
-                     "url": f"data:image/png;base64,{c[1]}"
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{c[1]}",  # yh: previously I always used jpeg format. The internet says that jpeg is smaller in size? I'm not sure.
+                        "detail": "high"
                      }
-                 }
+                }
             )
     return formated_content
     
 # send information to openai
-def call_openai_api(client, sys_prompt, contents):
+def call_openai_api(sys_prompt, contents) -> Optional[str]:
     max_tries = 5
     retry_count = 0
     formated_content = format_content(contents)
@@ -46,7 +50,7 @@ def call_openai_api(client, sys_prompt, contents):
                 presence_penalty=0,
                 stop=None,
             )
-            break
+            return completion.choices[0].message.content
         except openai.RateLimitError as e:
             print("Rate limit error, waiting for 60s")
             time.sleep(30)
@@ -56,8 +60,9 @@ def call_openai_api(client, sys_prompt, contents):
             print("Error: ", e)
             time.sleep(60)
             retry_count += 1
-    # print('openai api response {}'.format(completion))
-    return completion.choices[0].message.content
+            continue
+
+    return None
 
 # encode tensor images to base64 format
 def encode_tensor2base64(img):
@@ -75,7 +80,7 @@ def get_step_info(step):
     
     # 2.1 get egocentric views
     egocentric_imgs = []
-    if step.get("use_egocentric_view", True):
+    if step.get("use_egocentric_views", True):
         for egocentric_view in step["egocentric_views"]:
             egocentric_imgs.append(encode_tensor2base64(egocentric_view))
             
@@ -117,7 +122,7 @@ def format_explore_prompt(
     egocentric_view = False,
     use_snapshot_class = True
 ):
-    sys_prompt = "Task: You are an agent in an indoor scene tasked with answering quesions by observing the surroundings and exploring the environment. To answer the question, you are required to choose either a Snapshot or a Frontier image as the direction to explore.\n"
+    sys_prompt = "Task: You are an agent in an indoor scene tasked with answering questions by observing the surroundings and exploring the environment. To answer the question, you are required to choose either a Snapshot or a Frontier image as the direction to explore.\n"
     # TODO: format interleaved text and images
     # a list of (text, image) tuples, if theres no image, use (text,)
     content = []
@@ -130,7 +135,7 @@ def format_explore_prompt(
     # set | use '/n' to separate different parts
     # uppercase?
     # 2 here is the question
-    text += f"Question:{question}\n"
+    text += f"Question: {question}\n"
     text += "Select the Frontier/Snapshot that would help find the answer of the question.\n"
     # add the text to the content
     content.append((text,))
@@ -140,12 +145,12 @@ def format_explore_prompt(
     # remove '/'
     if egocentric_view:
         #text += "Followings are the egocentric views of the agent (in left, right, and forward directions)\n"
-        text = "Followings is the egocentric view of the agent (in forward direction)"
+        text = "The following is the egocentric view of the agent in forward direction: "
         content.append((text, egocentric_imgs[-1]))
         content.append(("\n",))
     # 3 here is the snapshot images
-    text = "Below are all the snapshots that we can explore (followed with contained object classes)\n"
-    text += "Please note that the contained class may not be accurate(wrong classes/missing classes) due to the limitation of the object detection model.\n"
+    text = "The followings are all the snapshots that you can explore (followed with contained object classes)\n"
+    text += "Please note that the contained classes may not be accurate (wrong classes/missing classes) due to the limitation of the object detection model. "
     text += "So you still need to utilize the images to make the decision.\n"
     content.append((text,))
     if len(snapshot_imgs) == 0:
@@ -158,7 +163,7 @@ def format_explore_prompt(
                 content.append((text,))
             content.append(("\n",))
     # 4 here is the frontier images
-    text = "Below are all the Frontiers that we can explore\n"
+    text = "The followings are all the Frontiers that we can explore: \n"
     content.append((text,))
     if len(frontier_imgs) == 0:
         content.append(("No Frontier is available\n",))
@@ -167,7 +172,7 @@ def format_explore_prompt(
             content.append((f"Frontier {i} ", frontier_imgs[i]))
             content.append(("\n",))
     # 5 here is the format of the answer
-    text = "Please provide your answer in the following format: 'Snapshot i' or 'Frontier i', where i is the index of the snapshot or frontier you choose."
+    text = "Please provide your answer in the following format: 'Snapshot i' or 'Frontier i', where i is the index of the snapshot or frontier you choose. "
     text += "For example, if you choose the first snapshot, please type 'Snapshot 0'.\n"
     text += "You can explain the reason for your choice, but put it in a new line after the choice.\n"
     #text += "Answer: "
@@ -194,14 +199,14 @@ def format_prefiltering_prompt(
     prompt += "If there are not enough objects, reprint all of them in ranked order. Each object should be printed on a new line.\n"
     prompt += "4. Do not print any object not included in the list or include any additional information in your response.\n"
     #------------------format an example-------------------------
-    prompt += "Here is an example of selecting top 3 ranked objects"
+    prompt += "Here is an example of selecting top 3 ranked objects:\n"
     # prompt += "EXAMPLE: select top 3 ranked objects\n"
-    prompt += "Question: What can I use to watch my favorite shows and movies?"
+    prompt += "Question: What can I use to watch my favorite shows and movies?\n"
     prompt += "Following is a list of objects that you can choose, each object one line\n"
     prompt += "painting\nspeaker\nbox\ncabinet\nlamp\ncouch\npillow\ncabinet\ntv\nbook rack\nwall panel\npainting\nstool\ntv stand\n"
-    prompt += "Answer: tv\ntv stand\nspeaker"
+    prompt += "Answer: tv\ntv stand\nspeaker\n"
     #------------------Task to solve----------------------------
-    prompt += f"Following is the concrete content of the task and you should retrieve top {top_k} objects\n"
+    prompt += f"Following is the concrete content of the task and you should retrieve top {top_k} objects:\n"
     prompt += f"Question: {question}\n"
     prompt += "Following is a list of objects that you can choose, each object one line\n"
     for i, cls in enumerate(class_list):
@@ -216,10 +221,12 @@ def get_prefiltering_classes(
 ): 
     prefiltering_sys,prefiltering_content = format_prefiltering_prompt(
         question, sorted(list(seen_classes)))
-    response = call_openai_api(client, prefiltering_sys,prefiltering_content)
+    response = call_openai_api(prefiltering_sys, prefiltering_content)
     print("Prefiltering response: ", response)
+    if response is None:
+        return []
     # parse the response and return the top_k objects
-    selected_classes = response.split('\n')
+    selected_classes = response.strip().split('\n')
     selected_classes = [cls for cls in selected_classes if cls in seen_classes]
     selected_classes = selected_classes[:top_k]
     return selected_classes
@@ -253,35 +260,49 @@ def explore_step(step, cfg):
         frontier_imgs,
         snapshot_imgs,
         snapshot_classes,
-        egocentric_view = step.get("use_egocentric_view", False),
+        egocentric_view = step.get("use_egocentric_views", False),
         use_snapshot_class = True
     )
     
     print(f"the size of frontier is {len(frontier_imgs)}")
-    print(f"the input prompt:\n {sys_prompt + ''.join([c[0] for c in content])}")
-    
-    # add retry mechanism to avoid invalid answer format
-    valid_response, retry_bound = False, 3
-    while not valid_response and retry_bound > 0:
-        response = call_openai_api(client, sys_prompt, content)
+    print(f"the input prompt:\n{sys_prompt + ''.join([c[0] for c in content])}")
+
+    retry_bound = 3
+    final_response = None
+    for _ in range(retry_bound):
+        response = call_openai_api(sys_prompt, content)
+
+        if response is None:
+            print("call_openai_api returns None, retrying")
+            continue
+
+        response = response.strip()
         if "\n" in response:
             response = response.split("\n")
             response, reason = response[0], response[-1]
+        else:
+            reason = ""
         response = response.lower()
         try:
             choice_type, choice_id = response.split(" ")
-        except:
-            print(response)
-            exit(0)
+        except Exception as e:
+            print(f"Error in splitting response: {response}")
+            print(e)
+            continue
+
+        response_valid = False
         if choice_type == "snapshot" and 0 <= int(choice_id) < len(snapshot_imgs):
-            valid_response = True
+            response_valid = True
         elif choice_type == "frontier" and 0 <= int(choice_id) < len(frontier_imgs):
-            valid_response = True
-        else:
-            retry_bound -= 1
-        if valid_response:
-            print(f"the reason for {response} is \n {reason}")
-    return response, snapshot_id_mapping
+            response_valid = True
+
+        if response_valid:
+            print(f"Response: [{response}], Reason: [{reason}]")
+            final_response = response
+            break
+
+
+    return final_response, snapshot_id_mapping
    
     
     

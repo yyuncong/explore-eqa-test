@@ -256,14 +256,12 @@ class TSDFPlanner(TSDFPlannerBase):
                         # create a new frontier with the old image
                         old_img_path = frontier.image
                         old_img_feature = frontier.feature
-                        old_img = frontier.img
                         filtered_frontiers.append(
                             self.create_frontier(valid_ft_angles[update_ft_idx], frontier_edge_areas=frontier_edge_areas, cur_point=cur_point)
                         )
                         filtered_frontiers[-1].image = old_img_path
                         filtered_frontiers[-1].target_detected = frontier.target_detected
                         filtered_frontiers[-1].feature = old_img_feature
-                        filtered_frontiers[-1].img = old_img
                         valid_ft_angles.pop(update_ft_idx)
                         kept_frontier_area = kept_frontier_area | filtered_frontiers[-1].region
         self.frontiers = filtered_frontiers

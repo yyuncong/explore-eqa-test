@@ -74,16 +74,13 @@ def encode_tensor2base64(img):
     return img_base64
 
 def format_question(step):
-    
-    question, image_goal = None, None
-    if "task_type" not in step.keys() or step["task_type"] == "description":
-        question = step["question"]
-    elif step["task_type"] == "object":
-        question = "Could you find a {step['class']}?"
-    elif step["task_type"] == "image":
-        question = "Could you find the object presented in the following image?"
+
+    question = step["question"]
+    image_goal = None
+    if step["task_type"] == "image":
         with open(step["image"],"rb") as image_file:
             image_goal = base64.b64encode(image_file.read()).decode('utf-8')
+
     return question, image_goal
 
 def get_step_info(step):
@@ -248,7 +245,7 @@ def get_prefiltering_classes(
     image_goal = None
 ): 
     prefiltering_sys,prefiltering_content = format_prefiltering_prompt(
-        question, sorted(list(seen_classes)), image_goal)
+        question, sorted(list(seen_classes)), top_k=top_k, image_goal=image_goal)
     print("prefiltering prompt: \n", "".join([c[0] for c in prefiltering_content]))
     response = call_openai_api(prefiltering_sys, prefiltering_content)
     print("Prefiltering response: ", response)

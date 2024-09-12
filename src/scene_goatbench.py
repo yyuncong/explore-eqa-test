@@ -371,7 +371,6 @@ class Scene:
         target_obj_id_mapping = {}
         if semantic_obs is not None:
             for target_gt_id in gt_target_obj_ids:
-                target_gt_id = int(target_gt_id.split("_")[-1])
                 target_obj_mask = semantic_obs == target_gt_id
                 if np.sum(target_obj_mask) / (target_obj_mask.shape[0] * target_obj_mask.shape[1]) > 0.0001:
                     # loop through the detected objects to find the highest IoU with the target object
@@ -720,8 +719,11 @@ class Scene:
             self.frames.pop(filename)
 
         # update the goal object ids mapping to remove the objects that have been removed
-        for goal_obj_id, mapped_obj_ids in goal_obj_ids_mapping.items():
-            goal_obj_ids_mapping[goal_obj_id] = [obj_id for obj_id in mapped_obj_ids if obj_id in self.objects.keys()]
+        if goal_obj_ids_mapping is not None:
+            for goal_obj_id, mapped_obj_ids in goal_obj_ids_mapping.items():
+                logging.info(f"Goal object {goal_obj_id}: {mapped_obj_ids} -> ")
+                goal_obj_ids_mapping[goal_obj_id] = [obj_id for obj_id in mapped_obj_ids if obj_id in self.objects.keys()]
+                logging.info(f"\t\t{goal_obj_ids_mapping[goal_obj_id]}")
 
 
 

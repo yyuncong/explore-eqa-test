@@ -24,7 +24,7 @@ import glob
 import open_clip
 from ultralytics import SAM, YOLOWorld
 from hydra import initialize, compose
-from habitat_sim.utils.common import quat_to_angle_axis
+from habitat_sim.utils.common import quat_to_angle_axis, quat_from_coeffs
 import habitat_sim
 from src.habitat import (
     pos_normal_to_habitat,
@@ -73,7 +73,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
     logging.info(f"Total number of episodes: {num_episode}")
     logging.info(f"Total number of scenes: {len(scene_data_list)}")
 
-    all_scene_ids = os.listdir(cfg.scene_data_path_train + '/train') + os.listdir(cfg.scene_data_path + '/val')
+    all_scene_ids = os.listdir(cfg.scene_data_path_train + '/train') + os.listdir(cfg.scene_data_path_val + '/val')
 
     ## Initialize the detection models
     detection_model = YOLOWorld(cfg.yolo_model_name)
@@ -172,7 +172,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             os.makedirs(episode_snapshot_dir, exist_ok=True)
 
             init_pts = episode["start_position"]
-            init_quat = quaternion.quaternion(*episode["start_rotation"])
+            init_quat = quat_from_coeffs(episode["start_rotation"])
 
             pts = np.asarray(init_pts)
             angle, axis = quat_to_angle_axis(init_quat)
@@ -227,10 +227,13 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     filtered_tasks.append(goal)
 
             all_subtask_goals = []
+            all_subtask_goal_types = []
             for goal in filtered_tasks:
                 goal_type = goal[1]
                 goal_category = goal[0]
                 goal_inst_id = goal[2]
+
+                all_subtask_goal_types.append(goal_type)
 
                 dset_same_cat_goals = [
                     x
@@ -253,8 +256,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 ), f"more than 1 goal categories for {goal_category}"
 
                 if goal_type == "object":
-                    subtask_goal = dset_same_cat_goals[0]
-                    subtask_goal[0]["goal_type"] = "object"
                     all_subtask_goals.append(dset_same_cat_goals[0])
                 else:
                     goal_inst = [
@@ -262,19 +263,18 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         for x in dset_same_cat_goals[0]
                         if x["object_id"] == goal_inst_id
                     ]
-                    goal_inst[0]["goal_type"] = goal_type
                     all_subtask_goals.append(goal_inst)
 
             # run questions in the scene
             global_step = -1
             all_snapshots = {}
-            for subtask_idx, subtask_goal in enumerate(all_subtask_goals):
+            for subtask_idx, (goal_type, subtask_goal) in enumerate(zip(all_subtask_goal_types, all_subtask_goals)):
                 subtask_id = f"{scene_id}_{episode_id}_{subtask_idx}"
 
                 # determine the navigation goals
-                goal_type = subtask_goal[0]["goal_type"]
                 goal_category = subtask_goal[0]["object_category"]
                 goal_obj_ids = [x["object_id"] for x in subtask_goal]
+                goal_obj_ids = [int(x.split('_')[-1]) for x in goal_obj_ids]
                 if goal_type != "object":
                     assert len(goal_obj_ids) == 1, f"{len(goal_obj_ids)} != 1"
 
@@ -324,6 +324,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 elif goal_type == "description":
                     subtask_metadata['question'] = f"Could you find the object described as \'{subtask_goal[0]['lang_desc']}\'?"
                 else:  # goal_type == "image"
+                    subtask_metadata['question'] = f"Could you find the object captured in the following image?"
                     view_pos_dict = random.choice(subtask_goal[0]["view_points"])['agent_state']
                     obs,_ = scene.get_observation(pts=view_pos_dict["position"], rotation=view_pos_dict["rotation"])
                     plt.imsave(os.path.join(str(cfg.output_dir), f"{subtask_id}", "image_goal.png"), obs["color_sensor"])
@@ -744,15 +745,15 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 logging.info(f"Subtask {subtask_id} finished with {cnt_step} steps, {subtask_explore_dist} length")
                 logging.info(f"Subtask spl by snapshot: {spl_by_snapshot[subtask_id]}, spl by distance: {spl_by_distance[subtask_id]}")
 
-                logging.info(f"Success rate by snapshot: {100 * np.mean(np.asarray(success_by_snapshot.values())):.2f}")
-                logging.info(f"Success rate by distance: {100 * np.mean(np.asarray(success_by_distance.values())):.2f}")
-                logging.info(f"SPL by snapshot: {np.mean(np.asarray(spl_by_snapshot.values())):.2f}")
-                logging.info(f"SPL by distance: {np.mean(np.asarray(spl_by_distance.values())):.2f}")
+                logging.info(f"Success rate by snapshot: {100 * np.mean(np.asarray(list(success_by_snapshot.values()))):.2f}")
+                logging.info(f"Success rate by distance: {100 * np.mean(np.asarray(list(success_by_distance.values()))):.2f}")
+                logging.info(f"SPL by snapshot: {100 * np.mean(np.asarray(list(spl_by_snapshot.values()))):.2f}")
+                logging.info(f"SPL by distance: {100 * np.mean(np.asarray(list(spl_by_distance.values()))):.2f}")
 
                 for task_name, success_list in success_by_task.items():
                     logging.info(f"Success rate for {task_name}: {100 * np.mean(np.asarray(success_list)):.2f}")
                 for task_name, spl_list in spl_by_task.items():
-                    logging.info(f"SPL for {task_name}: {np.mean(np.asarray(spl_list)):.2f}")
+                    logging.info(f"SPL for {task_name}: {100 * np.mean(np.asarray(spl_list)):.2f}")
 
                 # print the items in the scene graph
                 snapshot_dict = {}

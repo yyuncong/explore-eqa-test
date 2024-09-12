@@ -73,12 +73,22 @@ def encode_tensor2base64(img):
     img_base64 = base64.b64encode(buffer.read()).decode("utf-8")
     return img_base64
 
+def format_question(step):
+    
+    question, image_goal = None, None
+    if "task_type" not in step.keys() or step["task_type"] == "description":
+        question = step["question"]
+    elif step["task_type"] == "object":
+        question = "Could you find a {step['class']}?"
+    elif step["task_type"] == "image":
+        question = "Could you find the object presented in the following image?"
+        with open(step["image"],"rb") as image_file:
+            image_goal = base64.b64encode(image_file.read()).decode('utf-8')
+    return question, image_goal
+
 def get_step_info(step):
-    for k,v in step.items():
-        print(f"{k}: {v}")
-    exit(0)
     # 1 get question data
-    question = step['question']
+    question, image_goal = format_question(step)
     # 2 get step information(egocentric, frontier, snapshot)
     
     # 2.1 get egocentric views
@@ -110,11 +120,11 @@ def get_step_info(step):
     keep_index = list(range(len(snapshot_imgs)))
     if step.get("use_prefiltering") is True:
         snapshot_classes, keep_index = prefiltering(
-            question, snapshot_classes, seen_classes, step["top_k_categories"]
+            question, snapshot_classes, seen_classes, step["top_k_categories"], image_goal
         )
         snapshot_imgs = [snapshot_imgs[i] for i in keep_index]
     
-    return question, egocentric_imgs, frontier_imgs, snapshot_imgs, snapshot_classes, keep_index
+    return question, image_goal, egocentric_imgs, frontier_imgs, snapshot_imgs, snapshot_classes, keep_index
        
 def format_explore_prompt(
     question,
@@ -123,7 +133,8 @@ def format_explore_prompt(
     snapshot_imgs,
     snapshot_classes,
     egocentric_view = False,
-    use_snapshot_class = True
+    use_snapshot_class = True,
+    image_goal = None
 ):
     sys_prompt = "Task: You are an agent in an indoor scene tasked with answering questions by observing the surroundings and exploring the environment. To answer the question, you are required to choose either a Snapshot or a Frontier image as the direction to explore.\n"
     # TODO: format interleaved text and images
@@ -138,13 +149,16 @@ def format_explore_prompt(
     # set | use '/n' to separate different parts
     # uppercase?
     # 2 here is the question
-    text += f"Question: {question}\n"
-    text += "Select the Frontier/Snapshot that would help find the answer of the question.\n"
+    # TODO: add the image goal here
+    text += f"Question: {question}"
+    if image_goal is not None:
+        content.append((text, image_goal))
+        content.append(("\n",))
+    else:
+        content.append((text+"\n",))
+    text = "Select the Frontier/Snapshot that would help find the answer of the question.\n"
     # add the text to the content
     content.append((text,))
-    # TODO: only use 1 egocentric view
-    # TODO: see the error type | regenerate the answer if the format is incorrect
-    # TODO: direct ask for topk
     # remove '/'
     if egocentric_view:
         #text += "Followings are the egocentric views of the agent (in left, right, and forward directions)\n"
@@ -185,8 +199,10 @@ def format_explore_prompt(
 def format_prefiltering_prompt(
     question,
     class_list,
-    top_k = 10
+    top_k = 10,
+    image_goal = None
 ):
+    content = []
     sys_prompt = "You are an AI agent in a 3D indoor scene.\n"
     prompt = "The goal of the AI agent is to answer questions about the scene through exploration.\n"
     prompt += "To efficiently solve the problem, you should first rank objects in the scene based on their importance.\n"
@@ -201,29 +217,39 @@ def format_prefiltering_prompt(
     prompt += f"3. Reprint the name of top {top_k} objects. "
     prompt += "If there are not enough objects, reprint all of them in ranked order. Each object should be printed on a new line.\n"
     prompt += "4. Do not print any object not included in the list or include any additional information in your response.\n"
+    content.append((prompt,))
     #------------------format an example-------------------------
-    prompt += "Here is an example of selecting top 3 ranked objects:\n"
+    prompt = "Here is an example of selecting top 3 ranked objects:\n"
     # prompt += "EXAMPLE: select top 3 ranked objects\n"
     prompt += "Question: What can I use to watch my favorite shows and movies?\n"
     prompt += "Following is a list of objects that you can choose, each object one line\n"
     prompt += "painting\nspeaker\nbox\ncabinet\nlamp\ncouch\npillow\ncabinet\ntv\nbook rack\nwall panel\npainting\nstool\ntv stand\n"
     prompt += "Answer: tv\ntv stand\nspeaker\n"
+    content.append((prompt,))
     #------------------Task to solve----------------------------
-    prompt += f"Following is the concrete content of the task and you should retrieve top {top_k} objects:\n"
-    prompt += f"Question: {question}\n"
-    prompt += "Following is a list of objects that you can choose, each object one line\n"
+    prompt = f"Following is the concrete content of the task and you should retrieve top {top_k} objects:\n"
+    prompt += f"Question: {question}"
+    if image_goal is not None:
+        content.append((prompt, image_goal))
+        content.append(("\n",))
+    else:
+        content.append((prompt+"\n",))
+    prompt = "Following is a list of objects that you can choose, each object one line\n"
     for i, cls in enumerate(class_list):
         prompt += f"{cls}\n"
     prompt += "Answer: "
-    return sys_prompt,[(prompt,)]
+    content.append((prompt,))
+    return sys_prompt,content
 
 def get_prefiltering_classes(
     question,
     seen_classes,
-    top_k=10
+    top_k=10,
+    image_goal = None
 ): 
     prefiltering_sys,prefiltering_content = format_prefiltering_prompt(
-        question, sorted(list(seen_classes)))
+        question, sorted(list(seen_classes)), image_goal)
+    print("prefiltering prompt: \n", "".join([c[0] for c in prefiltering_content]))
     response = call_openai_api(prefiltering_sys, prefiltering_content)
     print("Prefiltering response: ", response)
     if response is None:
@@ -238,10 +264,11 @@ def prefiltering(
     question,
     snapshot_classes,
     seen_classes,
-    top_k=10
+    top_k=10,
+    image_goal = None
 ):
     selected_classes = get_prefiltering_classes(
-        question, seen_classes, top_k
+        question, seen_classes, top_k, image_goal
     )
     print(f"Selected classes: {selected_classes}")
     keep_index = [i for i in range(len(snapshot_classes)) 
@@ -256,7 +283,7 @@ def prefiltering(
 def explore_step(step, cfg):
     step["use_prefiltering"] = cfg.prefiltering
     step["top_k_categories"] = cfg.top_k_categories
-    question, egocentric_imgs, frontier_imgs, snapshot_imgs, snapshot_classes, snapshot_id_mapping = get_step_info(step)
+    question, image_goal, egocentric_imgs, frontier_imgs, snapshot_imgs, snapshot_classes, snapshot_id_mapping = get_step_info(step)
     sys_prompt, content = format_explore_prompt(
         question,
         egocentric_imgs,
@@ -264,7 +291,8 @@ def explore_step(step, cfg):
         snapshot_imgs,
         snapshot_classes,
         egocentric_view = step.get("use_egocentric_views", False),
-        use_snapshot_class = True
+        use_snapshot_class = True,
+        image_goal = image_goal
     )
     
     print(f"the size of frontier is {len(frontier_imgs)}")

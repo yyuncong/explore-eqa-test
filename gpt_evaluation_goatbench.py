@@ -14,6 +14,7 @@ import torch
 import math
 import time
 from PIL import Image
+from collections import defaultdict
 
 np.set_printoptions(precision=3)
 import pickle
@@ -156,13 +157,15 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             open(os.path.join(str(cfg.output_dir), f"success_by_task_{start_ratio}_{end_ratio}.pkl"), "rb")
         )
     else:
-        success_by_task = {}  # task type -> success
+        #success_by_task = {}  # task type -> success
+        success_by_task = defaultdict(list)
     if os.path.exists(os.path.join(str(cfg.output_dir), f"spl_by_task_{start_ratio}_{end_ratio}.pkl")):
         spl_by_task = pickle.load(
             open(os.path.join(str(cfg.output_dir), f"spl_by_task_{start_ratio}_{end_ratio}.pkl"), "rb")
         )
     else:
-        spl_by_task = {}  # task type -> spl
+        #spl_by_task = {}  # task type -> spl
+        spl_by_task = defaultdict(list)
     assert len(success_by_snapshot) == len(spl_by_snapshot) == len(success_by_distance) == len(spl_by_distance), f"{len(success_by_snapshot)} != {len(spl_by_snapshot)} != {len(success_by_distance)} != {len(spl_by_distance)}"
     assert sum([len(task_res) for task_res in success_by_task.values()]) == sum([len(task_res) for task_res in spl_by_task.values()]) == len(success_by_snapshot), f"{sum([len(task_res) for task_res in success_by_task.values()])} != {sum([len(task_res) for task_res in spl_by_task.values()])} != {len(success_by_snapshot)}"
 
@@ -583,6 +586,9 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                             step_dict["frontier_imgs"] = []
                         step_dict["question"] = subtask_metadata["question"]#question
                         step_dict["scene"] = scene_id
+                        step_dict["task_type"] = subtask_metadata["task_type"]
+                        step_dict["class"] = subtask_metadata["class"]
+                        step_dict["image"] = subtask_metadata["image"]
                         '''
                         if cfg.prefiltering:
                             outputs, snapshot_id_mapping = inference(model, tokenizer, step_dict, cfg)
@@ -650,7 +656,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                             tsdf_planner.frontiers_weight = np.zeros((len(tsdf_planner.frontiers)))
                             max_point_choice = tsdf_planner.frontiers[target_index]
 
-                            memory_feature = tsdf_planner.frontiers[target_index].feature.to("cpu")
+                            #memory_feature = tsdf_planner.frontiers[target_index].feature.to("cpu")
 
                         if max_point_choice is None:
                             logging.info(f"Question id {question_id} invalid: no valid choice!")

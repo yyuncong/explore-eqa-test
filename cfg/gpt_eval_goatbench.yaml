@@ -15,10 +15,10 @@ visual_feature_size: 24
 patch_size: 8
 img_prompt_visual_feature_size: 24
 img_prompt_patch_size: 2
-choose_every_step: true
+choose_every_step: false
 egocentric_views: true
 action_memory: false
-prefiltering: false
+prefiltering: true
 top_k_categories: 10
 
 use_deepspeed: true #false

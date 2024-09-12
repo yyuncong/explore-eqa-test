@@ -371,6 +371,7 @@ class Scene:
         target_obj_id_mapping = {}
         if semantic_obs is not None:
             for target_gt_id in gt_target_obj_ids:
+                target_gt_id = int(target_gt_id.split("_")[-1])
                 target_obj_mask = semantic_obs == target_gt_id
                 if np.sum(target_obj_mask) / (target_obj_mask.shape[0] * target_obj_mask.shape[1]) > 0.0001:
                     # loop through the detected objects to find the highest IoU with the target object

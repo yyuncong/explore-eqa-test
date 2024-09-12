@@ -1,10 +1,11 @@
 # General
 seed: 77
-exp_name: gpt_explore
+exp_name: exp_goatbench
 output_parent_dir: /work/pi_chuangg_umass_edu/yuncong/results
 scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
+scene_data_path_train: /project/pi_chuangg_umass_edu/yuncong/data_v2/scene_datasets/hm3d/
 scene_data_path: /work/pi_chuangg_umass_edu/yuncong/data/scene_datasets/hm3d/
-questions_list_path: 'data/generated_questions-eval.json'
+test_data_dir: /home/yuncongyang_umass_edu/scene_understanding/jiachen/explore-eqa-test/goat_bench/val_unseen/content/
 model_path: /work/pi_chuangg_umass_edu/yuncong/ds_lora/ds_cluster_scannet_4e-06_patch1_ds_rand_ego_lora
 
 concept_graph_config_path: "conceptgraph/hydra_configs"
@@ -12,7 +13,9 @@ concept_graph_config_name: "rerun_realtime_mapping"
 
 visual_feature_size: 24
 patch_size: 8
-choose_every_step: false #true
+img_prompt_visual_feature_size: 24
+img_prompt_patch_size: 2
+choose_every_step: false
 egocentric_views: true
 action_memory: false
 prefiltering: true
@@ -36,16 +39,15 @@ tsdf_grid_size: 0.1
 margin_w_ratio: 0.25
 margin_h_ratio: 0.6
 
+# about goatbench evaluation
+success_distance: 1.0
+
 save_visualization: false
 save_frontier_video: false
 
-# for handling fail case
-handle_target_not_found: none   # none, random, with_model
-num_final_images: 15
-
-# for continuous exploration
-clear_up_scene_interval: 3
-max_snapshot_threshold: 45
+# for prompting gpt-4o
+prompt_h: 360
+prompt_w: 360
 
 # Navigation
 init_clearance: 0.3

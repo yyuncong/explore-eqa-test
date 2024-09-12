@@ -36,35 +36,16 @@ from src.habitat import (
 from src.geom import get_cam_intr, get_scene_bnds
 from src.tsdf_new_cg import TSDFPlanner, Frontier, SnapShot
 from src.scene_goatbench import Scene
-
-#from src.eval_utils_snapshot_new import (
-from src.eval_utils_goatbench import (
-    prepare_step_dict,
-    get_item,
-    encode,
-    load_scene_features,
-    rgba2rgb,
-    load_checkpoint,
-    collate_wrapper,
-    construct_selection_prompt,
-    merge_patches,
-    load_ds_checkpoint
-)
+from src.eval_utils_goatbench import rgba2rgb
 from src.eval_utils_gpt import explore_step
-from src.eval_utils_snapshot_new import SCENE_TOKEN
 
-from conceptgraph.utils.general_utils import measure_time
-
-from llava.model.builder import load_pretrained_model
-from llava.mm_utils import get_model_name_from_path
-
-from easydict import EasyDict
 
 def resize_image(image, target_h, target_w):
     # image: np.array, h, w, c
     image = Image.fromarray(image)
     image = image.resize((target_w, target_h))
     return np.array(image)
+
 
 def main(cfg, start_ratio=0.0, end_ratio=1.0):
     # use hydra to load concept graph related configs
@@ -106,26 +87,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
     )
     clip_model = clip_model.to(cfg_cg.device)
     clip_tokenizer = open_clip.get_tokenizer("ViT-B-32")
-
-    '''
-    logging.info(f"Load VLM!")
-    # Initialize LLaVA model
-    # model_path = "liuhaotian/llava-v1.5-7b"
-    model_path = "/work/pi_chuangg_umass_edu/yuncong/llava-v1.5-7b"
-    model_name = get_model_name_from_path(model_path)
-    tokenizer, model, image_processor, context_len = load_pretrained_model(
-        model_path, None, model_name, device_map=None, add_multisensory_token=True
-    )
-    # model = model.to("cuda")
-    if not cfg.use_deepspeed:
-        load_checkpoint(model, cfg.model_path)
-    else:
-        load_ds_checkpoint(model, cfg.model_path, exclude_frozen_parameters=True)
-    model = model.to("cuda")
-    # model = None
-    model.eval()
-    logging.info(f"Load VLM successful!")
-    '''
 
     # load result stats
     if os.path.exists(os.path.join(str(cfg.output_dir), f"success_by_snapshot_{start_ratio}_{end_ratio}.pkl")):
@@ -211,7 +172,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             os.makedirs(episode_snapshot_dir, exist_ok=True)
 
             init_pts = episode["start_position"]
-            #init_quat = episode["start_rotation"]
             init_quat = quaternion.quaternion(*episode["start_rotation"])
 
             pts = np.asarray(init_pts)
@@ -307,7 +267,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
 
             # run questions in the scene
             global_step = -1
-            #all_snapshot_features = {}
             all_snapshots = {}
             for subtask_idx, subtask_goal in enumerate(all_subtask_goals):
                 subtask_id = f"{scene_id}_{episode_id}_{subtask_idx}"
@@ -352,24 +311,23 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     "episode_history": scene_id,
                     "category": "object localization",
                     "question": None,
+                    "image": None,
                     "answer": goal_category,
                     "object_id": goal_obj_ids,  # this is a list of obj id, since for object class type, there will be multiple target objects
                     "class": goal_category,
                     "position": goal_positions, # also a list of positions for possible multiple objects
                     "task_type": goal_type
                 }
-                # add language description if existed
-                if 'lang_desc' in subtask_goal[0]:
+                # format question according to the goal type
+                if goal_type == "object":
+                    subtask_metadata['question'] = f"Where is the {goal_category}?"
+                elif goal_type == "description":
                     subtask_metadata['question'] = f"Could you find the object described as \'{subtask_goal[0]['lang_desc']}\'?"
-                # get a ramdom image goal
-                if "view_points" in subtask_goal[0]:
+                else:  # goal_type == "image"
                     view_pos_dict = random.choice(subtask_goal[0]["view_points"])['agent_state']
                     obs,_ = scene.get_observation(pts=view_pos_dict["position"], rotation=view_pos_dict["rotation"])
                     plt.imsave(os.path.join(str(cfg.output_dir), f"{subtask_id}", "image_goal.png"), obs["color_sensor"])
                     subtask_metadata["image"] = f"{cfg.output_dir}/{subtask_id}/image_goal.png"
-                else:
-                    subtask_metadata["image"] = None
-
                 
                 # record the history of the agent's path
                 pts_pixs = np.empty((0, 2))
@@ -379,7 +337,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 target_found = False
                 subtask_explore_dist = 0.0
                 cnt_step = -1
-                memory_feature = None
                 question_idx += 1
 
                 # reset tsdf planner
@@ -400,7 +357,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     all_angles.append(main_angle)
 
                     # observe and update the TSDF
-                    #rgb_egocentric_views_features = []
                     rgb_egocentric_views = []
                     all_added_obj_ids = []
                     for view_idx, ang in enumerate(all_angles):
@@ -426,15 +382,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                                 semantic_obs=semantic_obs,
                                 gt_target_obj_ids=goal_obj_ids,
                             )
-                            '''
-                            img_feature = encode(model, image_processor, rgb).mean(0)
-                            img_feature = merge_patches(
-                                img_feature.view(cfg.visual_feature_size, cfg.visual_feature_size, -1),
-                                cfg.patch_size
-                            )
-                            all_snapshot_features[obs_file_name] = img_feature.to("cpu")
-                            rgb_egocentric_views_features.append(img_feature.to("cpu"))
-                            '''
                             resized_rgb = resize_image(rgb, cfg.prompt_h, cfg.prompt_w)
                             all_snapshots[obs_file_name] = resized_rgb
                             rgb_egocentric_views.append(resized_rgb)
@@ -476,29 +423,13 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
 
                     # update the mapping of object id to class name, since the objects have been updated
                     object_id_to_name = {obj_id: obj["class_name"] for obj_id, obj in scene.objects.items()}
+                    step_dict["obj_map"] = object_id_to_name
 
                     step_dict["snapshot_objects"] = {}
                     step_dict["snapshot_imgs"] = {}
                     for rgb_id, snapshot in scene.snapshots.items():
-                        #step_dict["snapshot_features"][rgb_id] = all_snapshot_features[rgb_id]
                         step_dict["snapshot_objects"][rgb_id] = snapshot.cluster
                         step_dict["snapshot_imgs"][rgb_id] = all_snapshots[rgb_id]
-                    # print(step_dict["snapshot_objects"])
-                    # input()
-
-                    # record current scene graph
-                    step_dict["scene_graph"] = list(scene.objects.keys())
-                    step_dict["scene_graph"] = [int(x) for x in step_dict["scene_graph"]]
-                    step_dict["obj_map"] = object_id_to_name
-                    step_dict["position"] = np.array(pts)[None,]
-                    obj_positions_map = {
-                        str(obj_id): obj['bbox'].center
-                        for obj_id, obj in scene.objects.items()
-                    }
-                    obj_positions_map = {
-                        key: value - step_dict["position"] for key, value in obj_positions_map.items()
-                    }
-                    step_dict["obj_position_map"] = obj_positions_map
 
                     update_success = tsdf_planner.update_frontier_map(pts=pts_normal, cfg=cfg.planner)
                     if not update_success:
@@ -553,12 +484,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         vlm_id_count = 0
                         for i, frontier in enumerate(tsdf_planner.frontiers):
                             frontier_dict = {}
-                            pos_voxel = frontier.position
-                            pos_world = pos_voxel * tsdf_planner._voxel_size + tsdf_planner._vol_origin[:2]
-                            pos_world = pos_normal_to_habitat(np.append(pos_world, floor_height))
-                            frontier_dict["coordinate"] = pos_world.tolist()
                             assert frontier.image is not None and frontier.feature is not None
-                            #frontier_dict["rgb_feature"] = frontier.feature
                             frontier_dict["rgb_id"] = frontier.image
                             frontier_dict["img"] = frontier.feature
 
@@ -569,15 +495,8 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         vlm_id_to_ft_id = {v: k for k, v in ft_id_to_vlm_id.items()}
 
                         if cfg.egocentric_views:
-                            #assert len(rgb_egocentric_views_features) == total_views
-                            #rgb_egocentric_views_features_tensor = torch.cat(rgb_egocentric_views_features, dim=0)
-                            #step_dict["egocentric_view_features"] = rgb_egocentric_views_features_tensor
                             step_dict["egocentric_views"] = rgb_egocentric_views
                             step_dict["use_egocentric_views"] = True
-
-                        if cfg.action_memory:
-                            step_dict["memory_feature"] = memory_feature
-                            step_dict["use_action_memory"] = True
 
                         # add model prediction here
                         if len(step_dict["frontiers"]) > 0:
@@ -589,17 +508,11 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         step_dict["task_type"] = subtask_metadata["task_type"]
                         step_dict["class"] = subtask_metadata["class"]
                         step_dict["image"] = subtask_metadata["image"]
-                        '''
-                        if cfg.prefiltering:
-                            outputs, snapshot_id_mapping = inference(model, tokenizer, step_dict, cfg)
-                        else:
-                            outputs = inference(model, tokenizer, step_dict, cfg)
-                            snapshot_id_mapping = None
-                        '''
+
                         outputs, snapshot_id_mapping = explore_step(step_dict, cfg)
                         if outputs is None:
                             # encounter generation error
-                            logging.info(f"Question id {question_id} invalid: model generation error!")
+                            logging.info(f"Subtask id {subtask_id} invalid: model generation error!")
                             break
                         try:
                             target_type, target_index = outputs.split(" ")[0], outputs.split(" ")[1]
@@ -656,10 +569,8 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                             tsdf_planner.frontiers_weight = np.zeros((len(tsdf_planner.frontiers)))
                             max_point_choice = tsdf_planner.frontiers[target_index]
 
-                            #memory_feature = tsdf_planner.frontiers[target_index].feature.to("cpu")
-
                         if max_point_choice is None:
-                            logging.info(f"Question id {question_id} invalid: no valid choice!")
+                            logging.info(f"Subtask id {subtask_id} invalid: no valid choice!")
                             break
 
                         update_success = tsdf_planner.set_next_navigation_point(
@@ -670,7 +581,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                             pathfinder=scene.pathfinder,
                         )
                         if not update_success:
-                            logging.info(f"Question id {question_id} invalid: set_next_navigation_point failed!")
+                            logging.info(f"Subtask id {subtask_id} invalid: set_next_navigation_point failed!")
                             break
 
                     return_values = tsdf_planner.agent_step(
@@ -684,7 +595,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         save_visualization=cfg.save_visualization,
                     )
                     if return_values[0] is None:
-                        logging.info(f"Question id {question_id} invalid: agent_step failed!")
+                        logging.info(f"Subtask id {subtask_id} invalid: agent_step failed!")
                         break
                     pts_normal, angle, pts_pix, fig, _, target_arrived = return_values
 
@@ -739,7 +650,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                             ax2.scatter(goal_pos_voxel[1], goal_pos_voxel[0], c=color, s=120)
 
                         fig.tight_layout()
-                        plt.savefig(os.path.join(visualization_path, f"{global_step}_{question_id}"))
+                        plt.savefig(os.path.join(visualization_path, f"{global_step}_{subtask_id}"))
                         plt.close()
 
                     if cfg.save_frontier_video:
@@ -766,10 +677,10 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                                     img = matplotlib.image.imread(img_path)
                                     axs[h_idx, w_idx].imshow(img)
                                     axs[h_idx, w_idx].set_title('Snapshot Chosen')
-                        global_caption = f"{question}\n{answer}"
+                        global_caption = f"{subtask_metadata['question']}\n{subtask_metadata['task_type']}\n{subtask_metadata['class']}"
                         fig.suptitle(global_caption, fontsize=16)
                         plt.tight_layout(rect=(0., 0., 1., 0.95))
-                        plt.savefig(os.path.join(frontier_video_path, f'{global_step}_{question_id}.png'))
+                        plt.savefig(os.path.join(frontier_video_path, f'{global_step}_{subtask_id}.png'))
                         plt.close()
 
                     # update position and rotation
@@ -851,9 +762,10 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     snapshot_dict[obj['image']].append(
                         f"{obj_id}: {obj['class_name']} {obj['num_detections']}"
                     )
-                logging.info(f"Scene graph of question {question_id}:")
-                logging.info(f"Question: {question}")
-                logging.info(f"Answer: {answer}")
+                logging.info(f"Scene graph of question {subtask_id}:")
+                logging.info(f"Question: {subtask_metadata['question']}")
+                logging.info(f"Task type: {subtask_metadata['task_type']}")
+                logging.info(f"Answer: {subtask_metadata['class']}")
                 for snapshot_id, obj_list in snapshot_dict.items():
                     logging.info(f"{snapshot_id}:")
                     for obj_str in obj_list:

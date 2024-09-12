@@ -74,6 +74,9 @@ def encode_tensor2base64(img):
     return img_base64
 
 def get_step_info(step):
+    for k,v in step.items():
+        print(f"{k}: {v}")
+    exit(0)
     # 1 get question data
     question = step['question']
     # 2 get step information(egocentric, frontier, snapshot)

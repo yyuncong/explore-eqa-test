@@ -63,11 +63,14 @@ class Scene:
         self.cfg_cg = graph_cfg
 
         # about the loading the scene
-        split = "train" if int(scene_id.split("-")[0]) < 800 else "val"
-        scene_mesh_path = os.path.join(cfg.scene_data_path, split, scene_id, scene_id.split("-")[1] + ".basis.glb")
-        navmesh_path = os.path.join(cfg.scene_data_path, split, scene_id, scene_id.split("-")[1] + ".basis.navmesh")
-        semantic_texture_path = os.path.join(cfg.scene_data_path, split, scene_id, scene_id.split("-")[1] + ".semantic.glb")
-        scene_semantic_annotation_path = os.path.join(cfg.scene_data_path, split, scene_id, scene_id.split("-")[1] + ".semantic.txt")
+        if int(scene_id.split("-")[0]) < 800:
+            split_path = os.path.join(cfg.scene_data_path_train,"train")
+        else:
+            split_path = os.path.join(cfg.scene_data_path_val,"val")
+        scene_mesh_path = os.path.join(split_path, scene_id, scene_id.split("-")[1] + ".basis.glb")
+        navmesh_path = os.path.join(split_path, scene_id, scene_id.split("-")[1] + ".basis.navmesh")
+        semantic_texture_path = os.path.join(split_path, scene_id, scene_id.split("-")[1] + ".semantic.glb")
+        scene_semantic_annotation_path = os.path.join(split_path, scene_id, scene_id.split("-")[1] + ".semantic.txt")
         assert os.path.exists(scene_mesh_path), f"scene_mesh_path: {scene_mesh_path} does not exist"
         assert os.path.exists(navmesh_path), f"navmesh_path: {navmesh_path} does not exist"
         assert os.path.exists(semantic_texture_path), f"semantic_texture_path: {semantic_texture_path} does not exist"

@@ -23,7 +23,7 @@ import glob
 import open_clip
 from ultralytics import SAM, YOLOWorld
 from hydra import initialize, compose
-from habitat_sim.utils.common import quat_to_angle_axis
+from habitat_sim.utils.common import quat_to_angle_axis, quat_from_coeffs
 import habitat_sim
 from src.habitat import (
     pos_normal_to_habitat,
@@ -208,7 +208,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
     logging.info(f"Total number of episodes: {num_episode}")
     logging.info(f"Total number of scenes: {len(scene_data_list)}")
 
-    all_scene_ids = os.listdir(cfg.scene_data_path + '/train') + os.listdir(cfg.scene_data_path + '/val')
+    all_scene_ids = os.listdir(cfg.scene_data_path_train + '/train') + os.listdir(cfg.scene_data_path_val + '/val')
 
     ## Initialize the detection models
     detection_model = YOLOWorld(cfg.yolo_model_name)
@@ -323,7 +323,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             os.makedirs(episode_snapshot_dir, exist_ok=True)
 
             init_pts = episode["start_position"]
-            init_quat = episode["start_rotation"]
+            init_quat = quat_from_coeffs(episode["start_rotation"])
 
             pts = np.asarray(init_pts)
             angle, axis = quat_to_angle_axis(init_quat)
@@ -378,11 +378,14 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     filtered_tasks.append(goal)
 
             all_subtask_goals = []
+            all_subtask_goal_types = []
             for goal in filtered_tasks:
                 goal_type = goal[1]
                 goal_category = goal[0]
                 goal_inst_id = goal[2]
 
+                all_subtask_goal_types.append(goal_type)
+                
                 dset_same_cat_goals = [
                     x
                     for x in navigation_goals.values()
@@ -416,14 +419,14 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             # run questions in the scene
             global_step = -1
             all_snapshot_features = {}
-
-            for subtask_idx, subtask_goal in enumerate(all_subtask_goals):
+            for subtask_idx, (goal_type, subtask_goal) in enumerate(zip(all_subtask_goal_types, all_subtask_goals)):
                 subtask_id = f"{scene_id}_{episode_id}_{subtask_idx}"
 
                 # determine the navigation goals
-                goal_type = subtask_goal[0]["goal_type"]
+                # goal_type = subtask_goal[0]["goal_type"]
                 goal_category = subtask_goal[0]["object_category"]
                 goal_obj_ids = [x["object_id"] for x in subtask_goal]
+                goal_obj_ids = [int(x.split('_')[-1]) for x in goal_obj_ids]
                 if goal_type != "object":
                     assert len(goal_obj_ids) == 1, f"{len(goal_obj_ids)} != 1"
 
@@ -460,22 +463,24 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     "episode_history": scene_id,
                     "category": "object localization",
                     "question": None,
+                    "image": None,
                     "answer": goal_category,
                     "object_id": goal_obj_ids,  # this is a list of obj id, since for object class type, there will be multiple target objects
                     "class": goal_category,
-                    "position": goal_positions  # also a list of positions for possible multiple objects
+                    "position": goal_positions,  # also a list of positions for possible multiple objects
+                    "task_type": goal_type
                 }
                 # add language description if existed
-                if 'lang_desc' in subtask_goal[0]:
+                if goal_type == "object":
+                    subtask_metadata['question'] = f"Where is the {goal_category}?"
+                elif goal_type == "description":
                     subtask_metadata['question'] = f"Could you find the object described as \'{subtask_goal[0]['lang_desc']}\'?"
-                # get a ramdom image goal
-                if "view_points" in subtask_goal[0]:
-                    view_pos_dict = random.choice(subtask_goal[0]["view_points"])
-                    obs = scene.get_observation(pts=view_pos_dict["position"], rotation=view_pos_dict["rotation"])
+                else:  # goal_type == "image"
+                    subtask_metadata['question'] = f"Could you find the object captured in the following image?"
+                    view_pos_dict = random.choice(subtask_goal[0]["view_points"])['agent_state']
+                    obs,_ = scene.get_observation(pts=view_pos_dict["position"], rotation=view_pos_dict["rotation"])
                     plt.imsave(os.path.join(str(cfg.output_dir), f"{subtask_id}", "image_goal.png"), obs["color_sensor"])
                     subtask_metadata["image"] = f"{cfg.output_dir}/{subtask_id}/image_goal.png"
-                else:
-                    subtask_metadata["image"] = None
 
                 
                 # record the history of the agent's path
@@ -577,7 +582,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
 
                     # update the mapping of object id to class name, since the objects have been updated
                     object_id_to_name = {obj_id: obj["class_name"] for obj_id, obj in scene.objects.items()}
-
+                    
                     step_dict["snapshot_features"] = {}
                     step_dict["snapshot_objects"] = {}
                     for rgb_id, snapshot in scene.snapshots.items():
@@ -700,6 +705,9 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                             step_dict["frontier_positions"] = None
                         step_dict["question"] = question
                         step_dict["scene"] = scene_id
+                        step_dict["task_type"] = subtask_metadata["task_type"]
+                        step_dict["class"] = subtask_metadata["class"]
+                        step_dict["image"] = subtask_metadata["image"]
                         if cfg.prefiltering:
                             outputs, snapshot_id_mapping = inference(model, tokenizer, step_dict, cfg)
                         else:
@@ -707,7 +715,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                             snapshot_id_mapping = None
                         if outputs is None:
                             # encounter generation error
-                            logging.info(f"Question id {question_id} invalid: model generation error!")
+                            logging.info(f"Subtask id {subtask_id} invalid: model generation error!")
                             break
                         try:
                             target_type, target_index = outputs.split(" ")[0], outputs.split(" ")[1]

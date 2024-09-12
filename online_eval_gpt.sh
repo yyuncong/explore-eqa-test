@@ -16,4 +16,5 @@ conda activate explore-eqa
 
 #python gpt_evaluation_dynamic_continuous.py -cf cfg/gpt_eval_continuous.yaml
 #python gpt_evaluation_dynamic.py -cf cfg/gpt_eval_dynamic.yaml
-python gpt_evaluation_dynamic_continuous.py -cf cfg/gpt_eval_dynamic.yaml
+#python gpt_evaluation_dynamic_continuous.py -cf cfg/gpt_eval_dynamic.yaml
+python gpt_evaluation_goatbench.py -cf cfg/gpt_eval_goatbench.yaml --start_ratio 0.1 --end_ratio 0.3

@@ -1,6 +1,6 @@
 # General
 seed: 77
-exp_name: exp_goatbench
+exp_name: exp_goatbench_0.1_0.3
 output_parent_dir: /work/pi_chuangg_umass_edu/yuncong/results
 scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
 scene_data_path_train: /project/pi_chuangg_umass_edu/yuncong/data_v2/scene_datasets/hm3d/
@@ -19,6 +19,9 @@ top_k_categories: 5
 # about detection model
 yolo_model_name: /home/yuncongyang_umass_edu/scene_understanding/yanghan/explore-eqa-test/yolov8x-world-finetuned.pt  # yolov8x-world.pt
 class_set: yolo_finetune  # hm3d, yolo_finetune, scannet200
+
+# about subsample
+subsample_by_episode: true
 
 # Camera, image
 camera_height: 1.5

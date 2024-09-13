@@ -295,7 +295,7 @@ def merge_obj2_into_obj1(obj1, obj2, downsample_voxel_size, dbscan_remove_noise,
     extend_attributes = ['class_id']
     add_attributes = ['num_detections']
     skip_attributes = ['id', 'class_name']  # 'inst_color' just keeps obj1's
-    custom_handled = ['pcd', 'bbox', 'clip_ft', 'conf', 'image']
+    custom_handled = ['pcd', 'bbox', 'clip_ft', 'conf', 'image', 'image_crop']
 
     # Check for unhandled keys and throw an error if there are
     all_handled_keys = set(extend_attributes + add_attributes + skip_attributes + custom_handled)
@@ -337,6 +337,11 @@ def merge_obj2_into_obj1(obj1, obj2, downsample_voxel_size, dbscan_remove_noise,
     obj1['clip_ft'] = F.normalize(obj1['clip_ft'], dim=0)
 
     # TODO: not sure how to handle image merging yet
+
+    # update image crop
+    if 'image_crop' in obj1 and 'image_crop' in obj2:
+        if obj1['conf'] < obj2['conf']:
+            obj1['image_crop'] = obj2['image_crop']
 
     # Update confidence by taking the maximum
     obj1['conf'] = max(obj1['conf'], obj2['conf'])

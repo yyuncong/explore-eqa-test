@@ -73,11 +73,18 @@ def encode_tensor2base64(img):
     img_base64 = base64.b64encode(buffer.read()).decode("utf-8")
     return img_base64
 
+def encode_pil2base64(img):
+    buffer = BytesIO()
+    img.save(buffer, format="PNG")
+    buffer.seek(0)
+    img_base64 = base64.b64encode(buffer.read()).decode("utf-8")
+    return img_base64
+
 def format_question(step):
 
     question = step["question"]
     image_goal = None
-    if step["task_type"] == "image":
+    if "task_type" in step and step["task_type"] == "image":
         with open(step["image"],"rb") as image_file:
             image_goal = base64.b64encode(image_file.read()).decode('utf-8')
 
@@ -85,9 +92,9 @@ def format_question(step):
 
 def get_step_info(step):
     # 1 get question data
-    question, image_goal = format_question(step)
+    question = step["question"]
+
     # 2 get step information(egocentric, frontier, snapshot)
-    
     # 2.1 get egocentric views
     egocentric_imgs = []
     if step.get("use_egocentric_views", True):
@@ -99,48 +106,43 @@ def get_step_info(step):
     for frontier in step["frontier_imgs"]:
         frontier_imgs.append(encode_tensor2base64(frontier))
         
-    # 2.3 get snapshots
-    snapshot_imgs, snapshot_classes = [],[]
+    # 2.3 get objects
+    obj_imgs, obj_classes = [],[]
     obj_map = step['obj_map']
     seen_classes = set()
-    for i, rgb_id in enumerate(step["snapshot_imgs"].keys()):
-        snapshot_img = step["snapshot_imgs"][rgb_id]
-        snapshot_imgs.append(encode_tensor2base64(snapshot_img))
-        snapshot_class = [obj_map[int(sid)] for sid in step["snapshot_objects"][rgb_id]]
-        # remove duplicates
-        snapshot_class = sorted(list(set(snapshot_class)))
-        seen_classes.update(snapshot_class)
-        snapshot_classes.append(
-            snapshot_class
-        )
+    for obj_id, obj_img in step["objects"].items():
+        # obj_img: PIL image
+        obj_imgs.append(encode_pil2base64(obj_img))
+        obj_classes.append(obj_map[obj_id])
+        seen_classes.add(obj_map[obj_id])
+
     # 2.3.3 prefiltering, note that we need the obj_id_mapping
-    keep_index = list(range(len(snapshot_imgs)))
+    keep_index = list(range(len(obj_imgs)))
     if step.get("use_prefiltering") is True:
-        snapshot_classes, keep_index = prefiltering(
-            question, snapshot_classes, seen_classes, step["top_k_categories"], image_goal
+        obj_classes, keep_index = prefiltering(
+            question, obj_classes, seen_classes, step["top_k_categories"]
         )
-        snapshot_imgs = [snapshot_imgs[i] for i in keep_index]
+        obj_imgs = [obj_imgs[i] for i in keep_index]
     
-    return question, image_goal, egocentric_imgs, frontier_imgs, snapshot_imgs, snapshot_classes, keep_index
+    return question, egocentric_imgs, frontier_imgs, obj_imgs, obj_classes, keep_index
        
 def format_explore_prompt(
     question,
     egocentric_imgs,
     frontier_imgs,
-    snapshot_imgs,
-    snapshot_classes,
+    obj_imgs,
+    obj_classes,
     egocentric_view = False,
-    use_snapshot_class = True,
-    image_goal = None
+    use_object_class = True,
 ):
-    sys_prompt = "Task: You are an agent in an indoor scene tasked with answering questions by observing the surroundings and exploring the environment. To answer the question, you are required to choose either a Snapshot or a Frontier image as the direction to explore.\n"
+    sys_prompt = "Task: You are an agent in an indoor scene tasked with answering questions by observing the surroundings and exploring the environment. To answer the question, you are required to choose either an Object or a Frontier image as the direction to explore.\n"
     # TODO: format interleaved text and images
     # a list of (text, image) tuples, if theres no image, use (text,)
     content = []
     # 1 here is some basic info
     #text = "Task: You are an agent in an indoor scene tasked with answering quesions by observing the surroundings and exploring the environment. To answer the question, you are required to choose either a snapshot or a frontier based on the egocentric views of your surroundings.\n"
     text = "Definitions:\n"
-    text += "Snapshot: A focused observation of several objects. Choosing a snapshot means that you are selecting the observed objects in the snapshot as the target objects to help answer the question.\n"
+    text += "Object: An image crop of an observed object. Choosing an object means that you are selecting this object as the target object to help answering the question.\n"
     text += "Frontier: An unexplored region that could potentially lead to new information for answering the question. Selecting a frontier means that you will further explore that direction.\n"
     # TODO: add simple example: frontier, snapshot 
     # set | use '/n' to separate different parts
@@ -148,12 +150,8 @@ def format_explore_prompt(
     # 2 here is the question
     # TODO: add the image goal here
     text += f"Question: {question}"
-    if image_goal is not None:
-        content.append((text, image_goal))
-        content.append(("\n",))
-    else:
-        content.append((text+"\n",))
-    text = "Select the Frontier/Snapshot that would help find the answer of the question.\n"
+    content.append((text+"\n",))
+    text = "Select the Frontier/Object that would help find the answer of the question.\n"
     # add the text to the content
     content.append((text,))
     # remove '/'
@@ -163,18 +161,17 @@ def format_explore_prompt(
         content.append((text, egocentric_imgs[-1]))
         content.append(("\n",))
     # 3 here is the snapshot images
-    text = "The followings are all the snapshots that you can explore (followed with contained object classes)\n"
-    text += "Please note that the contained classes may not be accurate (wrong classes/missing classes) due to the limitation of the object detection model. "
+    text = "The followings are all the objects that you can choose (followed with the object class)\n"
+    text += "Please note that the object classes may not be accurate due to the limitations of the object detection model. "
     text += "So you still need to utilize the images to make the decision.\n"
     content.append((text,))
-    if len(snapshot_imgs) == 0:
-        content.append(("No Snapshot is available\n",))
+    if len(obj_imgs) == 0:
+        content.append(("No Object is available\n",))
     else:
-        for i in range(len(snapshot_imgs)):
-            content.append((f"Snapshot {i} ", snapshot_imgs[i]))
-            if use_snapshot_class:
-                text = ", ".join(snapshot_classes[i])
-                content.append((text,))
+        for i in range(len(obj_imgs)):
+            content.append((f"Object {i} ", obj_imgs[i]))
+            if use_object_class:
+                content.append((obj_classes[i],))
             content.append(("\n",))
     # 4 here is the frontier images
     text = "The followings are all the Frontiers that we can explore: \n"
@@ -186,8 +183,8 @@ def format_explore_prompt(
             content.append((f"Frontier {i} ", frontier_imgs[i]))
             content.append(("\n",))
     # 5 here is the format of the answer
-    text = "Please provide your answer in the following format: 'Snapshot i' or 'Frontier i', where i is the index of the snapshot or frontier you choose. "
-    text += "For example, if you choose the first snapshot, please type 'Snapshot 0'.\n"
+    text = "Please provide your answer in the following format: 'Object i' or 'Frontier i', where i is the index of the Object or Frontier you choose. "
+    text += "For example, if you choose the first object, please type 'Object 0'.\n"
     text += "You can explain the reason for your choice, but put it in a new line after the choice.\n"
     #text += "Answer: "
     content.append((text,))
@@ -197,11 +194,10 @@ def format_prefiltering_prompt(
     question,
     class_list,
     top_k = 10,
-    image_goal = None
 ):
     content = []
     sys_prompt = "You are an AI agent in a 3D indoor scene.\n"
-    prompt = "The goal of the AI agent is to answer questions about the scene through exploration.\n"
+    prompt = "Your goal is to answer questions about the scene through exploration.\n"
     prompt += "To efficiently solve the problem, you should first rank objects in the scene based on their importance.\n"
     # prompt += "You should rank the objects based on how well they can help you answer the question.\n"
     # prompt += "More important objects should be more helpful in answering the question, and should be ranked higher and first explored.\n"
@@ -226,11 +222,7 @@ def format_prefiltering_prompt(
     #------------------Task to solve----------------------------
     prompt = f"Following is the concrete content of the task and you should retrieve top {top_k} objects:\n"
     prompt += f"Question: {question}"
-    if image_goal is not None:
-        content.append((prompt, image_goal))
-        content.append(("\n",))
-    else:
-        content.append((prompt+"\n",))
+    content.append((prompt+"\n",))
     prompt = "Following is a list of objects that you can choose, each object one line\n"
     for i, cls in enumerate(class_list):
         prompt += f"{cls}\n"
@@ -242,10 +234,9 @@ def get_prefiltering_classes(
     question,
     seen_classes,
     top_k=10,
-    image_goal = None
-): 
+):
     prefiltering_sys,prefiltering_content = format_prefiltering_prompt(
-        question, sorted(list(seen_classes)), top_k=top_k, image_goal=image_goal)
+        question, sorted(list(seen_classes)), top_k=top_k)
     print("prefiltering prompt: \n", "".join([c[0] for c in prefiltering_content]))
     response = call_openai_api(prefiltering_sys, prefiltering_content)
     print("Prefiltering response: ", response)
@@ -259,37 +250,30 @@ def get_prefiltering_classes(
 
 def prefiltering(
     question,
-    snapshot_classes,
+    obj_classes,
     seen_classes,
     top_k=10,
-    image_goal = None
 ):
-    selected_classes = get_prefiltering_classes(
-        question, seen_classes, top_k, image_goal
-    )
+    selected_classes = get_prefiltering_classes(question, seen_classes, top_k)
     print(f"Selected classes: {selected_classes}")
-    keep_index = [i for i in range(len(snapshot_classes)) 
-        if len(set(snapshot_classes[i]) & set(selected_classes)) > 0]
-    print("snapshot classes before filtering: ", snapshot_classes)
-    snapshot_classes = [snapshot_classes[i] for i in keep_index]
-    print("snapshot classes after filtering: ", snapshot_classes)
-    snapshot_classes = [sorted(list(set(s_cls)&set(selected_classes))) for s_cls in snapshot_classes]
-    print("snapshot classes after class-wise filtering",snapshot_classes)
-    return snapshot_classes, keep_index
+    keep_index = [i for i in range(len(obj_classes)) if obj_classes[i] in selected_classes]
+    print("object classes before filtering: ", obj_classes)
+    obj_classes = [obj_classes[i] for i in keep_index]
+    print("object classes after filtering: ", obj_classes)
+    return obj_classes, keep_index
    
 def explore_step(step, cfg):
     step["use_prefiltering"] = cfg.prefiltering
     step["top_k_categories"] = cfg.top_k_categories
-    question, image_goal, egocentric_imgs, frontier_imgs, snapshot_imgs, snapshot_classes, snapshot_id_mapping = get_step_info(step)
+    question, egocentric_imgs, frontier_imgs, obj_imgs, obj_classes, obj_id_mapping = get_step_info(step)
     sys_prompt, content = format_explore_prompt(
         question,
         egocentric_imgs,
         frontier_imgs,
-        snapshot_imgs,
-        snapshot_classes,
+        obj_imgs,
+        obj_classes,
         egocentric_view = step.get("use_egocentric_views", False),
-        use_snapshot_class = True,
-        image_goal = image_goal
+        use_object_class= True,
     )
     
     print(f"the size of frontier is {len(frontier_imgs)}")
@@ -319,7 +303,7 @@ def explore_step(step, cfg):
             continue
 
         response_valid = False
-        if choice_type == "snapshot" and 0 <= int(choice_id) < len(snapshot_imgs):
+        if choice_type == "object" and 0 <= int(choice_id) < len(obj_imgs):
             response_valid = True
         elif choice_type == "frontier" and 0 <= int(choice_id) < len(frontier_imgs):
             response_valid = True
@@ -330,7 +314,7 @@ def explore_step(step, cfg):
             break
 
 
-    return final_response, snapshot_id_mapping
+    return final_response, obj_id_mapping
    
     
     

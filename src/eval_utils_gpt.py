@@ -77,7 +77,7 @@ def format_question(step):
 
     question = step["question"]
     image_goal = None
-    if step["task_type"] == "image":
+    if "task_type" in step and step["task_type"] == "image":
         with open(step["image"],"rb") as image_file:
             image_goal = base64.b64encode(image_file.read()).decode('utf-8')
 

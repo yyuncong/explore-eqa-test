@@ -724,9 +724,7 @@ class Scene:
         # update the goal object ids mapping to remove the objects that have been removed
         if goal_obj_ids_mapping is not None:
             for goal_obj_id, mapped_obj_ids in goal_obj_ids_mapping.items():
-                logging.info(f"Goal object {goal_obj_id}: {mapped_obj_ids} -> ")
                 goal_obj_ids_mapping[goal_obj_id] = [obj_id for obj_id in mapped_obj_ids if obj_id in self.objects.keys()]
-                logging.info(f"\t\t{goal_obj_ids_mapping[goal_obj_id]}")
 
 
 

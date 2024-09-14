@@ -299,65 +299,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             logging.info(f"Loading scene {scene_id}")
             episode_id = episode["episode_id"]
 
-            # check whether this episode has been processed
-            finished_subtask_ids = list(success_by_snapshot.keys())
-            finished_episode_subtask = [subtask_id for subtask_id in finished_subtask_ids if subtask_id.startswith(f"{scene_id}_{episode_id}_")]
-            if len(finished_episode_subtask) > 3:
-                # there will at least be 5 subtask for each episode. Considering that some subtask will be filtered out,
-                # 3 is a reasonable threshold to determine whether the episode has been processed
-                logging.info(f"Scene {scene_id} Episode {episode_id} already done!")
-                continue
-
-            # load scene
-            try:
-                del scene
-            except:
-                pass
-
-            scene = Scene(scene_id, cfg, cfg_cg)
-
-            # Set the classes for the detection model
-            detection_model.set_classes(scene.obj_classes.get_classes_arr())
-
-            episode_data_dir = os.path.join(str(cfg.output_dir), f"{scene_id}_ep_{episode_id}")
-            episode_frontier_dir = os.path.join(episode_data_dir, "frontier_rgb")
-            episode_snapshot_dir = os.path.join(episode_data_dir, 'snapshot')
-            if cfg.save_frontier_video or cfg.save_visualization:
-                os.makedirs(episode_data_dir, exist_ok=True)
-                os.makedirs(episode_frontier_dir, exist_ok=True)
-                os.makedirs(episode_snapshot_dir, exist_ok=True)
-
-            init_pts = episode["start_position"]
-            init_quat = quat_from_coeffs(episode["start_rotation"])
-
-            pts = np.asarray(init_pts)
-            angle, axis = quat_to_angle_axis(init_quat)
-            angle = angle * axis[1] / np.abs(axis[1])
-            rotation = get_quaternion(angle, 0)
-
-            # initialize the TSDF
-            pts_normal = pos_habitat_to_normal(pts)
-            floor_height = pts_normal[-1]
-            tsdf_bnds, scene_size = get_scene_bnds(scene.pathfinder, floor_height)
-            num_step = int(math.sqrt(scene_size) * cfg.max_step_room_size_ratio)
-            num_step = max(num_step, 50)
-            logging.info(
-                f"Scene size: {scene_size} Floor height: {floor_height} Steps: {num_step}"
-            )
-            try:
-                del tsdf_planner
-            except:
-                pass
-            tsdf_planner = TSDFPlanner(
-                vol_bnds=tsdf_bnds,
-                voxel_size=cfg.tsdf_grid_size,
-                floor_height_offset=0,
-                pts_init=pts_normal,
-                init_clearance=cfg.init_clearance * 2,
-            )
-
-            logging.info(f'\n\nScene {scene_id} initialization successful!')
-
             # filter the task according to goatbench
             filtered_tasks = []
             for goal in episode["tasks"]:
@@ -420,6 +361,63 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         if x["object_id"] == goal_inst_id
                     ]
                     all_subtask_goals.append(goal_inst)
+
+            # check whether this episode has been processed
+            finished_subtask_ids = list(success_by_snapshot.keys())
+            finished_episode_subtask = [subtask_id for subtask_id in finished_subtask_ids if subtask_id.startswith(f"{scene_id}_{episode_id}_")]
+            if len(finished_episode_subtask) >= len(all_subtask_goals):
+                logging.info(f"Scene {scene_id} Episode {episode_id} already done!")
+                continue
+
+            # load scene
+            try:
+                del scene
+            except:
+                pass
+
+            scene = Scene(scene_id, cfg, cfg_cg)
+
+            # Set the classes for the detection model
+            detection_model.set_classes(scene.obj_classes.get_classes_arr())
+
+            episode_data_dir = os.path.join(str(cfg.output_dir), f"{scene_id}_ep_{episode_id}")
+            episode_frontier_dir = os.path.join(episode_data_dir, "frontier_rgb")
+            episode_snapshot_dir = os.path.join(episode_data_dir, 'snapshot')
+            if cfg.save_frontier_video or cfg.save_visualization:
+                os.makedirs(episode_data_dir, exist_ok=True)
+                os.makedirs(episode_frontier_dir, exist_ok=True)
+                os.makedirs(episode_snapshot_dir, exist_ok=True)
+
+            init_pts = episode["start_position"]
+            init_quat = quat_from_coeffs(episode["start_rotation"])
+
+            pts = np.asarray(init_pts)
+            angle, axis = quat_to_angle_axis(init_quat)
+            angle = angle * axis[1] / np.abs(axis[1])
+            rotation = get_quaternion(angle, 0)
+
+            # initialize the TSDF
+            pts_normal = pos_habitat_to_normal(pts)
+            floor_height = pts_normal[-1]
+            tsdf_bnds, scene_size = get_scene_bnds(scene.pathfinder, floor_height)
+            num_step = int(math.sqrt(scene_size) * cfg.max_step_room_size_ratio)
+            num_step = max(num_step, 50)
+            logging.info(
+                f"Scene size: {scene_size} Floor height: {floor_height} Steps: {num_step}"
+            )
+            try:
+                del tsdf_planner
+            except:
+                pass
+            tsdf_planner = TSDFPlanner(
+                vol_bnds=tsdf_bnds,
+                voxel_size=cfg.tsdf_grid_size,
+                floor_height_offset=0,
+                pts_init=pts_normal,
+                init_clearance=cfg.init_clearance * 2,
+            )
+
+            logging.info(f'\n\nScene {scene_id} initialization successful!')
 
             # run questions in the scene
             global_step = -1
@@ -511,6 +509,17 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 tsdf_planner.max_point = None
                 tsdf_planner.target_point = None
                 max_point_choice = None
+
+                if cfg.clear_up_memory_every_subtask and subtask_idx > 0:
+                    scene.clear_up_detections()
+                    tsdf_planner = TSDFPlanner(
+                        vol_bnds=tsdf_bnds,
+                        voxel_size=cfg.tsdf_grid_size,
+                        floor_height_offset=0,
+                        pts_init=pts_normal,
+                        init_clearance=cfg.init_clearance * 2,
+                    )
+                    all_snapshot_features = {}
 
                 while cnt_step < num_step - 1:
                     cnt_step += 1

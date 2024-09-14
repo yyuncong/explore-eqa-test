@@ -1,6 +1,6 @@
 # General
 seed: 77
-exp_name: exp_ours_goatbench
+exp_name: exp_ours_goatbench_0.0_0.1
 output_parent_dir: /work/pi_chuangg_umass_edu/yuncong/results
 scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
 scene_data_path_train: /project/pi_chuangg_umass_edu/yuncong/data_v2/scene_datasets/hm3d/

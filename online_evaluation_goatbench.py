@@ -204,11 +204,11 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
     random.shuffle(scene_data_list)
 
     # split the test data by scene
-    scene_data_list = scene_data_list[int(start_ratio * num_scene):int(end_ratio * num_scene)]
+    # scene_data_list = scene_data_list[int(start_ratio * num_scene):int(end_ratio * num_scene)]
     num_episode = 0
     for scene_data_file in scene_data_list:
         with open(os.path.join(cfg.test_data_dir, scene_data_file), 'r') as f:
-            num_episode += len(json.load(f)['episodes'])
+            num_episode += int(len(json.load(f)['episodes']) * (end_ratio - start_ratio))
     logging.info(f"Total number of episodes: {num_episode}")
     logging.info(f"Total number of scenes: {len(scene_data_list)}")
 
@@ -294,7 +294,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
 
         navigation_goals = scene_data["goals"]  # obj_id to obj_data, apply for all episodes in this scene
 
-        for episode_idx, episode in enumerate(scene_data["episodes"]):
+        for episode_idx, episode in enumerate(scene_data["episodes"][int(start_ratio * total_episodes):int(end_ratio * total_episodes)]):
             logging.info(f"Episode {episode_idx + 1}/{total_episodes}")
             logging.info(f"Loading scene {scene_id}")
             episode_id = episode["episode_id"]

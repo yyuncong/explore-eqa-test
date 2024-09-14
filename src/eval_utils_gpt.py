@@ -6,6 +6,7 @@ from io import BytesIO
 import os
 import time
 from typing import Optional
+import logging
 
 client = AzureOpenAI(
     azure_endpoint="https://yuncong.openai.azure.com/",
@@ -116,10 +117,12 @@ def get_step_info(step):
     # 2.3.3 prefiltering, note that we need the obj_id_mapping
     keep_index = list(range(len(snapshot_imgs)))
     if step.get("use_prefiltering") is True:
+        n_prev_snapshot = len(snapshot_imgs)
         snapshot_classes, keep_index = prefiltering(
             question, snapshot_classes, seen_classes, step["top_k_categories"], image_goal
         )
         snapshot_imgs = [snapshot_imgs[i] for i in keep_index]
+        logging.info(f"Prefiltering snapshot: {n_prev_snapshot} -> {len(snapshot_imgs)}")
     
     return question, image_goal, egocentric_imgs, frontier_imgs, snapshot_imgs, snapshot_classes, keep_index
        

@@ -35,6 +35,7 @@ margin_h_ratio: 0.6
 
 # about goatbench evaluation
 success_distance: 1.0
+clear_up_memory_every_subtask: false
 
 save_visualization: false
 save_frontier_video: false

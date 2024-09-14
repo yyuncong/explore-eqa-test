@@ -14,6 +14,7 @@ import torch
 import math
 import time
 from PIL import Image
+from collections import defaultdict
 
 np.set_printoptions(precision=3)
 import pickle
@@ -67,7 +68,7 @@ def infer_prefilter(model, tokenizer, sample):
         feature_dict = EasyDict(
             scene_feature = sample.filter_feature.to("cuda"),
             scene_insert_loc = sample.filter_insert_loc,
-            scene_length = sample.filter_length,
+            scene_length = sample.feature_length,
         )
     # return prefiltered object list
     filter_input_ids = sample.filter_input_ids.to("cuda")
@@ -139,8 +140,11 @@ def inference(model, tokenizer, step_dict, cfg):
 
     num_visual_tokens = (cfg.visual_feature_size // cfg.patch_size) ** 2
     step_dict["num_visual_tokens"] = num_visual_tokens
-    setp_dict["img_prompt_visual_feature_size"] = cfg.img_prompt_visual_feature_size
+    step_dict["img_prompt_visual_feature_size"] = cfg.img_prompt_visual_feature_size
     step_dict["img_prompt_patch_size"] = cfg.img_prompt_patch_size
+    #print(step_dict["img_prompt_visual_feature_size"])
+    #print(step_dict["img_prompt_patch_size"])
+    #exit(0)
     # print("pos", step_dict["add_positional_encodings"])
     # try:
     sample = get_item(
@@ -200,11 +204,11 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
     random.shuffle(scene_data_list)
 
     # split the test data by scene
-    scene_data_list = scene_data_list[int(start_ratio * num_scene):int(end_ratio * num_scene)]
+    # scene_data_list = scene_data_list[int(start_ratio * num_scene):int(end_ratio * num_scene)]
     num_episode = 0
     for scene_data_file in scene_data_list:
         with open(os.path.join(cfg.test_data_dir, scene_data_file), 'r') as f:
-            num_episode += len(json.load(f)['episodes'])
+            num_episode += int(len(json.load(f)['episodes']) * (end_ratio - start_ratio))
     logging.info(f"Total number of episodes: {num_episode}")
     logging.info(f"Total number of scenes: {len(scene_data_list)}")
 
@@ -271,13 +275,13 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             open(os.path.join(str(cfg.output_dir), f"success_by_task_{start_ratio}_{end_ratio}.pkl"), "rb")
         )
     else:
-        success_by_task = {}  # task type -> success
+        success_by_task = defaultdict(list) # task type -> success
     if os.path.exists(os.path.join(str(cfg.output_dir), f"spl_by_task_{start_ratio}_{end_ratio}.pkl")):
         spl_by_task = pickle.load(
             open(os.path.join(str(cfg.output_dir), f"spl_by_task_{start_ratio}_{end_ratio}.pkl"), "rb")
         )
     else:
-        spl_by_task = {}  # task type -> spl
+        spl_by_task = defaultdict(list)  # task type -> spl
     assert len(success_by_snapshot) == len(spl_by_snapshot) == len(success_by_distance) == len(spl_by_distance), f"{len(success_by_snapshot)} != {len(spl_by_snapshot)} != {len(success_by_distance)} != {len(spl_by_distance)}"
     assert sum([len(task_res) for task_res in success_by_task.values()]) == sum([len(task_res) for task_res in spl_by_task.values()]) == len(success_by_snapshot), f"{sum([len(task_res) for task_res in success_by_task.values()])} != {sum([len(task_res) for task_res in spl_by_task.values()])} != {len(success_by_snapshot)}"
 
@@ -290,7 +294,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
 
         navigation_goals = scene_data["goals"]  # obj_id to obj_data, apply for all episodes in this scene
 
-        for episode_idx, episode in enumerate(scene_data["episodes"]):
+        for episode_idx, episode in enumerate(scene_data["episodes"][int(start_ratio * total_episodes):int(end_ratio * total_episodes)]):
             logging.info(f"Episode {episode_idx + 1}/{total_episodes}")
             logging.info(f"Loading scene {scene_id}")
             episode_id = episode["episode_id"]
@@ -464,6 +468,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     "category": "object localization",
                     "question": None,
                     "image": None,
+                    "image_feature": None,
                     "answer": goal_category,
                     "object_id": goal_obj_ids,  # this is a list of obj id, since for object class type, there will be multiple target objects
                     "class": goal_category,
@@ -481,6 +486,14 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     obs,_ = scene.get_observation(pts=view_pos_dict["position"], rotation=view_pos_dict["rotation"])
                     plt.imsave(os.path.join(str(cfg.output_dir), f"{subtask_id}", "image_goal.png"), obs["color_sensor"])
                     subtask_metadata["image"] = f"{cfg.output_dir}/{subtask_id}/image_goal.png"
+                    # TODO: encode image feature here
+                    rgb = rgba2rgb(obs["color_sensor"])
+                    img_feature = encode(model, image_processor, rgb).mean(0)
+                    img_feature = merge_patches(
+                        img_feature.view(cfg.img_prompt_visual_feature_size, cfg.img_prompt_visual_feature_size, -1),
+                        cfg.img_prompt_patch_size
+                    )
+                    subtask_metadata["image_feature"] = img_feature.to("cpu")
 
                 
                 # record the history of the agent's path
@@ -703,11 +716,12 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         else:
                             step_dict["frontier_features"] = None
                             step_dict["frontier_positions"] = None
-                        step_dict["question"] = question
+                        step_dict["question"] = subtask_metadata["question"]
                         step_dict["scene"] = scene_id
                         step_dict["task_type"] = subtask_metadata["task_type"]
                         step_dict["class"] = subtask_metadata["class"]
                         step_dict["image"] = subtask_metadata["image"]
+                        step_dict["image_goal_feature"] = subtask_metadata["image_feature"]
                         if cfg.prefiltering:
                             outputs, snapshot_id_mapping = inference(model, tokenizer, step_dict, cfg)
                         else:
@@ -775,7 +789,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                             memory_feature = tsdf_planner.frontiers[target_index].feature.to("cpu")
 
                         if max_point_choice is None:
-                            logging.info(f"Question id {question_id} invalid: no valid choice!")
+                            logging.info(f"Subtask id {subtask_id} invalid: no valid choice!")
                             break
 
                         update_success = tsdf_planner.set_next_navigation_point(
@@ -786,7 +800,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                             pathfinder=scene.pathfinder,
                         )
                         if not update_success:
-                            logging.info(f"Question id {question_id} invalid: set_next_navigation_point failed!")
+                            logging.info(f"Subtask id {subtask_id} invalid: set_next_navigation_point failed!")
                             break
 
                     return_values = tsdf_planner.agent_step(
@@ -800,7 +814,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         save_visualization=cfg.save_visualization,
                     )
                     if return_values[0] is None:
-                        logging.info(f"Question id {question_id} invalid: agent_step failed!")
+                        logging.info(f"Subtask id {subtask_id} invalid: agent_step failed!")
                         break
                     pts_normal, angle, pts_pix, fig, _, target_arrived = return_values
 
@@ -855,7 +869,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                             ax2.scatter(goal_pos_voxel[1], goal_pos_voxel[0], c=color, s=120)
 
                         fig.tight_layout()
-                        plt.savefig(os.path.join(visualization_path, f"{global_step}_{question_id}"))
+                        plt.savefig(os.path.join(visualization_path, f"{global_step}_{subtask_id}"))
                         plt.close()
 
                     if cfg.save_frontier_video:
@@ -882,10 +896,10 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                                     img = matplotlib.image.imread(img_path)
                                     axs[h_idx, w_idx].imshow(img)
                                     axs[h_idx, w_idx].set_title('Snapshot Chosen')
-                        global_caption = f"{question}\n{answer}"
+                        global_caption = f"{subtask_metadata['question']}\n{subtask_metadata['task_type']}\n{subtask_metadata['class']}"
                         fig.suptitle(global_caption, fontsize=16)
                         plt.tight_layout(rect=(0., 0., 1., 0.95))
-                        plt.savefig(os.path.join(frontier_video_path, f'{global_step}_{question_id}.png'))
+                        plt.savefig(os.path.join(frontier_video_path, f'{global_step}_{subtask_id}.png'))
                         plt.close()
 
                     # update position and rotation
@@ -949,10 +963,10 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 logging.info(f"Subtask {subtask_id} finished with {cnt_step} steps, {subtask_explore_dist} length")
                 logging.info(f"Subtask spl by snapshot: {spl_by_snapshot[subtask_id]}, spl by distance: {spl_by_distance[subtask_id]}")
 
-                logging.info(f"Success rate by snapshot: {100 * np.mean(np.asarray(success_by_snapshot.values())):.2f}")
-                logging.info(f"Success rate by distance: {100 * np.mean(np.asarray(success_by_distance.values())):.2f}")
-                logging.info(f"SPL by snapshot: {np.mean(np.asarray(spl_by_snapshot.values())):.2f}")
-                logging.info(f"SPL by distance: {np.mean(np.asarray(spl_by_distance.values())):.2f}")
+                logging.info(f"Success rate by snapshot: {100 * np.mean(np.asarray(list(success_by_snapshot.values()))):.2f}")
+                logging.info(f"Success rate by distance: {100 * np.mean(np.asarray(list(success_by_distance.values()))):.2f}")
+                logging.info(f"SPL by snapshot: {np.mean(np.asarray(list(spl_by_snapshot.values()))):.2f}")
+                logging.info(f"SPL by distance: {np.mean(np.asarray(list(spl_by_distance.values()))):.2f}")
 
                 for task_name, success_list in success_by_task.items():
                     logging.info(f"Success rate for {task_name}: {100 * np.mean(np.asarray(success_list)):.2f}")
@@ -967,9 +981,10 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     snapshot_dict[obj['image']].append(
                         f"{obj_id}: {obj['class_name']} {obj['num_detections']}"
                     )
-                logging.info(f"Scene graph of question {question_id}:")
-                logging.info(f"Question: {question}")
-                logging.info(f"Answer: {answer}")
+                logging.info(f"Scene graph of question {subtask_id}:")
+                logging.info(f"Question: {subtask_metadata['question']}")
+                logging.info(f"Task type: {subtask_metadata['task_type']}")
+                logging.info(f"Answer: {subtask_metadata['class']}")
                 for snapshot_id, obj_list in snapshot_dict.items():
                     logging.info(f"{snapshot_id}:")
                     for obj_str in obj_list:

@@ -388,42 +388,30 @@ def prepare_prefiltering_prompt(
         filter_text = filter_text,
         filter_input_ids = filter_input_ids,
         filter_length = filter_length,
-        filter_feature_length = len(question_feature),
+        filter_feature_length = len(filter_feature),
         filter_attention_mask = filter_attention_mask,
         filter_feature = filter_feature,
         filter_insert_loc = filter_insert_loc,
     )
     return filter_input_dict
 
+# TODO: remove question_feature
+# TODO: revise feature loader
+#       encode feature in the main function, and load the feature here
 def prepare_question_prompt(
     step
 ):
-    text,question_feature = '', None
-    if "task_type" not in step.keys() or step["task_type"] == "description":
-        question = step["question"]
-        text += f"Question: {question}\n"
-    elif step["task_type"] == "image":
-        text += "Question: Could you find the object presented in the following image\n"
-        try:
-            image_feature = torch.load(step["image_path"].replace(".png","_full.pt"), map_location="cpu")
-        except:
-            return None,None
-        image_prompt_visual_feature_size = step["img_prompt_visual_feature_size"],
+    text,question_feature = step["question"], None
+    if step["task_type"] == "image":
+        image_prompt_visual_feature_size = step["img_prompt_visual_feature_size"]
         image_prompt_patch_size = step["img_prompt_patch_size"]
+        #print("image_prompt_visual_feature_size", image_prompt_visual_feature_size)
+        ##print("image_prompt_patch_size", image_prompt_patch_size)
         num_tokens = (image_prompt_visual_feature_size // image_prompt_patch_size) ** 2
-        question_feature = merge_patches(
-            image_feature.view(
-                image_prompt_visual_feature_size,
-                image_prompt_visual_feature_size,
-                -1,
-            ),
-            image_prompt_patch_size,
-        )
         for _ in range(num_tokens):
             text += "<scene>"
-        text += "?/\n"
-    elif step["task_type"] == "object":
-        text += f"Question: Could you find a {step['target_obj_class']}?\n"
+        question_feature = step["image_goal_feature"]
+    text += "\n"
     return text, question_feature
     
 

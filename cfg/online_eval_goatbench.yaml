@@ -1,12 +1,13 @@
 # General
 seed: 77
-exp_name: exp_openeqa_dynamic
+exp_name: exp_ours_goatbench_0.0_0.1
 output_parent_dir: /work/pi_chuangg_umass_edu/yuncong/results
 scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
 scene_data_path_train: /project/pi_chuangg_umass_edu/yuncong/data_v2/scene_datasets/hm3d/
 scene_data_path_val: /work/pi_chuangg_umass_edu/yuncong/data/scene_datasets/hm3d/
 test_data_dir: /home/yuncongyang_umass_edu/scene_understanding/jiachen/explore-eqa-test/goat_bench/val_unseen/content/
-model_path: /work/pi_chuangg_umass_edu/yuncong/ds_lora/ds_cluster_scannet_4e-06_patch1_ds_rand_ego_lora
+#model_path: /work/pi_chuangg_umass_edu/yuncong/ds_lora/ds_cluster_scannet_4e-06_patch1_ds_rand_ego_lora
+model_path: /work/pi_chuangg_umass_edu/yuncong/ds_lora/goatbench_4e-06_patch1_ds_rand_filter_top10_coeff0.3_ego5_lora_img12
 
 concept_graph_config_path: "conceptgraph/hydra_configs"
 concept_graph_config_name: "rerun_realtime_mapping"
@@ -19,7 +20,7 @@ img_prompt_patch_size: 2
 choose_every_step: true
 egocentric_views: true
 action_memory: false
-prefiltering: false
+prefiltering: true
 top_k_categories: 10
 
 use_deepspeed: true #false

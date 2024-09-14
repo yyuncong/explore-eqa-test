@@ -322,9 +322,10 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             episode_data_dir = os.path.join(str(cfg.output_dir), f"{scene_id}_ep_{episode_id}")
             episode_frontier_dir = os.path.join(episode_data_dir, "frontier_rgb")
             episode_snapshot_dir = os.path.join(episode_data_dir, 'snapshot')
-            os.makedirs(episode_data_dir, exist_ok=True)
-            os.makedirs(episode_frontier_dir, exist_ok=True)
-            os.makedirs(episode_snapshot_dir, exist_ok=True)
+            if cfg.save_frontier_video or cfg.save_visualization:
+                os.makedirs(episode_data_dir, exist_ok=True)
+                os.makedirs(episode_frontier_dir, exist_ok=True)
+                os.makedirs(episode_snapshot_dir, exist_ok=True)
 
             init_pts = episode["start_position"]
             init_quat = quat_from_coeffs(episode["start_rotation"])
@@ -558,8 +559,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                             rgb_egocentric_views_features.append(img_feature.to("cpu"))
                             if cfg.save_visualization or cfg.save_frontier_video:
                                 plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), annotated_rgb)
-                            else:
-                                plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), rgb)
                             # update the mapping of hm3d object id to our detected object id
                             for gt_goal_id, det_goal_id in target_obj_id_mapping.items():
                                 goal_obj_ids_mapping[gt_goal_id].append(det_goal_id)
@@ -908,14 +907,15 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     logging.info(f"Current position: {pts}, {subtask_explore_dist:.3f}")
 
                     if type(max_point_choice) == SnapShot and target_arrived:
-                        # get an observation and break
-                        obs, _ = scene.get_observation(pts, angle=angle)
-                        rgb = obs["color_sensor"]
+                        if cfg.save_frontier_video or cfg.save_visualization:
+                            # get an observation and break
+                            obs, _ = scene.get_observation(pts, angle=angle)
+                            rgb = obs["color_sensor"]
 
-                        plt.imsave(os.path.join(subtask_object_observe_dir, f"target.png"), rgb)
-                        # also, save the snapshot image itself
-                        snapshot_filename = max_point_choice.image.split(".")[0]
-                        os.system(f"cp {os.path.join(episode_snapshot_dir, max_point_choice.image)} {os.path.join(subtask_object_observe_dir, f'snapshot_{snapshot_filename}.png')}")
+                            plt.imsave(os.path.join(subtask_object_observe_dir, f"target.png"), rgb)
+                            # also, save the snapshot image itself
+                            snapshot_filename = max_point_choice.image.split(".")[0]
+                            os.system(f"cp {os.path.join(episode_snapshot_dir, max_point_choice.image)} {os.path.join(subtask_object_observe_dir, f'snapshot_{snapshot_filename}.png')}")
 
                         target_found = True
                         break

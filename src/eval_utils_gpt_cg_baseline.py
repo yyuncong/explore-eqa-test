@@ -299,11 +299,11 @@ def explore_step(step, cfg):
     )
     
     logging.info(f"Input prompt:")
-    message = sys_prompt + "\n"
+    message = sys_prompt
     for c in content:
         message += c[0]
         if len(c) == 2:
-            message += f": image {c[1][:10]}..."
+            message += f"[{c[1][:10]}...]"
     logging.info(message)
 
     retry_bound = 3

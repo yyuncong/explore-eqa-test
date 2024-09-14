@@ -389,7 +389,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 goal_inst_id = goal[2]
 
                 all_subtask_goal_types.append(goal_type)
-                
+
                 dset_same_cat_goals = [
                     x
                     for x in navigation_goals.values()
@@ -427,7 +427,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 subtask_id = f"{scene_id}_{episode_id}_{subtask_idx}"
 
                 # determine the navigation goals
-                # goal_type = subtask_goal[0]["goal_type"]
                 goal_category = subtask_goal[0]["object_category"]
                 goal_obj_ids = [x["object_id"] for x in subtask_goal]
                 goal_obj_ids = [int(x.split('_')[-1]) for x in goal_obj_ids]
@@ -475,7 +474,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     "position": goal_positions,  # also a list of positions for possible multiple objects
                     "task_type": goal_type
                 }
-                # add language description if existed
+                # format question according to the goal type
                 if goal_type == "object":
                     subtask_metadata['question'] = f"Where is the {goal_category}?"
                 elif goal_type == "description":
@@ -595,14 +594,12 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
 
                     # update the mapping of object id to class name, since the objects have been updated
                     object_id_to_name = {obj_id: obj["class_name"] for obj_id, obj in scene.objects.items()}
-                    
+
                     step_dict["snapshot_features"] = {}
                     step_dict["snapshot_objects"] = {}
                     for rgb_id, snapshot in scene.snapshots.items():
                         step_dict["snapshot_features"][rgb_id] = all_snapshot_features[rgb_id]
                         step_dict["snapshot_objects"][rgb_id] = snapshot.cluster
-                    # print(step_dict["snapshot_objects"])
-                    # input()
 
                     # record current scene graph
                     step_dict["scene_graph"] = list(scene.objects.keys())
@@ -965,13 +962,13 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
 
                 logging.info(f"Success rate by snapshot: {100 * np.mean(np.asarray(list(success_by_snapshot.values()))):.2f}")
                 logging.info(f"Success rate by distance: {100 * np.mean(np.asarray(list(success_by_distance.values()))):.2f}")
-                logging.info(f"SPL by snapshot: {np.mean(np.asarray(list(spl_by_snapshot.values()))):.2f}")
-                logging.info(f"SPL by distance: {np.mean(np.asarray(list(spl_by_distance.values()))):.2f}")
+                logging.info(f"SPL by snapshot: {100 * np.mean(np.asarray(list(spl_by_snapshot.values()))):.2f}")
+                logging.info(f"SPL by distance: {100 * np.mean(np.asarray(list(spl_by_distance.values()))):.2f}")
 
                 for task_name, success_list in success_by_task.items():
                     logging.info(f"Success rate for {task_name}: {100 * np.mean(np.asarray(success_list)):.2f}")
                 for task_name, spl_list in spl_by_task.items():
-                    logging.info(f"SPL for {task_name}: {np.mean(np.asarray(spl_list)):.2f}")
+                    logging.info(f"SPL for {task_name}: {100 * np.mean(np.asarray(spl_list)):.2f}")
 
                 # print the items in the scene graph
                 snapshot_dict = {}

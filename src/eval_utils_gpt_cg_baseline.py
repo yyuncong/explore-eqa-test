@@ -251,7 +251,13 @@ def get_prefiltering_classes(
 ):
     prefiltering_sys,prefiltering_content = format_prefiltering_prompt(
         question, sorted(list(seen_classes)), top_k=top_k, image_goal=image_goal)
-    logging.info("prefiltering prompt: \n", "".join([c[0] for c in prefiltering_content]))
+    logging.info("Prefiltering prompt:")
+    message = ''
+    for c in prefiltering_content:
+        message += c[0]
+        if len(c) == 2:
+            message += f": image {c[1][:10]}..."
+    logging.info(message)
     response = call_openai_api(prefiltering_sys, prefiltering_content)
     if response is None:
         return []
@@ -292,8 +298,13 @@ def explore_step(step, cfg):
         image_goal=image_goal
     )
     
-    #print(f"the size of frontier is {len(frontier_imgs)}")
-    logging.info(f"the input prompt:\n{sys_prompt + ''.join([c[0] for c in content])}")
+    logging.info(f"Input prompt:")
+    message = sys_prompt + "\n"
+    for c in content:
+        message += c[0]
+        if len(c) == 2:
+            message += f": image {c[1][:10]}..."
+    logging.info(message)
 
     retry_bound = 3
     final_response = None

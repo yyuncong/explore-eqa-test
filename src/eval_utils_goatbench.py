@@ -365,6 +365,7 @@ def prepare_prefiltering_prompt(
     # print(filter_text)
     # Jiachen TODO 7: output filter_input_ids/filter_attention_mask/filter_length for the filtering question
     # print("raw text of filter prompt:", filter_text)
+    logging.info(f"#####\n{filter_text}\n#####")
     filter_text = tokenizer(
         filter_text,
         return_tensors="pt",
@@ -463,15 +464,6 @@ def construct_selection_prompt(
     input_ids = text["input_ids"]
     # replace the placeholder token with the snapshot token
     # snapshot_token_id = tokenizer("frame").input_ids[-1]
-    # print(tokenizer("frame").input_ids)
-    # print(tokenizer("<scene> / frame").input_ids)
-    # print(tokenizer("frontier").input_ids)
-    # print(tokenizer("<scene> / frontier").input_ids)
-    # print(tokenizer.decode(8862))
-    # print(tokenizer.decode(631))
-    # input()
-    # placeholder_token_id = 27074
-    # input_ids[input_ids == placeholder_token_id] = snapshot_token_id
     length = torch.nonzero(input_ids).shape[0]
 
     # print('length', length)
@@ -628,6 +620,4 @@ def get_item(tokenizer, step_dict):
             step.get("noclass", False)
         )
         batch = [input_dict]
-        # print('before wrap up')
-        # print(tokenizer.decode(input_dict.input_ids[input_dict.input_ids != tokenizer.pad_token_id]))
         return collate_wrapper(batch)

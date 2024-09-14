@@ -6,6 +6,7 @@ from io import BytesIO
 import os
 import time
 from typing import Optional
+import logging
 
 client = AzureOpenAI(
     azure_endpoint="https://yuncong.openai.azure.com/",
@@ -246,15 +247,15 @@ def get_prefiltering_classes(
 ): 
     prefiltering_sys,prefiltering_content = format_prefiltering_prompt(
         question, sorted(list(seen_classes)), top_k=top_k, image_goal=image_goal)
-    print("prefiltering prompt: \n", "".join([c[0] for c in prefiltering_content]))
+    logging.info("prefiltering prompt: \n", "".join([c[0] for c in prefiltering_content]))
     response = call_openai_api(prefiltering_sys, prefiltering_content)
-    print("Prefiltering response: ", response)
     if response is None:
         return []
     # parse the response and return the top_k objects
     selected_classes = response.strip().split('\n')
     selected_classes = [cls for cls in selected_classes if cls in seen_classes]
     selected_classes = selected_classes[:top_k]
+    ogging.info(f"Prefiltering response: {selected_classes}")
     return selected_classes
 
 def prefiltering(
@@ -267,14 +268,14 @@ def prefiltering(
     selected_classes = get_prefiltering_classes(
         question, seen_classes, top_k, image_goal
     )
-    print(f"Selected classes: {selected_classes}")
+    #print(f"Selected classes: {selected_classes}")
     keep_index = [i for i in range(len(snapshot_classes)) 
         if len(set(snapshot_classes[i]) & set(selected_classes)) > 0]
-    print("snapshot classes before filtering: ", snapshot_classes)
+    #print("snapshot classes before filtering: ", snapshot_classes)
     snapshot_classes = [snapshot_classes[i] for i in keep_index]
-    print("snapshot classes after filtering: ", snapshot_classes)
+    #print("snapshot classes after filtering: ", snapshot_classes)
     snapshot_classes = [sorted(list(set(s_cls)&set(selected_classes))) for s_cls in snapshot_classes]
-    print("snapshot classes after class-wise filtering",snapshot_classes)
+    #print("snapshot classes after class-wise filtering",snapshot_classes)
     return snapshot_classes, keep_index
    
 def explore_step(step, cfg):
@@ -292,8 +293,8 @@ def explore_step(step, cfg):
         image_goal = image_goal
     )
     
-    print(f"the size of frontier is {len(frontier_imgs)}")
-    print(f"the input prompt:\n{sys_prompt + ''.join([c[0] for c in content])}")
+    #print(f"the size of frontier is {len(frontier_imgs)}")
+    logging.info(f"the input prompt:\n{sys_prompt + ''.join([c[0] for c in content])}")
 
     retry_bound = 3
     final_response = None
@@ -325,7 +326,7 @@ def explore_step(step, cfg):
             response_valid = True
 
         if response_valid:
-            print(f"Response: [{response}], Reason: [{reason}]")
+            logging.info(f"Response: [{response}], Reason: [{reason}]")
             final_response = response
             break
 

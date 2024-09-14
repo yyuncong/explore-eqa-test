@@ -1,6 +1,6 @@
 # General
 seed: 77
-exp_name: exp_ours_goatbench_0.0_0.1
+exp_name: exp_ours_goatbench_0.0_0.1_4e-06_patch1_top10_coeff0.3_img12
 output_parent_dir: /work/pi_chuangg_umass_edu/yuncong/results
 scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
 scene_data_path_train: /project/pi_chuangg_umass_edu/yuncong/data_v2/scene_datasets/hm3d/
@@ -15,7 +15,7 @@ concept_graph_config_name: "rerun_realtime_mapping"
 visual_feature_size: 24
 patch_size: 8
 img_prompt_visual_feature_size: 24
-img_prompt_patch_size: 2
+img_prompt_patch_size: 4
 
 choose_every_step: true
 egocentric_views: true

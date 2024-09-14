@@ -19,8 +19,6 @@ from src.habitat import (
     get_navigable_point_to_new,
 )
 from src.geom import get_cam_intr, IoU
-from src.tsdf_new_cg import SnapShot
-from src.hierarchy_clustering import SceneHierarchicalClustering
 
 # Local application/library specific imports
 from conceptgraph.utils.ious import mask_subtract_contained
@@ -64,9 +62,9 @@ class Scene:
 
         # about the loading the scene
         if int(scene_id.split("-")[0]) < 800:
-            split_path = os.path.join(cfg.scene_data_path_train,"train")
+            split_path = os.path.join(cfg.scene_data_path_train, "train")
         else:
-            split_path = os.path.join(cfg.scene_data_path_val,"val")
+            split_path = os.path.join(cfg.scene_data_path_val, "val")
         scene_mesh_path = os.path.join(split_path, scene_id, scene_id.split("-")[1] + ".basis.glb")
         navmesh_path = os.path.join(split_path, scene_id, scene_id.split("-")[1] + ".basis.navmesh")
         semantic_texture_path = os.path.join(split_path, scene_id, scene_id.split("-")[1] + ".semantic.glb")
@@ -112,15 +110,6 @@ class Scene:
         self.objects: MapObjectDict[int, Dict] = MapObjectDict()  # object_id -> object item
         self.object_id_counter = 1
 
-        self.snapshots: Dict[str, SnapShot] = {}  # image_path -> snapshot
-        self.frames: Dict[str, SnapShot] = {}  # image_path -> all frames
-
-        self.clustering = SceneHierarchicalClustering(
-            min_sample_split=0,
-            random_state=66,
-        )
-
-
     def __del__(self):
         try:
             self.simulator.close()
@@ -130,9 +119,6 @@ class Scene:
     def clear_up_detections(self):
         self.objects = MapObjectDict()
         self.object_id_counter = 1
-
-        self.snapshots = {}
-        self.frames = {}
 
     def get_observation(self, pts, angle=None, rotation=None):
         assert (angle is None) ^ (rotation is None), "Only one of angle and rotation should be specified"
@@ -389,26 +375,12 @@ class Scene:
                         target_obj_id_mapping[target_gt_id] = max_iou_obj_id
                         logging.info(f"Target object {target_gt_id} detected with IoU {max_iou} in {img_path}!!!")
 
-        # if there exists object detected in this frame, create a snapshot
-        frame = SnapShot(
-            image=img_path,
-            color=(random.random(), random.random(), random.random()),
-            obs_point=pts_voxel,
-        )
-        # add all detected objects into the snapshot
-        frame.full_obj_list = {
-            obj_id: detection_list[obj_id]['conf']
-            for obj_id in detection_list.keys()
-        }
-
         # if no objects yet in the map,
         # just add all the objects from the current frame
         # then continue, no need to match or merge
         if len(self.objects) == 0:
             logging.debug(f"No objects in the map yet, adding all detections of length {len(detection_list)}")
             self.objects.update(detection_list)
-
-            self.frames[img_path] = frame
 
             annotated_image = image_rgb
             added_obj_ids = list(detection_list.keys())
@@ -443,12 +415,8 @@ class Scene:
                 detection_list=detection_list,
                 match_indices=match_indices,
                 obj_classes=obj_classes,
-                snapshot=frame,
                 target_obj_id_mapping=target_obj_id_mapping
             )
-
-            # add the snapshot into the snapshot list
-            self.frames[img_path] = frame
 
             # create a Detection object for visualization
             det_visualize = sv.Detections(
@@ -498,7 +466,6 @@ class Scene:
         detection_list: DetectionDict,
         match_indices: List[Tuple[int, Optional[int]]],
         obj_classes: ObjectClasses,
-        snapshot: SnapShot,
         target_obj_id_mapping: Dict[int, int]
     ) -> Tuple[List[str], Dict[int, int], List[int]]:
         visualize_captions = []
@@ -531,10 +498,6 @@ class Scene:
                 most_common_class_id = class_id_counter.most_common(1)[0][0]
                 most_common_class_name = obj_classes.get_classes_arr()[most_common_class_id]
                 merged_obj['class_name'] = most_common_class_name
-
-                # adjust the full detected list of the current snapshot: remove the detected object and add the merged object
-                snapshot.full_obj_list[existing_obj_match_id] = detected_obj['conf']
-                snapshot.full_obj_list.pop(detected_obj_id)
 
                 self.objects[existing_obj_match_id] = merged_obj
                 visualize_captions.append(
@@ -572,8 +535,9 @@ class Scene:
                 'bbox': gobs['bbox'][mask_idx],
                 'clip_ft': to_tensor(gobs['image_feats'][mask_idx]),
 
-                # the snapshot name it belongs to
-                'image': None,
+                # The observation crop
+                'image_crop': gobs['image_crops'][mask_idx],
+                'image': 'no_use',  # this is not used in the current implementation
             }
 
             detection_list[self.object_id_counter] = detected_object
@@ -581,77 +545,6 @@ class Scene:
 
         return detection_list
 
-    def cleanup_empty_frames_snapshots(self):
-        # remove the frame that have empty detected objects
-        filtered_frames = {}
-        for file_name, frame in self.frames.items():
-            if len(frame.full_obj_list) > 0:
-                filtered_frames[file_name] = frame
-        self.frames = filtered_frames
-
-        # remove the snapshots that have no cluster
-        filtered_snapshots = {}
-        for file_name, snapshot in self.snapshots.items():
-            if len(snapshot.cluster) > 0:
-                filtered_snapshots[file_name] = snapshot
-        self.snapshots = filtered_snapshots
-
-    def update_snapshots(
-        self,
-        obj_ids,
-    ):
-        self.cleanup_empty_frames_snapshots()
-
-        prev_snapshots = copy.deepcopy(self.snapshots)
-
-        obj_ids_temp = obj_ids.copy()
-        for filename, snapshot in self.snapshots.items():
-            cluster = snapshot.cluster
-            if any([obj_id in obj_ids_temp for obj_id in cluster]):
-                obj_ids = obj_ids.union(set(cluster))
-                prev_snapshots.pop(filename)
-        obj_ids = list(set(obj_ids))
-
-        # find and exclude the objects that have only one observation
-        obj_exclude = [obj_id for obj_id in self.objects.keys() if self.objects[obj_id]['num_detections'] < 2]
-        obj_ids = [obj_id for obj_id in obj_ids if obj_id not in obj_exclude]
-
-        obj_centers = np.zeros((len(obj_ids), 2))
-        for i, obj_id in enumerate(obj_ids):
-            obj_centers[i] = self.objects[obj_id]['bbox'].center[[0, 2]]
-
-        if len(obj_centers) == 0:
-            return
-
-        new_snapshots = self.clustering.fit(obj_centers, obj_ids, self.frames)
-
-        prev_snapshot_objs = [obj_id for snapshot in prev_snapshots.values() for obj_id in snapshot.cluster]
-        assert set([obj_id for snapshot in new_snapshots.values() for obj_id in snapshot.cluster]) == set(obj_ids), f"{set([obj_id for snapshot in new_snapshots.values() for obj_id in snapshot.cluster])} != {set(obj_ids)}"
-        assert (set(obj_ids) & set(prev_snapshot_objs)) == set(), f"{set(obj_ids)} & {set(prev_snapshot_objs)} != empty"
-        assert (set(obj_ids) | set(prev_snapshot_objs) | set(obj_exclude)) == set(self.objects.keys()), f"{set(obj_ids)} | {set(prev_snapshot_objs)} | {set(obj_exclude)} != {set(self.objects.keys())}"
-
-        for key, snapshot in new_snapshots.items():
-            if key in prev_snapshots.keys():
-                prev_snapshots[key].cluster += snapshot.cluster
-            else:
-                prev_snapshots[key] = snapshot
-        self.snapshots = prev_snapshots
-
-        # update the snapshot belonging of each object
-        for file_name, snapshot in self.snapshots.items():
-            for obj_id in snapshot.cluster:
-                self.objects[obj_id]['image'] = file_name
-
-        # remove the duplicates caused by copying snapshots: self.frames and self.snapshots should point to the same object
-        for file_name, snapshot in self.snapshots.items():
-            self.frames[file_name] = snapshot
-
-        # sanity check
-        for obj_id, obj in self.objects.items():
-            if obj['num_detections'] < 2:
-                assert obj['image'] is None, f"{obj_id} has only one detection but has image"
-            else:
-                assert obj['image'] is not None, f"{obj_id} has no image"
 
     def periodic_cleanup_objects(self, frame_idx, pts, goal_obj_ids_mapping=None):
         ### Perform post-processing periodically if told so
@@ -710,16 +603,6 @@ class Scene:
                 device=self.cfg_cg["device"],
                 goal_obj_ids_mapping=goal_obj_ids_mapping,
             )
-
-        # update the object list in snapshots, since some objects may have been removed
-        frame_to_pop = []
-        for filename, ss in self.frames.items():  # TODO: check whether content in snapshots are also changed, and see whether need to remove snapshot that have empty cluster
-            ss.cluster = [obj_id for obj_id in ss.cluster if obj_id in self.objects.keys()]
-            ss.full_obj_list = {obj_id: conf for obj_id, conf in ss.full_obj_list.items() if obj_id in self.objects.keys()}
-            if len(ss.full_obj_list) == 0:
-                frame_to_pop.append(filename)
-        for filename in frame_to_pop:
-            self.frames.pop(filename)
 
         # update the goal object ids mapping to remove the objects that have been removed
         if goal_obj_ids_mapping is not None:

@@ -35,9 +35,9 @@ from src.habitat import (
 )
 from src.geom import get_cam_intr, get_scene_bnds
 from src.tsdf_new_cg import TSDFPlanner, Frontier, SnapShot
-from src.scene_goatbench import Scene
+from src.scene_goatbench_cg_baseline import Scene
 from src.eval_utils_goatbench import rgba2rgb
-from src.eval_utils_gpt import explore_step
+from src.eval_utils_gpt_cg_baseline import explore_step
 
 
 def resize_image(image, target_h, target_w):
@@ -265,7 +265,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
 
             # run questions in the scene
             global_step = -1
-            all_snapshots = {}
             for subtask_idx, (goal_type, subtask_goal) in enumerate(zip(all_subtask_goal_types, all_subtask_goals)):
                 subtask_id = f"{scene_id}_{episode_id}_{subtask_idx}"
 
@@ -352,7 +351,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         pts_init=pts_normal,
                         init_clearance=cfg.init_clearance * 2,
                     )
-                    all_snapshots = {}
 
                 while cnt_step < num_step - 1:
                     cnt_step += 1
@@ -368,7 +366,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
 
                     # observe and update the TSDF
                     rgb_egocentric_views = []
-                    all_added_obj_ids = []
                     for view_idx, ang in enumerate(all_angles):
                         obs, cam_pose = scene.get_observation(pts, angle=ang)
                         rgb = obs["color_sensor"]
@@ -393,7 +390,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                                 gt_target_obj_ids=goal_obj_ids,
                             )
                             resized_rgb = resize_image(rgb, cfg.prompt_h, cfg.prompt_w)
-                            all_snapshots[obs_file_name] = resized_rgb
                             rgb_egocentric_views.append(resized_rgb)
                             if cfg.save_visualization or cfg.save_frontier_video:
                                 plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), annotated_rgb)
@@ -402,7 +398,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                             # update the mapping of hm3d object id to our detected object id
                             for gt_goal_id, det_goal_id in target_obj_id_mapping.items():
                                 goal_obj_ids_mapping[gt_goal_id].append(det_goal_id)
-                            all_added_obj_ids += added_obj_ids
 
                         # clean up or merge redundant objects periodically
                         scene.periodic_cleanup_objects(
@@ -422,24 +417,11 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                             explored_depth=cfg.explored_depth,
                         )
 
-                    # cluster all the newly added objects
-                    all_added_obj_ids = [obj_id for obj_id in all_added_obj_ids if obj_id in scene.objects]
-                    # as well as the objects nearby
-                    for obj_id, obj in scene.objects.items():
-                        if np.linalg.norm(obj['bbox'].center[[0, 2]] - pts[[0, 2]]) < cfg.scene_graph.obj_include_dist + 0.5:
-                            all_added_obj_ids.append(obj_id)
-                    scene.update_snapshots(obj_ids=set(all_added_obj_ids))
-                    logging.info(f"Step {cnt_step} {len(scene.objects)} objects, {len(scene.snapshots)} snapshots")
+                    logging.info(f"Step {cnt_step} {len(scene.objects)} objects")
 
                     # update the mapping of object id to class name, since the objects have been updated
                     object_id_to_name = {obj_id: obj["class_name"] for obj_id, obj in scene.objects.items()}
                     step_dict["obj_map"] = object_id_to_name
-
-                    step_dict["snapshot_objects"] = {}
-                    step_dict["snapshot_imgs"] = {}
-                    for rgb_id, snapshot in scene.snapshots.items():
-                        step_dict["snapshot_objects"][rgb_id] = snapshot.cluster
-                        step_dict["snapshot_imgs"][rgb_id] = all_snapshots[rgb_id]
 
                     update_success = tsdf_planner.update_frontier_map(pts=pts_normal, cfg=cfg.planner)
                     if not update_success:
@@ -504,6 +486,10 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                             vlm_id_count += 1
                         vlm_id_to_ft_id = {v: k for k, v in ft_id_to_vlm_id.items()}
 
+                        step_dict["objects"] = {}
+                        for obj_id, obj in scene.objects.items():
+                            step_dict["objects"][obj_id] = obj["image_crop"]  # obj_id -> image_crop: pil_image
+
                         if cfg.egocentric_views:
                             step_dict["egocentric_views"] = rgb_egocentric_views
                             step_dict["use_egocentric_views"] = True
@@ -519,7 +505,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         step_dict["class"] = subtask_metadata["class"]
                         step_dict["image"] = subtask_metadata["image"]
 
-                        outputs, snapshot_id_mapping = explore_step(step_dict, cfg)
+                        outputs, obj_id_mapping = explore_step(step_dict, cfg)
                         if outputs is None:
                             # encounter generation error
                             logging.info(f"Subtask id {subtask_id} invalid: model generation error!")
@@ -532,42 +518,35 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                             logging.info(f"Wrong output format, failed!")
                             break
 
-                        if target_type not in ["snapshot", "frontier"]:
+                        if target_type not in ["object", "frontier"]:
                             logging.info(f"Invalid prediction type: {target_type}, failed!")
                             print(target_type)
                             break
 
-                        if target_type == "snapshot":
-                            if snapshot_id_mapping is not None:
-                                if int(target_index) < 0 or int(target_index) >= len(snapshot_id_mapping):
+                        if target_type == "object":
+                            if obj_id_mapping is not None:
+                                if int(target_index) < 0 or int(target_index) >= len(obj_id_mapping):
                                     logging.info(f"target index can not match real objects: {target_index}, failed!")
                                     break
-                                target_index = snapshot_id_mapping[int(target_index)]
-                                logging.info(f"The index of target snapshot {target_index}")
+                                target_index = obj_id_mapping[int(target_index)]
+                                logging.info(f"The index of target object {target_index}")
                             if int(target_index) < 0 or int(target_index) >= len(scene.objects):
                                 logging.info(f"Prediction out of range: {target_index}, {len(scene.objects)}, failed!")
                                 break
-                            pred_target_snapshot = list(scene.snapshots.values())[int(target_index)]
-                            logging.info(
-                                "pred_target_class: " + str(' '.join([object_id_to_name[obj_id] for obj_id in pred_target_snapshot.cluster]))
+                            pred_target_object = list(scene.objects.values())[int(target_index)]
+                            logging.info(f"Predicted object: id: {pred_target_object['id']}, class: {pred_target_object['class_name']}, num_detections: {pred_target_object['num_detections']}")
+
+                            # construct a snapshot for the object
+                            pred_target_snapshot = SnapShot(
+                                image="no_use",
+                                color=(random.random(), random.random(), random.random()),
+                                obs_point=np.empty(3),
+                                full_obj_list={pred_target_object['id']: pred_target_object['conf']},
+                                cluster=[pred_target_object['id']],
                             )
 
-                            logging.info(f"Next choice Snapshot of {pred_target_snapshot.image}")
                             tsdf_planner.frontiers_weight = np.zeros((len(tsdf_planner.frontiers)))
                             max_point_choice = pred_target_snapshot
-
-                            # print the items in the scene graph
-                            snapshot_dict = {}
-                            for obj_id, obj in scene.objects.items():
-                                if obj['image'] not in snapshot_dict:
-                                    snapshot_dict[obj['image']] = []
-                                snapshot_dict[obj['image']].append(
-                                    f"{obj_id}: {obj['class_name']} {obj['num_detections']}"
-                                )
-                            for snapshot_id, obj_list in snapshot_dict.items():
-                                logging.info(f"{snapshot_id}:")
-                                for obj_str in obj_list:
-                                    logging.info(f"\t{obj_str}")
                         else:
                             target_index = int(target_index)
                             if target_index not in vlm_id_to_ft_id.keys():
@@ -598,7 +577,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         pts=pts_normal,
                         angle=angle,
                         objects=scene.objects,
-                        snapshots=scene.snapshots,
+                        snapshots={},
                         pathfinder=scene.pathfinder,
                         cfg=cfg.planner,
                         path_points=None,
@@ -608,37 +587,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         logging.info(f"Subtask id {subtask_id} invalid: agent_step failed!")
                         break
                     pts_normal, angle, pts_pix, fig, _, target_arrived = return_values
-
-                    # sanity check
-                    obj_exclude_count = sum([1 if obj['num_detections'] < 2 else 0 for obj in scene.objects.values()])
-                    total_objs_count = sum(
-                        [len(snapshot.cluster) for snapshot in scene.snapshots.values()]
-                    )
-                    assert len(scene.objects) == total_objs_count + obj_exclude_count, f"{len(scene.objects)} != {total_objs_count} + {obj_exclude_count}"
-                    total_objs_count = sum(
-                        [len(set(snapshot.cluster)) for snapshot in scene.snapshots.values()]
-                    )
-                    assert len(scene.objects) == total_objs_count + obj_exclude_count, f"{len(scene.objects)} != {total_objs_count} + {obj_exclude_count}"
-                    for obj_id in scene.objects.keys():
-                        exist_count = 0
-                        for ss in scene.snapshots.values():
-                            if obj_id in ss.cluster:
-                                exist_count += 1
-                        if scene.objects[obj_id]['num_detections'] < 2:
-                            assert exist_count == 0, f"{exist_count} != 0 for obj_id {obj_id}, {scene.objects[obj_id]['class_name']}"
-                        else:
-                            assert exist_count == 1, f"{exist_count} != 1 for obj_id {obj_id}, {scene.objects[obj_id]['class_name']}"
-                    for ss in scene.snapshots.values():
-                        assert len(ss.cluster) == len(set(ss.cluster)), f"{ss.cluster} has duplicates"
-                        assert len(ss.full_obj_list.keys()) == len(set(ss.full_obj_list.keys())), f"{ss.full_obj_list.keys()} has duplicates"
-                        for obj_id in ss.cluster:
-                            assert obj_id in ss.full_obj_list, f"{obj_id} not in {ss.full_obj_list.keys()}"
-                        for obj_id in ss.full_obj_list.keys():
-                            assert obj_id in scene.objects, f"{obj_id} not in scene objects"
-                    # check whether the snapshots in scene.snapshots and scene.frames are the same
-                    for file_name, ss in scene.snapshots.items():
-                        assert ss.cluster == scene.frames[file_name].cluster, f"{ss}\n!=\n{scene.frames[file_name]}"
-                        assert ss.full_obj_list == scene.frames[file_name].full_obj_list, f"{ss}\n==\n{scene.frames[file_name]}"
 
                     # update the agent's position record
                     pts_pixs = np.vstack((pts_pixs, pts_pix))
@@ -683,10 +631,12 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                                     if type(max_point_choice) == Frontier and max_point_choice.image == tsdf_planner.frontiers[i].image:
                                         axs[h_idx, w_idx].set_title('Chosen')
                                 elif i == num_images - 1 and type(max_point_choice) == SnapShot:
-                                    img_path = os.path.join(episode_snapshot_dir, max_point_choice.image)
-                                    img = matplotlib.image.imread(img_path)
+                                    obj_id = max_point_choice.cluster[0]
+                                    img_pil = scene.objects[obj_id]["image_crop"]
+                                    img = np.array(img_pil)
+
                                     axs[h_idx, w_idx].imshow(img)
-                                    axs[h_idx, w_idx].set_title('Snapshot Chosen')
+                                    axs[h_idx, w_idx].set_title('Object Chosen')
                         global_caption = f"{subtask_metadata['question']}\n{subtask_metadata['task_type']}\n{subtask_metadata['class']}"
                         fig.suptitle(global_caption, fontsize=16)
                         plt.tight_layout(rect=(0., 0., 1., 0.95))
@@ -707,21 +657,23 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         rgb = obs["color_sensor"]
 
                         plt.imsave(os.path.join(subtask_object_observe_dir, f"target.png"), rgb)
-                        # also, save the snapshot image itself
-                        snapshot_filename = max_point_choice.image.split(".")[0]
-                        os.system(f"cp {os.path.join(episode_snapshot_dir, max_point_choice.image)} {os.path.join(subtask_object_observe_dir, f'snapshot_{snapshot_filename}.png')}")
+                        # also, save the image crop of the object in the snapshot
+                        obj_id = max_point_choice.cluster[0]
+                        img_pil = scene.objects[obj_id]["image_crop"]
+                        img = np.array(img_pil)
+                        plt.imsave(os.path.join(subtask_object_observe_dir, f"target_crop.png"), img)
 
                         target_found = True
                         break
 
                 # get some statistics
-                # check whether the target objects are in the selected snapshot
-                if target_found and np.any([obj_id in max_point_choice.cluster for obj_id in target_obj_ids_estimate]):
+                # check whether the target objects are selected
+                if target_found and max_point_choice.cluster[0] in target_obj_ids_estimate:
                     success_by_snapshot[subtask_id] = 1.0
-                    logging.info(f"Success: {target_obj_ids_estimate} in chosen snapshot {max_point_choice.image}!")
+                    logging.info(f"Success: {max_point_choice.cluster[0]} chosen correct!")
                 else:
                     success_by_snapshot[subtask_id] = 0.0
-                    logging.info(f"Fail: {target_obj_ids_estimate} not in chosen snapshot {max_point_choice.image}!")
+                    logging.info(f"Fail: {max_point_choice.cluster[0]} chosen wrong!")
 
                 # calculate the distance to the nearest view point
                 all_distances = []
@@ -764,22 +716,10 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 for task_name, spl_list in spl_by_task.items():
                     logging.info(f"SPL for {task_name}: {100 * np.mean(np.asarray(spl_list)):.2f}")
 
-                # print the items in the scene graph
-                snapshot_dict = {}
-                for obj_id, obj in scene.objects.items():
-                    if obj['image'] not in snapshot_dict:
-                        snapshot_dict[obj['image']] = []
-                    snapshot_dict[obj['image']].append(
-                        f"{obj_id}: {obj['class_name']} {obj['num_detections']}"
-                    )
                 logging.info(f"Scene graph of question {subtask_id}:")
                 logging.info(f"Question: {subtask_metadata['question']}")
                 logging.info(f"Task type: {subtask_metadata['task_type']}")
                 logging.info(f"Answer: {subtask_metadata['class']}")
-                for snapshot_id, obj_list in snapshot_dict.items():
-                    logging.info(f"{snapshot_id}:")
-                    for obj_str in obj_list:
-                        logging.info(f"\t{obj_str}")
 
             # save the results at the end of each episode
             assert len(success_by_snapshot) == len(spl_by_snapshot) == len(success_by_distance) == len(

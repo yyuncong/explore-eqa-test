@@ -6,6 +6,7 @@ from io import BytesIO
 import os
 import time
 from typing import Optional
+import logging
 
 client = AzureOpenAI(
     azure_endpoint="https://yuncong.openai.azure.com/",
@@ -92,9 +93,9 @@ def format_question(step):
 
 def get_step_info(step):
     # 1 get question data
-    question = step["question"]
-
+    question, image_goal = format_question(step)
     # 2 get step information(egocentric, frontier, snapshot)
+
     # 2.1 get egocentric views
     egocentric_imgs = []
     if step.get("use_egocentric_views", True):
@@ -119,12 +120,14 @@ def get_step_info(step):
     # 2.3.3 prefiltering, note that we need the obj_id_mapping
     keep_index = list(range(len(obj_imgs)))
     if step.get("use_prefiltering") is True:
+        n_prev_object = len(obj_imgs)
         obj_classes, keep_index = prefiltering(
-            question, obj_classes, seen_classes, step["top_k_categories"]
+            question, obj_classes, seen_classes, step["top_k_categories"], image_goal
         )
         obj_imgs = [obj_imgs[i] for i in keep_index]
+        logging.info(f"Prefiltering object: {n_prev_object} -> {len(obj_imgs)}")
     
-    return question, egocentric_imgs, frontier_imgs, obj_imgs, obj_classes, keep_index
+    return question, image_goal, egocentric_imgs, frontier_imgs, obj_imgs, obj_classes, keep_index
        
 def format_explore_prompt(
     question,
@@ -134,6 +137,7 @@ def format_explore_prompt(
     obj_classes,
     egocentric_view = False,
     use_object_class = True,
+    image_goal = None
 ):
     sys_prompt = "Task: You are an agent in an indoor scene tasked with answering questions by observing the surroundings and exploring the environment. To answer the question, you are required to choose either an Object or a Frontier image as the direction to explore.\n"
     # TODO: format interleaved text and images
@@ -150,7 +154,11 @@ def format_explore_prompt(
     # 2 here is the question
     # TODO: add the image goal here
     text += f"Question: {question}"
-    content.append((text+"\n",))
+    if image_goal is not None:
+        content.append((text, image_goal))
+        content.append(("\n",))
+    else:
+        content.append((text + "\n",))
     text = "Select the Frontier/Object that would help find the answer of the question.\n"
     # add the text to the content
     content.append((text,))
@@ -168,7 +176,7 @@ def format_explore_prompt(
     if len(obj_imgs) == 0:
         content.append(("No Object is available\n",))
     else:
-        for i in range(len(obj_imgs)):
+        for i in range(min(len(obj_imgs), 30)):
             content.append((f"Object {i} ", obj_imgs[i]))
             if use_object_class:
                 content.append((obj_classes[i],))
@@ -194,6 +202,7 @@ def format_prefiltering_prompt(
     question,
     class_list,
     top_k = 10,
+    image_goal = None
 ):
     content = []
     sys_prompt = "You are an AI agent in a 3D indoor scene.\n"
@@ -222,7 +231,11 @@ def format_prefiltering_prompt(
     #------------------Task to solve----------------------------
     prompt = f"Following is the concrete content of the task and you should retrieve top {top_k} objects:\n"
     prompt += f"Question: {question}"
-    content.append((prompt+"\n",))
+    if image_goal is not None:
+        content.append((prompt, image_goal))
+        content.append(("\n",))
+    else:
+        content.append((prompt+"\n",))
     prompt = "Following is a list of objects that you can choose, each object one line\n"
     for i, cls in enumerate(class_list):
         prompt += f"{cls}\n"
@@ -234,18 +247,19 @@ def get_prefiltering_classes(
     question,
     seen_classes,
     top_k=10,
+    image_goal = None
 ):
     prefiltering_sys,prefiltering_content = format_prefiltering_prompt(
-        question, sorted(list(seen_classes)), top_k=top_k)
-    print("prefiltering prompt: \n", "".join([c[0] for c in prefiltering_content]))
+        question, sorted(list(seen_classes)), top_k=top_k, image_goal=image_goal)
+    logging.info("prefiltering prompt: \n", "".join([c[0] for c in prefiltering_content]))
     response = call_openai_api(prefiltering_sys, prefiltering_content)
-    print("Prefiltering response: ", response)
     if response is None:
         return []
     # parse the response and return the top_k objects
     selected_classes = response.strip().split('\n')
     selected_classes = [cls for cls in selected_classes if cls in seen_classes]
     selected_classes = selected_classes[:top_k]
+    logging.info(f"Prefiltering response: {selected_classes}")
     return selected_classes
 
 def prefiltering(
@@ -253,19 +267,20 @@ def prefiltering(
     obj_classes,
     seen_classes,
     top_k=10,
+    image_goal = None
 ):
-    selected_classes = get_prefiltering_classes(question, seen_classes, top_k)
-    print(f"Selected classes: {selected_classes}")
+    selected_classes = get_prefiltering_classes(question, seen_classes, top_k, image_goal)
+    # print(f"Selected classes: {selected_classes}")
     keep_index = [i for i in range(len(obj_classes)) if obj_classes[i] in selected_classes]
-    print("object classes before filtering: ", obj_classes)
+    # print("object classes before filtering: ", obj_classes)
     obj_classes = [obj_classes[i] for i in keep_index]
-    print("object classes after filtering: ", obj_classes)
+    # print("object classes after filtering: ", obj_classes)
     return obj_classes, keep_index
    
 def explore_step(step, cfg):
     step["use_prefiltering"] = cfg.prefiltering
     step["top_k_categories"] = cfg.top_k_categories
-    question, egocentric_imgs, frontier_imgs, obj_imgs, obj_classes, obj_id_mapping = get_step_info(step)
+    question, image_goal, egocentric_imgs, frontier_imgs, obj_imgs, obj_classes, obj_id_mapping = get_step_info(step)
     sys_prompt, content = format_explore_prompt(
         question,
         egocentric_imgs,
@@ -274,10 +289,11 @@ def explore_step(step, cfg):
         obj_classes,
         egocentric_view = step.get("use_egocentric_views", False),
         use_object_class= True,
+        image_goal=image_goal
     )
     
-    print(f"the size of frontier is {len(frontier_imgs)}")
-    print(f"the input prompt:\n{sys_prompt + ''.join([c[0] for c in content])}")
+    #print(f"the size of frontier is {len(frontier_imgs)}")
+    logging.info(f"the input prompt:\n{sys_prompt + ''.join([c[0] for c in content])}")
 
     retry_bound = 3
     final_response = None
@@ -309,7 +325,7 @@ def explore_step(step, cfg):
             response_valid = True
 
         if response_valid:
-            print(f"Response: [{response}], Reason: [{reason}]")
+            logging.info(f"Response: [{response}], Reason: [{reason}]")
             final_response = response
             break
 

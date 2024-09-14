@@ -257,7 +257,7 @@ def get_prefiltering_classes(
     selected_classes = response.strip().split('\n')
     selected_classes = [cls for cls in selected_classes if cls in seen_classes]
     selected_classes = selected_classes[:top_k]
-    ogging.info(f"Prefiltering response: {selected_classes}")
+    logging.info(f"Prefiltering response: {selected_classes}")
     return selected_classes
 
 def prefiltering(

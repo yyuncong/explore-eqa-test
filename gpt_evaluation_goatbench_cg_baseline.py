@@ -673,10 +673,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     logging.info(f"Success: {max_point_choice.cluster[0]} chosen correct!")
                 else:
                     success_by_snapshot[subtask_id] = 0.0
-                    if max_point_choice is not None:
-                        logging.info(f"Fail: {max_point_choice.cluster[0]} chosen wrong!")
-                    else:
-                        logging.info(f"Fail: no valid choice made!")
+                    logging.info(f"Fail: chosen wrong!")
 
                 # calculate the distance to the nearest view point
                 all_distances = []

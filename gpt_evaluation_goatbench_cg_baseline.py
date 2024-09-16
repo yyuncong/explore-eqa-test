@@ -73,7 +73,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
     logging.info(f"Total number of episodes: {num_episode}")
     logging.info(f"Total number of scenes: {len(scene_data_list)}")
 
-    all_scene_ids = os.listdir(cfg.scene_data_path_train + '/train') + os.listdir(cfg.scene_data_path_val + '/val')
+    all_scene_ids = os.listdir(cfg.scene_data_path_val + '/val')
 
     ## Initialize the detection models
     detection_model = YOLOWorld(cfg.yolo_model_name)

@@ -655,13 +655,17 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         # get an observation and break
                         obs, _ = scene.get_observation(pts, angle=angle)
                         rgb = obs["color_sensor"]
-
                         plt.imsave(os.path.join(subtask_object_observe_dir, f"target.png"), rgb)
-                        # also, save the image crop of the object in the snapshot
-                        obj_id = max_point_choice.cluster[0]
-                        img_pil = scene.objects[obj_id]["image_crop"]
-                        img = np.array(img_pil)
-                        plt.imsave(os.path.join(subtask_object_observe_dir, f"target_crop.png"), img)
+
+                        try:
+                            # also, save the image crop of the object in the snapshot
+                            obj_id = max_point_choice.cluster[0]
+                            img_pil = scene.objects[obj_id]["image_crop"]
+                            img = np.array(img_pil)
+                            plt.imsave(os.path.join(subtask_object_observe_dir, f"target_crop.png"), img)
+                        except Exception as e:
+                            logging.info(f"Error: {e}")
+                            logging.info(f"Failed to save the image crop of the object in the snapshot")
 
                         target_found = True
                         break

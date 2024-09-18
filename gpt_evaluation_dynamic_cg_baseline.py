@@ -93,6 +93,11 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             path_length_list = pickle.load(f)
     else:
         path_length_list = {}
+    if os.path.exists(os.path.join(str(cfg.output_dir), f"fail_list_{start_ratio}_{end_ratio}.pkl")):
+        with open(os.path.join(str(cfg.output_dir), f"fail_list_{start_ratio}_{end_ratio}.pkl"), "rb") as f:
+            fail_list = pickle.load(f)
+    else:
+        fail_list = []
 
     success_count = 0
     max_target_observation = cfg.max_target_observation
@@ -102,6 +107,11 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
         question_id = question_data['question_id']
         question = question_data['question']
         answer = question_data['answer']
+
+        if question_id in success_list or question_id in fail_list:
+            logging.info(f"Question {question_id} already processed")
+            success_count += 1
+            continue
 
         # Extract question
         scene_id = question_data["episode_history"]
@@ -133,11 +143,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
         os.makedirs(episode_object_observe_dir, exist_ok=True)
         os.makedirs(episode_frontier_dir, exist_ok=True)
         os.makedirs(episode_snapshot_dir, exist_ok=True)
-
-        if len(os.listdir(episode_object_observe_dir)) > 0:
-            logging.info(f"Question id {question_id} already has enough target observations!")
-            success_count += 1
-            continue
 
         pts = np.asarray(init_pts)
         angle, axis = quat_to_angle_axis(init_quat)
@@ -483,6 +488,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             path_length_list[question_id] = explore_dist
             logging.info(f"Question id {question_id} finish with {cnt_step} steps, {explore_dist} length")
         else:
+            fail_list.append(question_id)
             logging.info(f"Question id {question_id} failed, {explore_dist} length")
         logging.info(f"{question_idx + 1}/{total_questions}: Success rate: {success_count}/{question_idx + 1}")
         logging.info(f"Mean path length for success exploration: {np.mean(list(path_length_list.values()))}")
@@ -496,11 +502,15 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             pickle.dump(success_list, f)
         with open(os.path.join(str(cfg.output_dir), f"path_length_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
             pickle.dump(path_length_list, f)
+        with open(os.path.join(str(cfg.output_dir), f"fail_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
+            pickle.dump(fail_list, f)
 
     with open(os.path.join(str(cfg.output_dir), f"success_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
         pickle.dump(success_list, f)
     with open(os.path.join(str(cfg.output_dir), f"path_length_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
         pickle.dump(path_length_list, f)
+    with open(os.path.join(str(cfg.output_dir), f"fail_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
+        pickle.dump(fail_list, f)
 
     logging.info(f'All scenes finish')
 

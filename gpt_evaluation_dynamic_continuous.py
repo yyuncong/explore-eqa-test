@@ -110,6 +110,11 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             path_length_list = pickle.load(f)
     else:
         path_length_list = {}
+    if os.path.exists(os.path.join(str(cfg.output_dir), f"fail_list_{start_ratio}_{end_ratio}.pkl")):
+        with open(os.path.join(str(cfg.output_dir), f"fail_list_{start_ratio}_{end_ratio}.pkl"), "rb") as f:
+            fail_list = pickle.load(f)
+    else:
+        fail_list = []
 
     success_count = 0
     max_target_observation = cfg.max_target_observation
@@ -203,7 +208,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 episode_object_observe_dir = os.path.join(str(cfg.output_dir), question_id, 'object_observations')
                 os.makedirs(episode_object_observe_dir, exist_ok=True)
 
-                if len(os.listdir(episode_object_observe_dir)) > 0:
+                if question_id in success_list or question_id in fail_list:
                     logging.info(f"Question id {question_id} already has enough target observations!")
                     success_count += 1
                     finished_questions.append(question_id)
@@ -583,6 +588,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     path_length_list[question_id] = explore_dist
                     logging.info(f"Question id {question_id} finish with {cnt_step} steps, {explore_dist} length")
                 else:
+                    fail_list.append(question_id)
                     logging.info(f"Question id {question_id} failed, {explore_dist} length")
                 logging.info(f"{question_idx + 1}/{total_questions}: Success rate: {success_count}/{question_idx + 1}")
                 logging.info(f"Mean path length for success exploration: {np.mean(list(path_length_list.values()))}")
@@ -684,6 +690,8 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     pickle.dump(success_list, f)
                 with open(os.path.join(str(cfg.output_dir), f"path_length_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
                     pickle.dump(path_length_list, f)
+                with open(os.path.join(str(cfg.output_dir), f"fail_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
+                    pickle.dump(fail_list, f)
 
                 finished_questions.append(question_id)
                 finished_question_count += 1
@@ -692,6 +700,8 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
         pickle.dump(success_list, f)
     with open(os.path.join(str(cfg.output_dir), f"path_length_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
         pickle.dump(path_length_list, f)
+    with open(os.path.join(str(cfg.output_dir), f"fail_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
+        pickle.dump(fail_list, f)
 
     logging.info(f'All scenes finish')
 

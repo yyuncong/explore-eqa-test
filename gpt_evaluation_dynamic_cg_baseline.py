@@ -458,12 +458,12 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     os.path.join(episode_object_observe_dir, f"target_{target_observation_count}.png"), rgb
                 )
                 # also, save the image crop of the object in the snapshot
-                obj_id = max_point_choice.cluster[0]
-                img_pil = scene.objects[obj_id]["image_crop"]
-                img = np.array(img_pil)
-                plt.imsave(
-                    os.path.join(episode_object_observe_dir, f"target_{target_observation_count}_crop.png"), img
-                )
+                # obj_id = max_point_choice.cluster[0]
+                # img_pil = scene.objects[obj_id]["image_crop"]
+                # img = np.array(img_pil)
+                # plt.imsave(
+                #     os.path.join(episode_object_observe_dir, f"target_{target_observation_count}_crop.png"), img
+                # )
 
                 target_observation_count += 1
                 if target_observation_count >= max_target_observation:

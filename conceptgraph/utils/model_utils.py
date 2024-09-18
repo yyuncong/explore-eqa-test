@@ -148,19 +148,24 @@ def compute_clip_features_batched(image, detections, clip_model, clip_preprocess
         right_padding = min(padding, image_width - x_max)
         bottom_padding = min(padding, image_height - y_max)
 
+        # get the image crop without padding
+        image_crops.append(
+            image.crop((x_min, y_min, x_max, y_max))
+        )
+
         x_min -= left_padding
         y_min -= top_padding
         x_max += right_padding
         y_max += bottom_padding
 
-        cropped_image = image.crop((x_min, y_min, x_max, y_max))
-        preprocessed_image = clip_preprocess(cropped_image).unsqueeze(0)
+        preprocessed_image = clip_preprocess(
+            image.crop((x_min, y_min, x_max, y_max))
+        ).unsqueeze(0)
         preprocessed_images.append(preprocessed_image)
 
         class_id = detections.class_id[idx]
         text_tokens.append(classes[class_id])
-        image_crops.append(cropped_image)
-    
+
     # Convert lists to batches
     preprocessed_images_batch = torch.cat(preprocessed_images, dim=0).to(device)
     text_tokens_batch = clip_tokenizer(text_tokens).to(device)

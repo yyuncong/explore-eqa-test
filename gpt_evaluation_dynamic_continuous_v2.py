@@ -323,8 +323,8 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         selected_bbox = snapshot.visual_prompt[selected_bbox_idx]
                         annot_snapshot = BOUNDING_BOX_ANNOTATOR.annotate(annot_snapshot, selected_bbox)
 
-                        # tempt saving for debug
-                        plt.imsave(os.path.join(episode_snapshot_dir, f"{rgb_id}_annot.png"), annot_snapshot)
+                        # # tempt saving for debug
+                        # plt.imsave(os.path.join(episode_snapshot_dir, f"{rgb_id}_annot.png"), annot_snapshot)
 
                         step_dict["snapshot_imgs"][rgb_id] = resize_image(annot_snapshot, cfg.prompt_h, cfg.prompt_w)
 

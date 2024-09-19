@@ -187,7 +187,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             cnt_step += 1
             logging.info(f"\n== step: {cnt_step}")
             step_dict = {}
-            if cnt_step == 1:
+            if cnt_step == 0:
                 angle_increment = cfg.extra_view_angle_deg_phase_2 * np.pi / 180
                 total_views = 1 + cfg.extra_view_phase_2
             else:

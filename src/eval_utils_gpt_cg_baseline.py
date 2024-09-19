@@ -263,6 +263,7 @@ def get_prefiltering_classes(
         return []
     # parse the response and return the top_k objects
     selected_classes = response.strip().split('\n')
+    selected_classes = [cls.strip() for cls in selected_classes]
     selected_classes = [cls for cls in selected_classes if cls in seen_classes]
     selected_classes = selected_classes[:top_k]
     # logging.info(f"Prefiltering response: {selected_classes}")

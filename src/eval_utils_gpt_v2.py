@@ -9,7 +9,7 @@ from typing import Optional
 import logging
 
 client = AzureOpenAI(
-    azure_endpoint="https://chuangsweden.openai.azure.com",
+    azure_endpoint="https://jiaben.openai.azure.com/",
     api_key=os.getenv('AZURE_OPENAI_KEY'),
     api_version="2024-02-15-preview",
 )
@@ -143,7 +143,8 @@ def format_explore_prompt(
     # 1 here is some basic info
     #text = "Task: You are an agent in an indoor scene tasked with answering quesions by observing the surroundings and exploring the environment. To answer the question, you are required to choose either a snapshot or a frontier based on the egocentric views of your surroundings.\n"
     text = "Definitions:\n"
-    text += "Snapshot: A focused observation of several objects. Choosing a snapshot means that you are selecting the observed objects in the snapshot as the target objects to help answer the question.\n"
+    text += ("Snapshot: A focused observation of an area and represents a cluster of objects. The objects are annotated with white bounding boxes in the snapshot image."
+             " Choosing a snapshot means that you are selecting the annotated objects in the snapshot as the target objects for directly answering the question.\n")
     text += "Frontier: An unexplored region that could potentially lead to new information for answering the question. Selecting a frontier means that you will further explore that direction.\n"
     # TODO: add simple example: frontier, snapshot 
     # set | use '/n' to separate different parts
@@ -166,8 +167,8 @@ def format_explore_prompt(
         content.append((text, egocentric_imgs[-1]))
         content.append(("\n",))
     # 3 here is the snapshot images
-    text = "The followings are all the snapshots that you can explore (followed with contained object classes)\n"
-    text += "Please note that the contained classes may not be accurate (wrong classes/missing classes) due to the limitation of the object detection model. "
+    text = "The followings are all the snapshots that you can explore (followed with the object classes of the annotated objects)\n"
+    text += "Please note that the contained classes may not be accurate due to the limitation of the object detection model. "
     text += "So you still need to utilize the images to make the decision.\n"
     content.append((text,))
     if len(snapshot_imgs) == 0:

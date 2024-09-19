@@ -88,7 +88,7 @@ def get_step_info(step):
     # 1 get question data
     question, image_goal = format_question(step)
     # 2 get step information(egocentric, frontier, snapshot)
-    
+
     # 2.1 get egocentric views
     egocentric_imgs = []
     if step.get("use_egocentric_views", False):
@@ -246,18 +246,25 @@ def get_prefiltering_classes(
     seen_classes,
     top_k=10,
     image_goal = None
-): 
+):
     prefiltering_sys,prefiltering_content = format_prefiltering_prompt(
         question, sorted(list(seen_classes)), top_k=top_k, image_goal=image_goal)
-    # logging.info("prefiltering prompt: \n", "".join([c[0] for c in prefiltering_content]))
+    logging.info("Prefiltering prompt:")
+    message = ''
+    for c in prefiltering_content:
+        message += c[0]
+        if len(c) == 2:
+            message += f": image {c[1][:10]}..."
+    logging.info(message)
     response = call_openai_api(prefiltering_sys, prefiltering_content)
     if response is None:
         return []
     # parse the response and return the top_k objects
     selected_classes = response.strip().split('\n')
+    selected_classes = [cls.strip() for cls in selected_classes]
     selected_classes = [cls for cls in selected_classes if cls in seen_classes]
     selected_classes = selected_classes[:top_k]
-    # logging.info(f"Prefiltering response: {selected_classes}")
+    logging.info(f"Prefiltering response: {response}")
     return selected_classes
 
 def prefiltering(
@@ -295,8 +302,13 @@ def explore_step(step, cfg):
         image_goal = image_goal
     )
     
-    #print(f"the size of frontier is {len(frontier_imgs)}")
-    # logging.info(f"the input prompt:\n{sys_prompt + ''.join([c[0] for c in content])}")
+    logging.info(f"Input prompt:")
+    message = sys_prompt
+    for c in content:
+        message += c[0]
+        if len(c) == 2:
+            message += f"[{c[1][:10]}...]"
+    logging.info(message)
 
     retry_bound = 3
     final_response = None

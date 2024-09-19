@@ -275,7 +275,9 @@ class Scene:
             return image_rgb, [], {}
 
         image_crops, image_feats, text_feats = compute_clip_features_batched(
-            image_rgb, curr_det, clip_model, clip_preprocess, clip_tokenizer, obj_classes.get_classes_arr(), self.cfg_cg.device)
+            image_rgb, curr_det, clip_model, clip_preprocess, clip_tokenizer, obj_classes.get_classes_arr(), self.cfg_cg.device,
+            prompt_h=self.cfg.prompt_h, prompt_w=self.cfg.prompt_w
+        )
 
         raw_gobs = {
                 # add new uuid for each detection

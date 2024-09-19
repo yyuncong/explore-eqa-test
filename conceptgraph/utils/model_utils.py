@@ -130,7 +130,7 @@ def compute_clip_features(image, detections, clip_model, clip_preprocess, clip_t
     return image_crops, image_feats, text_feats
 
 # @profile
-def compute_clip_features_batched(image, detections, clip_model, clip_preprocess, clip_tokenizer, classes, device):
+def compute_clip_features_batched(image, detections, clip_model, clip_preprocess, clip_tokenizer, classes, device, prompt_h=None, prompt_w=None):
     
     image = Image.fromarray(image)
     padding = 20  # Adjust the padding amount as needed
@@ -138,6 +138,12 @@ def compute_clip_features_batched(image, detections, clip_model, clip_preprocess
     image_crops = []
     preprocessed_images = []
     text_tokens = []
+
+    original_width, original_height = image.size
+    if prompt_h is not None and prompt_w is not None:
+        scale_w, scale_h = prompt_w/original_width, prompt_h/original_height
+    else:
+        scale_w, scale_h = 1, 1
     
     # Prepare data for batch processing
     for idx in range(len(detections.xyxy)):
@@ -183,7 +189,13 @@ def compute_clip_features_batched(image, detections, clip_model, clip_preprocess
     # text_feats = text_features.cpu().numpy()
     # image_feats = []
     text_feats = []
-    
+
+    # resize image crops
+    if prompt_h is not None and prompt_w is not None:
+        for i in range(len(image_crops)):
+            crop_w, crop_h = image_crops[i].size
+            image_crops[i] = image_crops[i].resize((int(crop_w*scale_w), int(crop_h*scale_h)))
+
     return image_crops, image_feats, text_feats
 
 

@@ -9,7 +9,7 @@ from typing import Optional
 import logging
 
 client = AzureOpenAI(
-    azure_endpoint="https://yuncong.openai.azure.com/",
+    azure_endpoint="https://chuangsweden.openai.azure.com",
     api_key=os.getenv('AZURE_OPENAI_KEY'),
     api_version="2024-02-15-preview",
 )
@@ -98,7 +98,7 @@ def get_step_info(step):
 
     # 2.1 get egocentric views
     egocentric_imgs = []
-    if step.get("use_egocentric_views", True):
+    if step.get("use_egocentric_views", False):
         for egocentric_view in step["egocentric_views"]:
             egocentric_imgs.append(encode_tensor2base64(egocentric_view))
             
@@ -251,13 +251,13 @@ def get_prefiltering_classes(
 ):
     prefiltering_sys,prefiltering_content = format_prefiltering_prompt(
         question, sorted(list(seen_classes)), top_k=top_k, image_goal=image_goal)
-    logging.info("Prefiltering prompt:")
+    # logging.info("Prefiltering prompt:")
     message = ''
     for c in prefiltering_content:
         message += c[0]
         if len(c) == 2:
             message += f": image {c[1][:10]}..."
-    logging.info(message)
+    # logging.info(message)
     response = call_openai_api(prefiltering_sys, prefiltering_content)
     if response is None:
         return []
@@ -265,7 +265,7 @@ def get_prefiltering_classes(
     selected_classes = response.strip().split('\n')
     selected_classes = [cls for cls in selected_classes if cls in seen_classes]
     selected_classes = selected_classes[:top_k]
-    logging.info(f"Prefiltering response: {selected_classes}")
+    # logging.info(f"Prefiltering response: {selected_classes}")
     return selected_classes
 
 def prefiltering(
@@ -298,13 +298,13 @@ def explore_step(step, cfg):
         image_goal=image_goal
     )
     
-    logging.info(f"Input prompt:")
+    # logging.info(f"Input prompt:")
     message = sys_prompt
     for c in content:
         message += c[0]
         if len(c) == 2:
             message += f"[{c[1][:10]}...]"
-    logging.info(message)
+    # logging.info(message)
 
     retry_bound = 3
     final_response = None

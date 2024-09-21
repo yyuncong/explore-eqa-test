@@ -262,12 +262,23 @@ def get_prefiltering_classes(
     if response is None:
         return []
     # parse the response and return the top_k objects
+    logging.info(f"Prefiltering response: {response}")
     selected_classes = response.strip().split('\n')
-    selected_classes = [cls.strip() for cls in selected_classes]
+    selected_classes = selected_postprocess(selected_classes)
+    logging.info(f"Selected classes: {selected_classes}")
     selected_classes = [cls for cls in selected_classes if cls in seen_classes]
     selected_classes = selected_classes[:top_k]
-    logging.info(f"Prefiltering response:\n{response}")
     return selected_classes
+
+def selected_postprocess(selected_classes):
+    import re
+    postprocessed_classes = []
+    for scls in selected_classes:
+        scls = re.sub(r'\d', '', scls)
+        scls = re.sub(r'[.,:]', '', scls)
+        scls = scls.strip()
+        postprocessed_classes.append(scls)
+    return postprocessed_classes
 
 def prefiltering(
     question,

@@ -202,16 +202,9 @@ def format_prefiltering_prompt(
     top_k = 10,
     image_goal = None
 ):
-    '''
-    sys_prompt = "You are an AI agent in a 3D indoor scene.\n"
-    text = "Can you identify the object occured in the following image"
-    content = [(text, image_goal)]
-    return sys_prompt, content
-    '''
-    
     content = []
     sys_prompt = "You are an AI agent in a 3D indoor scene.\n"
-    prompt = "The goal of the AI agent is to answer questions about the scene through exploration.\n"
+    prompt = "Your goal is to answer questions about the scene through exploration.\n"
     prompt += "To efficiently solve the problem, you should first rank objects in the scene based on their importance.\n"
     # prompt += "You should rank the objects based on how well they can help you answer the question.\n"
     # prompt += "More important objects should be more helpful in answering the question, and should be ranked higher and first explored.\n"
@@ -247,7 +240,7 @@ def format_prefiltering_prompt(
     prompt += "Answer: "
     content.append((prompt,))
     return sys_prompt,content
-    
+
 def get_prefiltering_classes(
     question,
     seen_classes,

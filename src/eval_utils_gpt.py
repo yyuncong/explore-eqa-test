@@ -222,7 +222,7 @@ def format_prefiltering_prompt(
     # prompt += "EXAMPLE: select top 3 ranked objects\n"
     prompt += "Question: What can I use to watch my favorite shows and movies?\n"
     prompt += "Following is a list of objects that you can choose, each object one line\n"
-    prompt += "painting\nspeaker\nbox\ncabinet\nlamptv\nbook rack\nsofa\noven\nbed\ncurtain\n"
+    prompt += "painting\nspeaker\nbox\ncabinet\nlamp\ntv\nbook rack\nsofa\noven\nbed\ncurtain\n"
     prompt += "Answer: tv\nspeaker\nsofa\nbed\n"
     content.append((prompt,))
     #------------------Task to solve----------------------------

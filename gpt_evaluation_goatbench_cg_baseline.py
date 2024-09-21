@@ -357,8 +357,12 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     global_step += 1
                     logging.info(f"\n== step: {cnt_step}, global step: {global_step} ==")
                     step_dict = {}
-                    angle_increment = cfg.extra_view_angle_deg_phase_1 * np.pi / 180
-                    total_views = 1 + cfg.extra_view_phase_1
+                    if cnt_step == 0:
+                        angle_increment = cfg.extra_view_angle_deg_phase_2 * np.pi / 180
+                        total_views = 1 + cfg.extra_view_phase_2
+                    else:
+                        angle_increment = cfg.extra_view_angle_deg_phase_1 * np.pi / 180
+                        total_views = 1 + cfg.extra_view_phase_1
                     all_angles = [angle + angle_increment * (i - total_views // 2) for i in range(total_views)]
                     # let the main viewing angle be the last one to avoid potential overwriting problems
                     main_angle = all_angles.pop(total_views // 2)

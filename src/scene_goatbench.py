@@ -599,6 +599,7 @@ class Scene:
     def update_snapshots(
         self,
         obj_ids,
+        min_detection=2,
     ):
         self.cleanup_empty_frames_snapshots()
 
@@ -613,7 +614,7 @@ class Scene:
         obj_ids = list(set(obj_ids))
 
         # find and exclude the objects that have only one observation
-        obj_exclude = [obj_id for obj_id in self.objects.keys() if self.objects[obj_id]['num_detections'] < 2]
+        obj_exclude = [obj_id for obj_id in self.objects.keys() if self.objects[obj_id]['num_detections'] < min_detection]
         obj_ids = [obj_id for obj_id in obj_ids if obj_id not in obj_exclude]
 
         obj_centers = np.zeros((len(obj_ids), 2))
@@ -648,7 +649,7 @@ class Scene:
 
         # sanity check
         for obj_id, obj in self.objects.items():
-            if obj['num_detections'] < 2:
+            if obj['num_detections'] < min_detection:
                 assert obj['image'] is None, f"{obj_id} has only one detection but has image"
             else:
                 assert obj['image'] is not None, f"{obj_id} has no image"

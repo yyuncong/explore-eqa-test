@@ -135,8 +135,8 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
         scene_name = scene_data_file.split(".")[0]
         scene_id = [scene_id for scene_id in all_scene_ids if scene_name in scene_id][0]
         # workaround for debugging
-        if scene_id != "00820-mL8ThkuaVTM":
-            continue
+        #if scene_id != "00820-mL8ThkuaVTM":
+        #    continue
         scene_data = json.load(open(os.path.join(cfg.test_data_dir, scene_data_file), "r"))
         total_episodes = len(scene_data["episodes"])
 
@@ -320,8 +320,8 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     "task_type": goal_type
                 }
                 # format question according to the goal type
-                if goal_type != "image":
-                    continue
+                #if goal_type != "image":
+                #    continue
                 if goal_type == "object":
                     subtask_metadata['question'] = f"Where is the {goal_category}?"
                 elif goal_type == "description":

@@ -757,8 +757,8 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 spl_by_distance[subtask_id] = (success_by_distance[subtask_id] * start_end_subtask_distance /
                                                max(start_end_subtask_distance, subtask_explore_dist))
 
-                success_by_task[goal_type].append(success_by_snapshot[subtask_id])
-                spl_by_task[goal_type].append(spl_by_snapshot[subtask_id])
+                success_by_task[goal_type].append(success_by_distance[subtask_id])
+                spl_by_task[goal_type].append(spl_by_distance[subtask_id])
 
                 logging.info(f"Subtask {subtask_id} finished with {cnt_step} steps, {subtask_explore_dist} length")
                 logging.info(f"Subtask spl by snapshot: {spl_by_snapshot[subtask_id]}, spl by distance: {spl_by_distance[subtask_id]}")

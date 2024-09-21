@@ -15,6 +15,7 @@ import copy
 from habitat_sim.utils.common import quat_to_coeffs, quat_from_angle_axis, quat_from_two_vectors
 from src.habitat import (
     make_semantic_cfg_new,
+    make_simple_cfg_new,
     get_quaternion,
     get_navigable_point_to_new,
 )
@@ -70,8 +71,10 @@ class Scene:
         scene_semantic_annotation_path = os.path.join(cfg.scene_data_path, split, scene_id, scene_id.split("-")[1] + ".semantic.txt")
         assert os.path.exists(scene_mesh_path), f"scene_mesh_path: {scene_mesh_path} does not exist"
         assert os.path.exists(navmesh_path), f"navmesh_path: {navmesh_path} does not exist"
-        assert os.path.exists(semantic_texture_path), f"semantic_texture_path: {semantic_texture_path} does not exist"
-        assert os.path.exists(scene_semantic_annotation_path), f"scene_semantic_annotation_path: {scene_semantic_annotation_path} does not exist"
+        if not os.path.exists(semantic_texture_path) or not os.path.exists(scene_semantic_annotation_path):
+            logging.warning(f"semantic_texture_path: {semantic_texture_path} or scene_semantic_annotation_path: {scene_semantic_annotation_path} does not exist")
+            semantic_texture_path = None
+            scene_semantic_annotation_path = None
 
         sim_settings = {
             "scene": scene_mesh_path,
@@ -83,7 +86,10 @@ class Scene:
             "scene_dataset_config_file": cfg.scene_dataset_config_path,
             "camera_tilt": cfg.camera_tilt_deg * np.pi / 180,
         }
-        sim_cfg = make_semantic_cfg_new(sim_settings)
+        if semantic_texture_path is not None and scene_semantic_annotation_path is not None:
+            sim_cfg = make_semantic_cfg_new(sim_settings)
+        else:
+            sim_cfg = make_simple_cfg_new(sim_settings)
         self.simulator = habitat_sim.Simulator(sim_cfg)
         self.pathfinder = self.simulator.pathfinder
         self.pathfinder.seed(cfg.seed)
@@ -98,7 +104,10 @@ class Scene:
             class_set=self.cfg['class_set'],
         )
 
-        logging.info(f"Load scene {scene_id} successfully")
+        if semantic_texture_path is not None and scene_semantic_annotation_path is not None:
+            logging.info(f"Load scene {scene_id} successfully with semantic texture")
+        else:
+            logging.info(f"Load scene {scene_id} successfully without semantic texture")
 
         # set agent
         self.agent = self.simulator.initialize_agent(sim_settings["default_agent"])

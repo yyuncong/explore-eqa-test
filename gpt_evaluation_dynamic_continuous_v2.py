@@ -257,7 +257,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         obs, cam_pose = scene.get_observation(pts, ang)
                         rgb = obs["color_sensor"]
                         depth = obs["depth_sensor"]
-                        semantic_obs = obs["semantic_sensor"]
                         rgb = rgba2rgb(rgb)
 
                         cam_pose_normal = pose_habitat_to_normal(cam_pose)

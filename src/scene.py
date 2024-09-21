@@ -73,8 +73,6 @@ class Scene:
         assert os.path.exists(navmesh_path), f"navmesh_path: {navmesh_path} does not exist"
         if not os.path.exists(semantic_texture_path) or not os.path.exists(scene_semantic_annotation_path):
             logging.warning(f"semantic_texture_path: {semantic_texture_path} or scene_semantic_annotation_path: {scene_semantic_annotation_path} does not exist")
-            semantic_texture_path = None
-            scene_semantic_annotation_path = None
 
         sim_settings = {
             "scene": scene_mesh_path,
@@ -86,7 +84,7 @@ class Scene:
             "scene_dataset_config_file": cfg.scene_dataset_config_path,
             "camera_tilt": cfg.camera_tilt_deg * np.pi / 180,
         }
-        if semantic_texture_path is not None and scene_semantic_annotation_path is not None:
+        if os.path.exists(semantic_texture_path) and os.path.exists(scene_semantic_annotation_path):
             sim_cfg = make_semantic_cfg_new(sim_settings)
         else:
             sim_cfg = make_simple_cfg_new(sim_settings)
@@ -104,7 +102,7 @@ class Scene:
             class_set=self.cfg['class_set'],
         )
 
-        if semantic_texture_path is not None and scene_semantic_annotation_path is not None:
+        if os.path.exists(semantic_texture_path) and os.path.exists(scene_semantic_annotation_path):
             logging.info(f"Load scene {scene_id} successfully with semantic texture")
         else:
             logging.info(f"Load scene {scene_id} successfully without semantic texture")

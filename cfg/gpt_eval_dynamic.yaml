@@ -14,6 +14,9 @@ egocentric_views: false
 action_memory: false
 prefiltering: true
 top_k_categories: 10
+
+min_detection: 2
+
 # about detection model
 #yolo_model_name: /home/yuncongyang_umass_edu/scene_understanding/yanghan/explore-eqa-test/yolov8x-world-finetuned.pt  # yolov8x-world.pt
 #class_set: yolo_finetune  # hm3d, yolo_finetune, scannet200

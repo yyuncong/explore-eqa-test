@@ -303,7 +303,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     for obj_id, obj in scene.objects.items():
                         if np.linalg.norm(obj['bbox'].center[[0, 2]] - pts[[0, 2]]) < cfg.scene_graph.obj_include_dist + 0.5:
                             all_added_obj_ids.append(obj_id)
-                    scene.update_snapshots(obj_ids=set(all_added_obj_ids))
+                    scene.update_snapshots(obj_ids=set(all_added_obj_ids), min_detection=cfg.min_detection)
                     logging.info(f"Step {cnt_step} {len(scene.objects)} objects, {len(scene.snapshots)} snapshots")
 
                     # update the mapping of object id to class name, since the objects have been updated
@@ -487,7 +487,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     pts_normal, angle, pts_pix, fig, _, target_arrived = return_values
 
                     # sanity check
-                    obj_exclude_count = sum([1 if obj['num_detections'] < 2 else 0 for obj in scene.objects.values()])
+                    obj_exclude_count = sum([1 if obj['num_detections'] < cfg.min_detection else 0 for obj in scene.objects.values()])
                     total_objs_count = sum(
                         [len(snapshot.cluster) for snapshot in scene.snapshots.values()]
                     )
@@ -501,7 +501,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         for ss in scene.snapshots.values():
                             if obj_id in ss.cluster:
                                 exist_count += 1
-                        if scene.objects[obj_id]['num_detections'] < 2:
+                        if scene.objects[obj_id]['num_detections'] < cfg.min_detection:
                             assert exist_count == 0, f"{exist_count} != 0 for obj_id {obj_id}, {scene.objects[obj_id]['class_name']}"
                         else:
                             assert exist_count == 1, f"{exist_count} != 1 for obj_id {obj_id}, {scene.objects[obj_id]['class_name']}"

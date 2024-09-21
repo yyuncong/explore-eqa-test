@@ -134,6 +134,9 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
     for scene_data_file in scene_data_list:
         scene_name = scene_data_file.split(".")[0]
         scene_id = [scene_id for scene_id in all_scene_ids if scene_name in scene_id][0]
+        # workaround for debugging
+        if scene_id != "00820-mL8ThkuaVTM":
+            continue
         scene_data = json.load(open(os.path.join(cfg.test_data_dir, scene_data_file), "r"))
         total_episodes = len(scene_data["episodes"])
 
@@ -317,6 +320,8 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     "task_type": goal_type
                 }
                 # format question according to the goal type
+                if goal_type != "image":
+                    continue
                 if goal_type == "object":
                     subtask_metadata['question'] = f"Where is the {goal_category}?"
                 elif goal_type == "description":
@@ -325,7 +330,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     subtask_metadata['question'] = f"Could you find the object captured in the following image?"
                     view_pos_dict = random.choice(subtask_goal[0]["view_points"])['agent_state']
                     obs,_ = scene.get_observation(pts=view_pos_dict["position"], rotation=view_pos_dict["rotation"])
-                    plt.imsave(os.path.join(str(cfg.output_dir), f"{subtask_id}", "image_goal.png"), obs["color_sensor"])
+                    plt.imsave(os.path.join(str(cfg.output_dir), f"{subtask_id}", "image_goal.png"), rgba2rgb(obs["color_sensor"]))
                     subtask_metadata["image"] = f"{cfg.output_dir}/{subtask_id}/image_goal.png"
                 
                 # record the history of the agent's path

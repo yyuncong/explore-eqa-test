@@ -16,6 +16,6 @@ export AZURE_OPENAI_KEY=0186e6b94e834c4db7d3a2f7e5303fff
 
 #python gpt_evaluation_dynamic_continuous.py -cf cfg/gpt_eval_continuous.yaml
 #python gpt_evaluation_dynamic.py -cf cfg/gpt_eval_dynamic.yaml
-python gpt_evaluation_dynamic_cg_baseline.py -cf cfg/gpt_eval_dynamic_cg_baseline.yaml
+#python gpt_evaluation_dynamic_cg_baseline.py -cf cfg/gpt_eval_dynamic_cg_baseline.yaml
 #python gpt_evaluation_dynamic_continuous.py -cf cfg/gpt_eval_dynamic.yaml
-#python gpt_evaluation_goatbench.py -cf cfg/gpt_eval_goatbench.yaml --start_ratio 0.1 --end_ratio 0.3
+python gpt_evaluation_goatbench.py -cf cfg/gpt_eval_goatbench.yaml --start_ratio 0.0 --end_ratio 0.1

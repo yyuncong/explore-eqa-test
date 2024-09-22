@@ -293,7 +293,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         all_distances.append(np.inf)
                     else:
                         all_distances.append(path.geodesic_distance)
-                start_end_subtask_distance = min(all_distances)
+                start_end_subtask_distance = min(all_distances) + 1e-6
 
                 logging.info(f"\nScene {scene_id} Episode {episode_id} Subtask {subtask_idx + 1}/{len(all_subtask_goals)}")
 
@@ -729,6 +729,9 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 logging.info(f"Task type: {subtask_metadata['task_type']}")
                 logging.info(f"Answer: {subtask_metadata['class']}")
 
+                if not cfg.save_visualization and not cfg.save_frontier_video:
+                    os.system(f"rm -r {os.path.join(str(cfg.output_dir), f'{subtask_id}')}")
+
             # save the results at the end of each episode
             assert len(success_by_snapshot) == len(spl_by_snapshot) == len(success_by_distance) == len(
                 spl_by_distance), f"{len(success_by_snapshot)} != {len(spl_by_snapshot)} != {len(success_by_distance)} != {len(spl_by_distance)}"
@@ -747,6 +750,10 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 pickle.dump(success_by_task, f)
             with open(os.path.join(str(cfg.output_dir), f"spl_by_task_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
                 pickle.dump(spl_by_task, f)
+
+            logging.info(f'Episode {episode_id} finish')
+            if not cfg.save_visualization and not cfg.save_frontier_video:
+                os.system(f"rm -r {episode_data_dir}")
 
 
     # save the results

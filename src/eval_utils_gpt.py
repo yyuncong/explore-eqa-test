@@ -213,21 +213,20 @@ def format_prefiltering_prompt(
     prompt += "These are the rules for the task.\n"
     # prompt += "RULES:\n"
     prompt += "1. Read through the whole object list.\n"
-    prompt += "2. Rank objects in the list based on how well they can help you answer the question.\n"
-    prompt += f"3. Reprint the name of top {top_k} objects. "
-    prompt += "If there are not enough objects, reprint all of them in ranked order. Each object should be printed on a new line.\n"
+    prompt += "2. Rank objects in the list based on how well they can help your exploration given the question.\n"
+    prompt += f"3. Reprint the name of all objects that may help your exploration given the question. "
     prompt += "4. Do not print any object not included in the list or include any additional information in your response.\n"
     content.append((prompt,))
     #------------------format an example-------------------------
-    prompt = "Here is an example of selecting top 3 ranked objects:\n"
+    prompt = "Here is an example of selecting helpful objects:\n"
     # prompt += "EXAMPLE: select top 3 ranked objects\n"
     prompt += "Question: What can I use to watch my favorite shows and movies?\n"
     prompt += "Following is a list of objects that you can choose, each object one line\n"
-    prompt += "painting\nspeaker\nbox\ncabinet\nlamp\ncouch\npillow\ncabinet\ntv\nbook rack\nwall panel\npainting\nstool\ntv stand\n"
-    prompt += "Answer: tv\ntv stand\nspeaker\n"
+    prompt += "painting\nspeaker\nbox\ncabinet\nlamptv\nbook rack\nsofa\noven\nbed\ncurtain\n"
+    prompt += "Answer: tv\nspeaker\nsofa\nbed\n"
     content.append((prompt,))
     #------------------Task to solve----------------------------
-    prompt = f"Following is the concrete content of the task and you should retrieve top {top_k} objects:\n"
+    prompt = f"Following is the concrete content of the task and you should retrieve helpful objects in order:\n"
     prompt += f"Question: {question}"
     if image_goal is not None:
         content.append((prompt, image_goal))
@@ -249,35 +248,25 @@ def get_prefiltering_classes(
 ):
     prefiltering_sys,prefiltering_content = format_prefiltering_prompt(
         question, sorted(list(seen_classes)), top_k=top_k, image_goal=image_goal)
-    logging.info("Prefiltering prompt:")
+    # logging.info("Prefiltering prompt:")
     message = ''
     for c in prefiltering_content:
         message += c[0]
         if len(c) == 2:
             message += f": image {c[1][:10]}..."
-    logging.info(message)
+    # logging.info(message)
     response = call_openai_api(prefiltering_sys, prefiltering_content)
     if response is None:
         return []
     # parse the response and return the top_k objects
-    logging.info(f"Prefiltering response: {response}")
     selected_classes = response.strip().split('\n')
-    selected_classes = selected_postprocess(selected_classes)
-    logging.info(f"Selected classes: {selected_classes}")
+    # logging.info(f"Prefiltering response: {selected_classes}")
+    selected_classes = [cls.strip() for cls in selected_classes]
     selected_classes = [cls for cls in selected_classes if cls in seen_classes]
     selected_classes = selected_classes[:top_k]
+    logging.info(f"Prefiltering selected classes: {selected_classes}")
     return selected_classes
 
-def selected_postprocess(selected_classes):
-    import re
-    postprocessed_classes = []
-    for scls in selected_classes:
-        scls = re.sub(r'\d', '', scls)
-        scls = re.sub(r'[.,:]', '', scls)
-        scls = scls.strip()
-        postprocessed_classes.append(scls)
-    return postprocessed_classes
-        
 def prefiltering(
     question,
     snapshot_classes,
@@ -313,13 +302,13 @@ def explore_step(step, cfg):
         image_goal = image_goal
     )
     
-    logging.info(f"Input prompt:")
+    # logging.info(f"Input prompt:")
     message = sys_prompt
     for c in content:
         message += c[0]
         if len(c) == 2:
             message += f"[{c[1][:10]}...]"
-    logging.info(message)
+    # logging.info(message)
 
     retry_bound = 3
     final_response = None
@@ -345,9 +334,9 @@ def explore_step(step, cfg):
             continue
 
         response_valid = False
-        if choice_type == "snapshot" and 0 <= int(choice_id) < len(snapshot_imgs):
+        if choice_type == "snapshot" and choice_id.isdigit() and 0 <= int(choice_id) < len(snapshot_imgs):
             response_valid = True
-        elif choice_type == "frontier" and 0 <= int(choice_id) < len(frontier_imgs):
+        elif choice_type == "frontier" and choice_id.isdigit() and 0 <= int(choice_id) < len(frontier_imgs):
             response_valid = True
 
         if response_valid:

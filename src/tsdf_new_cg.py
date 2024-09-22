@@ -379,7 +379,8 @@ class TSDFPlanner(TSDFPlannerBase):
             objects: MapObjectDict[int, Dict],
             cfg,
             pathfinder,
-            random_position=False
+            random_position=False,
+            observe_snapshot=True
     ) -> bool:
         if self.max_point is not None or self.target_point is not None:
             # if the next point is already set
@@ -395,6 +396,12 @@ class TSDFPlanner(TSDFPlannerBase):
             obj_centers = np.asarray(obj_centers)
             snapshot_center = np.mean(obj_centers, axis=0)
             choice.position = snapshot_center
+
+            if not observe_snapshot:
+                # if the agent does not need to observe the snapshot, then the target point is the snapshot center
+                target_point = snapshot_center
+                self.target_point = get_nearest_true_point(target_point, self.unoccupied)  # get the nearest unoccupied point for the nav target
+                return True
 
             if len(obj_centers) == 1:
                 # if there is only one object in the snapshot, then the target point is the object center

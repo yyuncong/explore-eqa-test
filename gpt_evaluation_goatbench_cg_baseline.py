@@ -322,7 +322,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     subtask_metadata['question'] = f"Could you find the object described as \'{subtask_goal[0]['lang_desc']}\'?"
                 else:  # goal_type == "image"
                     subtask_metadata['question'] = f"Could you find the object captured in the following image?"
-                    view_pos_dict = random.choice(subtask_goal[0]["view_points"])['agent_state']
+                    view_pos_dict = subtask_goal[0]["view_points"][0]['agent_state']
                     obs,_ = scene.get_observation(pts=view_pos_dict["position"], rotation=view_pos_dict["rotation"])
                     plt.imsave(os.path.join(str(cfg.output_dir), f"{subtask_id}", "image_goal.png"), obs["color_sensor"])
                     subtask_metadata["image"] = f"{cfg.output_dir}/{subtask_id}/image_goal.png"

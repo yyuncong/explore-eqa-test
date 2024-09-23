@@ -81,7 +81,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
     detection_model = YOLOWorld(cfg.yolo_model_name)
     logging.info(f"Load YOLO model {cfg.yolo_model_name} successful!")
 
-    sam_predictor = SAM('mobile_sam.pt')  # SAM('sam_l.pt') # UltraLytics SAM
+    sam_predictor = SAM('sam_l.pt')  # SAM('sam_l.pt') # UltraLytics SAM
     # sam_predictor = measure_time(get_sam_predictor)(cfg) # Normal SAM
 
     clip_model, _, clip_preprocess = open_clip.create_model_and_transforms(

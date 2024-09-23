@@ -401,6 +401,11 @@ class Scene:
             for obj_id in detection_list.keys()
         }
 
+        det_visual_prompt = sv.Detections(
+            xyxy=gobs['xyxy'],
+            class_id=gobs['class_id'],
+        )
+
         # if no objects yet in the map,
         # just add all the objects from the current frame
         # then continue, no need to match or merge
@@ -408,6 +413,8 @@ class Scene:
             logging.debug(f"No objects in the map yet, adding all detections of length {len(detection_list)}")
             self.objects.update(detection_list)
 
+            det_visual_prompt.data['obj_id'] = list(detection_list.keys())
+            frame.visual_prompt = det_visual_prompt
             self.frames[img_path] = frame
 
             annotated_image = image_rgb
@@ -439,13 +446,16 @@ class Scene:
             )
 
             # Now merge the detected objects into the existing objects based on the match indices
-            visualize_captions, target_obj_id_mapping, added_obj_ids = self.merge_obj_matches(
+            visualize_captions, target_obj_id_mapping, added_obj_ids, all_obj_ids = self.merge_obj_matches(
                 detection_list=detection_list,
                 match_indices=match_indices,
                 obj_classes=obj_classes,
                 snapshot=frame,
                 target_obj_id_mapping=target_obj_id_mapping
             )
+
+            det_visual_prompt.data['obj_id'] = all_obj_ids
+            frame.visual_prompt = det_visual_prompt
 
             # add the snapshot into the snapshot list
             self.frames[img_path] = frame
@@ -500,8 +510,9 @@ class Scene:
         obj_classes: ObjectClasses,
         snapshot: SnapShot,
         target_obj_id_mapping: Dict[int, int]
-    ) -> Tuple[List[str], Dict[int, int], List[int]]:
+    ) -> Tuple[List[str], Dict[int, int], List[int], List[int]]:
         visualize_captions = []
+        all_obj_ids = []
         added_obj_ids = []
         for idx, (detected_obj_id, existing_obj_match_id) in enumerate(match_indices):
             if existing_obj_match_id is None:
@@ -509,6 +520,7 @@ class Scene:
                 visualize_captions.append(
                     f"{detected_obj_id} {self.objects[detected_obj_id]['class_name']} {self.objects[detected_obj_id]['conf']:.3f} N"
                 )
+                all_obj_ids.append(detected_obj_id)
                 added_obj_ids.append(detected_obj_id)
             else:
                 # merge detected object into existing object
@@ -540,13 +552,14 @@ class Scene:
                 visualize_captions.append(
                     f"{existing_obj_match_id} {self.objects[existing_obj_match_id]['class_name']} {detected_obj['conf']:.3f} {merged_obj['num_detections']}"
                 )
+                all_obj_ids.append(existing_obj_match_id)
 
                 # update the mapping of target object id
                 for gt_id, mapped_id in target_obj_id_mapping.items():
                     if mapped_id == detected_obj_id:
                         target_obj_id_mapping[gt_id] = existing_obj_match_id
 
-        return visualize_captions, target_obj_id_mapping, added_obj_ids
+        return visualize_captions, target_obj_id_mapping, added_obj_ids, all_obj_ids
 
     def make_detection_list_from_pcd_and_gobs(
             self, gobs, image_path, obj_classes

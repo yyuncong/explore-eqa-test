@@ -24,6 +24,7 @@ import glob
 import open_clip
 from ultralytics import SAM, YOLOWorld
 from hydra import initialize, compose
+import supervision as sv
 from habitat_sim.utils.common import quat_to_angle_axis, quat_from_coeffs
 import habitat_sim
 from src.habitat import (
@@ -35,10 +36,11 @@ from src.habitat import (
 )
 from src.geom import get_cam_intr, get_scene_bnds
 from src.tsdf_new_cg import TSDFPlanner, Frontier, SnapShot
-from src.scene_goatbench import Scene
+from src.scene_goatbench_v2 import Scene
 from src.eval_utils_goatbench import rgba2rgb
-from src.eval_utils_gpt import explore_step
+from src.eval_utils_gpt_v2 import explore_step
 
+# use image prompt to mark objects contained in the snapshot
 
 def resize_image(image, target_h, target_w):
     # image: np.array, h, w, c
@@ -79,7 +81,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
     detection_model = YOLOWorld(cfg.yolo_model_name)
     logging.info(f"Load YOLO model {cfg.yolo_model_name} successful!")
 
-    sam_predictor = SAM('sam_l.pt')  # SAM('sam_l.pt') # UltraLytics SAM
+    sam_predictor = SAM('mobile_sam.pt')  # SAM('sam_l.pt') # UltraLytics SAM
     # sam_predictor = measure_time(get_sam_predictor)(cfg) # Normal SAM
 
     clip_model, _, clip_preprocess = open_clip.create_model_and_transforms(
@@ -401,9 +403,8 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                                 semantic_obs=semantic_obs,
                                 gt_target_obj_ids=goal_obj_ids,
                             )
-                            resized_rgb = resize_image(rgb, cfg.prompt_h, cfg.prompt_w)
-                            all_snapshots[obs_file_name] = resized_rgb
-                            rgb_egocentric_views.append(resized_rgb)
+                            all_snapshots[obs_file_name] = rgb
+                            rgb_egocentric_views.append(resize_image(rgb, cfg.prompt_h, cfg.prompt_w))
                             if cfg.save_visualization or cfg.save_frontier_video:
                                 plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), annotated_rgb)
                             else:
@@ -448,7 +449,18 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     step_dict["snapshot_imgs"] = {}
                     for rgb_id, snapshot in scene.snapshots.items():
                         step_dict["snapshot_objects"][rgb_id] = snapshot.cluster
-                        step_dict["snapshot_imgs"][rgb_id] = all_snapshots[rgb_id]
+
+                        # add visual prompt to snapshots
+                        BOUNDING_BOX_ANNOTATOR = sv.BoundingBoxAnnotator(thickness=3, color=sv.Color(255, 255, 255))
+                        annot_snapshot = all_snapshots[rgb_id].copy()
+                        selected_bbox_idx = [idx for idx in range(len(snapshot.visual_prompt)) if snapshot.visual_prompt[idx].data['obj_id'][0] in snapshot.cluster]
+                        selected_bbox = snapshot.visual_prompt[selected_bbox_idx]
+                        annot_snapshot = BOUNDING_BOX_ANNOTATOR.annotate(annot_snapshot, selected_bbox)
+
+                        # tempt saving for debug
+                        plt.imsave(os.path.join(episode_snapshot_dir, f"{rgb_id}_annot.png"), annot_snapshot)
+
+                        step_dict["snapshot_imgs"][rgb_id] = resize_image(annot_snapshot, cfg.prompt_h, cfg.prompt_w)
 
                     update_success = tsdf_planner.update_frontier_map(pts=pts_normal, cfg=cfg.planner)
                     if not update_success:

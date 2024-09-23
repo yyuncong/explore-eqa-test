@@ -33,7 +33,7 @@ from src.habitat import (
 )
 from src.geom import get_cam_intr, get_scene_bnds
 from src.tsdf_new_cg import TSDFPlanner, Frontier, SnapShot
-from src.scene import Scene
+from src.scene_cg_baseline import Scene
 from src.eval_utils_snapshot_new import (
     prepare_step_dict,
     get_item,
@@ -56,115 +56,115 @@ from llava.mm_utils import get_model_name_from_path
 from easydict import EasyDict
 
 
-def infer_prefilter(model, tokenizer, sample):
-    # return prefiltered object list
-    filter_input_ids = sample.filter_input_ids.to("cuda")
-    if len(torch.where(sample.filter_input_ids==22550)[1]) == 0:
-        logging.info(f"invalid: no token 'answer'!")
-        return None
-    answer_ind = torch.where(sample.filter_input_ids==22550)[1][0].item()
-    filter_input_ids = filter_input_ids[:, :answer_ind+2]
-    # logging.info('prefiltering prompt')
-    # logging.info(
-    #     tokenizer.decode(filter_input_ids[0][filter_input_ids[0] != tokenizer.pad_token_id])
-    # )
-    with torch.no_grad():
-        with torch.inference_mode() and torch.autocast(device_type="cuda"):
-            filter_output_ids = model.generate(
-                filter_input_ids,
-                feature_dict=None,
-                do_sample=False,
-                max_new_tokens=100,
-            )
-    # parse the prefilter output
-        filter_outputs = tokenizer.decode(filter_output_ids[0, filter_input_ids.shape[1]:]).replace("</s>", "").strip()
-    # print("the output of prefiltering", filter_outputs)
-    # logging.info(f"prefiltering output: {filter_outputs}")
-    if filter_outputs == "No object available":
-        return []
-    else:
-        filter_outputs = filter_outputs.split("\n")
-        # print("parsed output of prefiltering", filter_outputs)
-        return filter_outputs
-
-def infer_selection(model, tokenizer, sample):
-    feature_dict = EasyDict(
-        scene_feature = sample.scene_feature.to("cuda"),
-        scene_insert_loc = sample.scene_insert_loc,
-        scene_length = sample.scene_length,
-    )
-    input_ids = sample.input_ids.to("cuda")
-    # logging.info('final input to the model')
-    # logging.info(
-    #     tokenizer.decode(input_ids[0][input_ids[0] != tokenizer.pad_token_id])
-    # )
-    # input()
-    # the loss of : exists in infer_selection
-    # but in final prompt
-    if len(torch.where(sample.input_ids==22550)[1]) == 0:
-        logging.info(f"invalid: no token 'answer'!")
-        return None
-        eixt(0)  # ???
-    answer_ind = torch.where(sample.input_ids==22550)[1][0].item()
-    input_ids = input_ids[:, :answer_ind+2]
-    with torch.no_grad():
-        with torch.inference_mode() and torch.autocast(device_type="cuda"):
-            output_ids = model.generate(
-                input_ids,
-                feature_dict=feature_dict,
-                do_sample=False,
-                max_new_tokens=10,
-            )
-        outputs = tokenizer.decode(output_ids[0, input_ids.shape[1]:]).replace("</s>", "").strip()
-    return outputs
-
-def inference(model, tokenizer, step_dict, cfg):
-    step_dict["use_prefiltering"] = cfg.prefiltering
-    #step_dict["use_egocentric_views"] = cfg.egocentric_views
-    #step_dict["use_action_memory"] = cfg.action_memory
-    step_dict["top_k_categories"] = cfg.top_k_categories
-    step_dict["add_positional_encodings"] = cfg.add_positional_encodings
-
-    num_visual_tokens = (cfg.visual_feature_size // cfg.patch_size) ** 2
-    step_dict["num_visual_tokens"] = num_visual_tokens
-    # print("pos", step_dict["add_positional_encodings"])
-    # try:
-    sample = get_item(
-        tokenizer, step_dict
-    )
-    # except:
-    #     logging.info(f"Get item failed! (most likely no frontiers and no objects)")
-    #     return None
-
-    if cfg.prefiltering:
-        filter_outputs = infer_prefilter(model,tokenizer,sample)
-        if filter_outputs is None:
-            return None
-        selection_dict = sample.selection_dict[0]
-        selection_input, snapshot_id_mapping = construct_selection_prompt(
-            tokenizer, 
-            selection_dict.text_before_snapshot,
-            selection_dict.feature_before_snapshot,
-            selection_dict.frontier_text,
-            selection_dict.frontier_features,
-            selection_dict.snapshot_info_dict,
-            4096,
-            True,
-            filter_outputs,
-            cfg.top_k_categories,
-            num_visual_tokens
-        )
-        sample = collate_wrapper([selection_input])
-        outputs = infer_selection(model,tokenizer,sample)
-        return outputs, snapshot_id_mapping
-    else:
-        # already loss Answer/:
-        #print('before input into inference')
-        #print(
-        #    tokenizer.decode(sample.input_ids[0][sample.input_ids[0] != tokenizer.pad_token_id])
-        #)
-        outputs = infer_selection(model,tokenizer,sample)
-        return outputs
+# def infer_prefilter(model, tokenizer, sample):
+#     # return prefiltered object list
+#     filter_input_ids = sample.filter_input_ids.to("cuda")
+#     if len(torch.where(sample.filter_input_ids==22550)[1]) == 0:
+#         logging.info(f"invalid: no token 'answer'!")
+#         return None
+#     answer_ind = torch.where(sample.filter_input_ids==22550)[1][0].item()
+#     filter_input_ids = filter_input_ids[:, :answer_ind+2]
+#     # logging.info('prefiltering prompt')
+#     # logging.info(
+#     #     tokenizer.decode(filter_input_ids[0][filter_input_ids[0] != tokenizer.pad_token_id])
+#     # )
+#     with torch.no_grad():
+#         with torch.inference_mode() and torch.autocast(device_type="cuda"):
+#             filter_output_ids = model.generate(
+#                 filter_input_ids,
+#                 feature_dict=None,
+#                 do_sample=False,
+#                 max_new_tokens=100,
+#             )
+#     # parse the prefilter output
+#         filter_outputs = tokenizer.decode(filter_output_ids[0, filter_input_ids.shape[1]:]).replace("</s>", "").strip()
+#     # print("the output of prefiltering", filter_outputs)
+#     # logging.info(f"prefiltering output: {filter_outputs}")
+#     if filter_outputs == "No object available":
+#         return []
+#     else:
+#         filter_outputs = filter_outputs.split("\n")
+#         # print("parsed output of prefiltering", filter_outputs)
+#         return filter_outputs
+#
+# def infer_selection(model, tokenizer, sample):
+#     feature_dict = EasyDict(
+#         scene_feature = sample.scene_feature.to("cuda"),
+#         scene_insert_loc = sample.scene_insert_loc,
+#         scene_length = sample.scene_length,
+#     )
+#     input_ids = sample.input_ids.to("cuda")
+#     # logging.info('final input to the model')
+#     # logging.info(
+#     #     tokenizer.decode(input_ids[0][input_ids[0] != tokenizer.pad_token_id])
+#     # )
+#     # input()
+#     # the loss of : exists in infer_selection
+#     # but in final prompt
+#     if len(torch.where(sample.input_ids==22550)[1]) == 0:
+#         logging.info(f"invalid: no token 'answer'!")
+#         return None
+#         eixt(0)  # ???
+#     answer_ind = torch.where(sample.input_ids==22550)[1][0].item()
+#     input_ids = input_ids[:, :answer_ind+2]
+#     with torch.no_grad():
+#         with torch.inference_mode() and torch.autocast(device_type="cuda"):
+#             output_ids = model.generate(
+#                 input_ids,
+#                 feature_dict=feature_dict,
+#                 do_sample=False,
+#                 max_new_tokens=10,
+#             )
+#         outputs = tokenizer.decode(output_ids[0, input_ids.shape[1]:]).replace("</s>", "").strip()
+#     return outputs
+#
+# def inference(model, tokenizer, step_dict, cfg):
+#     step_dict["use_prefiltering"] = cfg.prefiltering
+#     #step_dict["use_egocentric_views"] = cfg.egocentric_views
+#     #step_dict["use_action_memory"] = cfg.action_memory
+#     step_dict["top_k_categories"] = cfg.top_k_categories
+#     step_dict["add_positional_encodings"] = cfg.add_positional_encodings
+#
+#     num_visual_tokens = (cfg.visual_feature_size // cfg.patch_size) ** 2
+#     step_dict["num_visual_tokens"] = num_visual_tokens
+#     # print("pos", step_dict["add_positional_encodings"])
+#     # try:
+#     sample = get_item(
+#         tokenizer, step_dict
+#     )
+#     # except:
+#     #     logging.info(f"Get item failed! (most likely no frontiers and no objects)")
+#     #     return None
+#
+#     if cfg.prefiltering:
+#         filter_outputs = infer_prefilter(model,tokenizer,sample)
+#         if filter_outputs is None:
+#             return None
+#         selection_dict = sample.selection_dict[0]
+#         selection_input, snapshot_id_mapping = construct_selection_prompt(
+#             tokenizer,
+#             selection_dict.text_before_snapshot,
+#             selection_dict.feature_before_snapshot,
+#             selection_dict.frontier_text,
+#             selection_dict.frontier_features,
+#             selection_dict.snapshot_info_dict,
+#             4096,
+#             True,
+#             filter_outputs,
+#             cfg.top_k_categories,
+#             num_visual_tokens
+#         )
+#         sample = collate_wrapper([selection_input])
+#         outputs = infer_selection(model,tokenizer,sample)
+#         return outputs, snapshot_id_mapping
+#     else:
+#         # already loss Answer/:
+#         #print('before input into inference')
+#         #print(
+#         #    tokenizer.decode(sample.input_ids[0][sample.input_ids[0] != tokenizer.pad_token_id])
+#         #)
+#         outputs = infer_selection(model,tokenizer,sample)
+#         return outputs
 
 
 def main(cfg, start_ratio=0.0, end_ratio=1.0):
@@ -233,6 +233,11 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             path_length_list = pickle.load(f)
     else:
         path_length_list = {}
+    if os.path.exists(os.path.join(str(cfg.output_dir), f"fail_list_{start_ratio}_{end_ratio}.pkl")):
+        with open(os.path.join(str(cfg.output_dir), f"fail_list_{start_ratio}_{end_ratio}.pkl"), "rb") as f:
+            fail_list = pickle.load(f)
+    else:
+        fail_list = []
 
     success_count = 0
     max_target_observation = cfg.max_target_observation
@@ -242,6 +247,11 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
         question_id = question_data['question_id']
         question = question_data['question']
         answer = question_data['answer']
+
+        if question_id in success_list or question_id in fail_list:
+            logging.info(f"Question {question_id} already processed")
+            success_count += 1
+            continue
 
         # Extract question
         scene_id = question_data["episode_history"]
@@ -273,11 +283,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
         os.makedirs(episode_object_observe_dir, exist_ok=True)
         os.makedirs(episode_frontier_dir, exist_ok=True)
         os.makedirs(episode_snapshot_dir, exist_ok=True)
-
-        if len(os.listdir(episode_object_observe_dir)) > 0:
-            logging.info(f"Question id {question_id} already has enough target observations!")
-            success_count += 1
-            continue
 
         pts = np.asarray(init_pts)
         angle, axis = quat_to_angle_axis(init_quat)
@@ -316,16 +321,17 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
         explore_dist = 0.0
         cnt_step = -1
         target_observation_count = 0
-        memory_feature = None
-
-        all_snapshot_features = {}
 
         while cnt_step < num_step - 1:
             cnt_step += 1
             logging.info(f"\n== step: {cnt_step}")
             step_dict = {}
-            angle_increment = cfg.extra_view_angle_deg_phase_1 * np.pi / 180
-            total_views = 1 + cfg.extra_view_phase_1
+            if cnt_step == 0:
+                angle_increment = cfg.extra_view_angle_deg_phase_2 * np.pi / 180
+                total_views = 1 + cfg.extra_view_phase_2
+            else:
+                angle_increment = cfg.extra_view_angle_deg_phase_1 * np.pi / 180
+                total_views = 1 + cfg.extra_view_phase_1
             all_angles = [angle + angle_increment * (i - total_views // 2) for i in range(total_views)]
             # let the main viewing angle be the last one to avoid potential overwriting problems
             main_angle = all_angles.pop(total_views // 2)
@@ -333,12 +339,11 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
 
             # observe and update the TSDF
             rgb_egocentric_views_features = []
-            all_added_obj_ids = []
             for view_idx, ang in enumerate(all_angles):
                 obs, cam_pose = scene.get_observation(pts, ang)
                 rgb = obs["color_sensor"]
                 depth = obs["depth_sensor"]
-                semantic_obs = obs["semantic_sensor"]
+
                 rgb = rgba2rgb(rgb)
 
                 cam_pose_normal = pose_habitat_to_normal(cam_pose)
@@ -361,13 +366,11 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         img_feature.view(cfg.visual_feature_size, cfg.visual_feature_size, -1),
                         cfg.patch_size
                     )
-                    all_snapshot_features[obs_file_name] = img_feature.to("cpu")
                     rgb_egocentric_views_features.append(img_feature.to("cpu"))
                     if cfg.save_visualization or cfg.save_frontier_video:
                         plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), annotated_rgb)
                     else:
                         plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), rgb)
-                    all_added_obj_ids += added_obj_ids
 
                 # clean up or merge redundant objects periodically
                 scene.periodic_cleanup_objects(frame_idx=cnt_step * total_views + view_idx, pts=pts)
@@ -384,25 +387,10 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     explored_depth=cfg.explored_depth,
                 )
 
-            # cluster all the newly added objects
-            all_added_obj_ids = [obj_id for obj_id in all_added_obj_ids if obj_id in scene.objects]
-            # as well as the objects nearby
-            for obj_id, obj in scene.objects.items():
-                if np.linalg.norm(obj['bbox'].center[[0, 2]] - pts[[0, 2]]) < cfg.scene_graph.obj_include_dist + 0.5:
-                    all_added_obj_ids.append(obj_id)
-            scene.update_snapshots(obj_ids=set(all_added_obj_ids))
-            logging.info(f"Step {cnt_step} {len(scene.objects)} objects, {len(scene.snapshots)} snapshots")
+            logging.info(f"Step {cnt_step} {len(scene.objects)} objects")
 
             # update the mapping of object id to class name, since the objects have been updated
             object_id_to_name = {obj_id: obj["class_name"] for obj_id, obj in scene.objects.items()}
-
-            step_dict["snapshot_features"] = {}
-            step_dict["snapshot_objects"] = {}
-            for rgb_id, snapshot in scene.snapshots.items():
-                step_dict["snapshot_features"][rgb_id] = all_snapshot_features[rgb_id]
-                step_dict["snapshot_objects"][rgb_id] = snapshot.cluster
-            # print(step_dict["snapshot_objects"])
-            # input()
 
             # record current scene graph
             step_dict["scene_graph"] = list(scene.objects.keys())
@@ -483,15 +471,16 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     vlm_id_count += 1
                 vlm_id_to_ft_id = {v: k for k, v in ft_id_to_vlm_id.items()}
 
+                step_dict["objects"] = {}
+                for obj_id, obj in scene.objects.items():
+                    step_dict["objects"][obj_id] = obj["image_crop"]  # obj_id -> image_crop: pil_image
+                    assert False, "Check here and then remove this line!" # TODO: image_crop is pil_image, need to somehow convert to feature
+
                 if cfg.egocentric_views:
                     assert len(rgb_egocentric_views_features) == total_views
                     rgb_egocentric_views_features_tensor = torch.cat(rgb_egocentric_views_features, dim=0)
                     step_dict["egocentric_view_features"] = rgb_egocentric_views_features_tensor
                     step_dict["use_egocentric_views"] = True
-
-                if cfg.action_memory:
-                    step_dict["memory_feature"] = memory_feature
-                    step_dict["use_action_memory"] = True
 
                 # add model prediction here
                 if len(step_dict["frontiers"]) > 0:
@@ -509,11 +498,12 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     step_dict["frontier_positions"] = None
                 step_dict["question"] = question
                 step_dict["scene"] = scene_id
+
                 if cfg.prefiltering:
-                    outputs, snapshot_id_mapping = inference(model, tokenizer, step_dict, cfg)
+                    outputs, obj_id_mapping = inference(model, tokenizer, step_dict, cfg)
                 else:
                     outputs = inference(model, tokenizer, step_dict, cfg)
-                    snapshot_id_mapping = None
+                    obj_id_mapping = None
                 if outputs is None:
                     # encounter generation error
                     logging.info(f"Question id {question_id} invalid: model generation error!")
@@ -526,44 +516,36 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     logging.info(f"Wrong output format, failed!")
                     break
 
-                if target_type not in ["snapshot", "frontier"]:
+                if target_type not in ["object", "frontier"]:
                     logging.info(f"Invalid prediction type: {target_type}, failed!")
                     print(target_type)
                     break
 
-                if target_type == "snapshot":
+                if target_type == "object":
                     # TODO: the problem needed to be fixed here
-                    if snapshot_id_mapping is not None:
-                        if int(target_index) < 0 or int(target_index) >= len(snapshot_id_mapping):
+                    if obj_id_mapping is not None:
+                        if int(target_index) < 0 or int(target_index) >= len(obj_id_mapping):
                             logging.info(f"target index can not match real objects: {target_index}, failed!")
                             break
-                        target_index = snapshot_id_mapping[int(target_index)]
-                        logging.info(f"The index of target snapshot {target_index}")
+                        target_index = obj_id_mapping[int(target_index)]
+                        logging.info(f"The index of target object {target_index}")
                     if int(target_index) < 0 or int(target_index) >= len(scene.objects):
                         logging.info(f"Prediction out of range: {target_index}, {len(scene.objects)}, failed!")
                         break
-                    pred_target_snapshot = list(scene.snapshots.values())[int(target_index)]
-                    logging.info(
-                        "pred_target_class: " + str(' '.join([object_id_to_name[obj_id] for obj_id in pred_target_snapshot.cluster]))
+                    pred_target_object = list(scene.objects.values())[int(target_index)]
+                    logging.info(f"Predicted object: id: {pred_target_object['id']}, class: {pred_target_object['class_name']}, num_detections: {pred_target_object['num_detections']}")
+
+                    # construct a snapshot for the object
+                    pred_target_snapshot = SnapShot(
+                        image="no_use",
+                        color=(random.random(), random.random(), random.random()),
+                        obs_point=np.empty(3),
+                        full_obj_list={pred_target_object['id']: pred_target_object['conf']},
+                        cluster=[pred_target_object['id']],
                     )
 
-                    logging.info(f"Next choice Snapshot of {pred_target_snapshot.image}")
                     tsdf_planner.frontiers_weight = np.zeros((len(tsdf_planner.frontiers)))
-                    # TODO: where to go if snapshot?
                     max_point_choice = pred_target_snapshot
-
-                    # print the items in the scene graph
-                    snapshot_dict = {}
-                    for obj_id, obj in scene.objects.items():
-                        if obj['image'] not in snapshot_dict:
-                            snapshot_dict[obj['image']] = []
-                        snapshot_dict[obj['image']].append(
-                            f"{obj_id}: {obj['class_name']} {obj['num_detections']}"
-                        )
-                    for snapshot_id, obj_list in snapshot_dict.items():
-                        logging.info(f"{snapshot_id}:")
-                        for obj_str in obj_list:
-                            logging.info(f"\t{obj_str}")
                 else:
                     target_index = int(target_index)
                     if target_index not in vlm_id_to_ft_id.keys():
@@ -574,9 +556,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     logging.info(f"Next choice: Frontier at {target_point}")
                     tsdf_planner.frontiers_weight = np.zeros((len(tsdf_planner.frontiers)))
                     max_point_choice = tsdf_planner.frontiers[target_index]
-
-                    # TODO: modify this: update memory feature only in frontiers (for now)
-                    memory_feature = tsdf_planner.frontiers[target_index].feature.to("cpu")
 
                 if max_point_choice is None:
                     logging.info(f"Question id {question_id} invalid: no valid choice!")
@@ -598,7 +577,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 pts=pts_normal,
                 angle=angle,
                 objects=scene.objects,
-                snapshots=scene.snapshots,
+                snapshots={},
                 pathfinder=scene.pathfinder,
                 cfg=cfg.planner,
                 path_points=None,
@@ -608,37 +587,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 logging.info(f"Question id {question_id} invalid: agent_step failed!")
                 break
             pts_normal, angle, pts_pix, fig, _, target_arrived = return_values
-
-            # sanity check
-            obj_exclude_count = sum([1 if obj['num_detections'] < 2 else 0 for obj in scene.objects.values()])
-            total_objs_count = sum(
-                [len(snapshot.cluster) for snapshot in scene.snapshots.values()]
-            )
-            assert len(scene.objects) == total_objs_count + obj_exclude_count, f"{len(scene.objects)} != {total_objs_count} + {obj_exclude_count}"
-            total_objs_count = sum(
-                [len(set(snapshot.cluster)) for snapshot in scene.snapshots.values()]
-            )
-            assert len(scene.objects) == total_objs_count + obj_exclude_count, f"{len(scene.objects)} != {total_objs_count} + {obj_exclude_count}"
-            for obj_id in scene.objects.keys():
-                exist_count = 0
-                for ss in scene.snapshots.values():
-                    if obj_id in ss.cluster:
-                        exist_count += 1
-                if scene.objects[obj_id]['num_detections'] < 2:
-                    assert exist_count == 0, f"{exist_count} != 0 for obj_id {obj_id}, {scene.objects[obj_id]['class_name']}"
-                else:
-                    assert exist_count == 1, f"{exist_count} != 1 for obj_id {obj_id}, {scene.objects[obj_id]['class_name']}"
-            for ss in scene.snapshots.values():
-                assert len(ss.cluster) == len(set(ss.cluster)), f"{ss.cluster} has duplicates"
-                assert len(ss.full_obj_list.keys()) == len(set(ss.full_obj_list.keys())), f"{ss.full_obj_list.keys()} has duplicates"
-                for obj_id in ss.cluster:
-                    assert obj_id in ss.full_obj_list, f"{obj_id} not in {ss.full_obj_list.keys()}"
-                for obj_id in ss.full_obj_list.keys():
-                    assert obj_id in scene.objects, f"{obj_id} not in scene objects"
-            # check whether the snapshots in scene.snapshots and scene.frames are the same
-            for file_name, ss in scene.snapshots.items():
-                assert ss.cluster == scene.frames[file_name].cluster, f"{ss}\n!=\n{scene.frames[file_name]}"
-                assert ss.full_obj_list == scene.frames[file_name].full_obj_list, f"{ss}\n==\n{scene.frames[file_name]}"
 
             # update the agent's position record
             pts_pixs = np.vstack((pts_pixs, pts_pix))
@@ -674,10 +622,12 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                             if type(max_point_choice) == Frontier and max_point_choice.image == tsdf_planner.frontiers[i].image:
                                 axs[h_idx, w_idx].set_title('Chosen')
                         elif i == num_images - 1 and type(max_point_choice) == SnapShot:
-                            img_path = os.path.join(episode_snapshot_dir, max_point_choice.image)
-                            img = matplotlib.image.imread(img_path)
+                            obj_id = max_point_choice.cluster[0]
+                            img_pil = scene.objects[obj_id]["image_crop"]
+                            img = np.array(img_pil)
+
                             axs[h_idx, w_idx].imshow(img)
-                            axs[h_idx, w_idx].set_title('Snapshot Chosen')
+                            axs[h_idx, w_idx].set_title('Object Chosen')
                 global_caption = f"{question}\n{answer}"
                 fig.suptitle(global_caption, fontsize=16)
                 plt.tight_layout(rect=(0., 0., 1., 0.95))
@@ -700,9 +650,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 plt.imsave(
                     os.path.join(episode_object_observe_dir, f"target_{target_observation_count}.png"), rgb
                 )
-                # also, save the snapshot image itself
-                snapshot_filename = max_point_choice.image.split(".")[0]
-                os.system(f"cp {os.path.join(episode_snapshot_dir, max_point_choice.image)} {os.path.join(episode_object_observe_dir, f'snapshot_{snapshot_filename}.png')}")
 
                 target_observation_count += 1
                 if target_observation_count >= max_target_observation:
@@ -722,128 +669,29 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             path_length_list[question_id] = explore_dist
             logging.info(f"Question id {question_id} finish with {cnt_step} steps, {explore_dist} length")
         else:
+            fail_list.append(question_id)
             logging.info(f"Question id {question_id} failed, {explore_dist} length")
         logging.info(f"{question_idx + 1}/{total_questions}: Success rate: {success_count}/{question_idx + 1}")
         logging.info(f"Mean path length for success exploration: {np.mean(list(path_length_list.values()))}")
         # logging.info(f'Scene {scene_id} finish')
 
-        # if target not found, select images from existing snapshots for question answering
-        if not target_found:
-            if cfg.handle_target_not_found == 'none':
-                selected_snapshot_ids = []
-            elif cfg.handle_target_not_found == "random":
-                all_snapshot_ids = list(scene.snapshots.keys())
-                selected_snapshot_ids = random.sample(all_snapshot_ids, len(cfg.num_final_images))
-            elif cfg.handle_target_not_found == "with_model":
-                selected_snapshot_ids = []
-                for _ in range(cfg.num_final_images):
-                    step_dict = {}
-                    # add snapshot features
-                    step_dict["snapshot_features"] = {}
-                    step_dict["snapshot_objects"] = {}
-                    snapshot_id_mapping = {}
-                    prompt_ss_idx = 0
-                    for snapshot_idx, (rgb_id, snapshot) in enumerate(scene.snapshots.items()):
-                        if rgb_id in selected_snapshot_ids:
-                            continue
-                        step_dict["snapshot_features"][rgb_id] = all_snapshot_features[rgb_id]
-                        step_dict["snapshot_objects"][rgb_id] = snapshot.cluster
-
-                        snapshot_id_mapping[prompt_ss_idx] = snapshot_idx
-                        prompt_ss_idx += 1
-
-                    if len(snapshot_id_mapping) == 0:
-                        logging.info(f"Question id {question_id} target not found handling: no snapshots available!")
-                        break
-
-                    # add scene graph
-                    step_dict["scene_graph"] = list(scene.objects.keys())
-                    step_dict["scene_graph"] = [int(x) for x in step_dict["scene_graph"]]
-                    step_dict["obj_map"] = object_id_to_name
-                    step_dict["position"] = np.array(pts)[None,]
-                    obj_positions_map = {
-                        str(obj_id): obj['bbox'].center
-                        for obj_id, obj in scene.objects.items()
-                    }
-                    obj_positions_map = {
-                        key: value - step_dict["position"] for key, value in obj_positions_map.items()
-                    }
-                    step_dict["obj_position_map"] = obj_positions_map
-
-                    # we don't need to add frontier for model selection
-                    step_dict["frontiers"] = []
-
-                    if cfg.egocentric_views:
-                        step_dict["egocentric_view_features"] = rgb_egocentric_views_features_tensor
-                        step_dict["use_egocentric_views"] = True
-
-                    if cfg.action_memory:
-                        step_dict["memory_feature"] = memory_feature
-                        step_dict["use_action_memory"] = True
-
-                    step_dict["frontier_features"] = None
-                    step_dict["frontier_positions"] = None
-                    step_dict["question"] = question
-                    step_dict["scene"] = scene_id
-                    if cfg.prefiltering:
-                        outputs, _ = inference(model, tokenizer, step_dict, cfg)
-                    else:
-                        outputs = inference(model, tokenizer, step_dict, cfg)
-                    if outputs is None:
-                        logging.info(f"Question id {question_id} target not found handling: model generation error!")
-                        continue
-                    try:
-                        target_type, target_index = outputs.split(" ")[0], outputs.split(" ")[1]
-                        logging.info(f"Prediction in target not found handling: {target_type}, {target_index}")
-                    except:
-                        logging.info(f"Wrong output format in target not found handling, failed!")
-                        continue
-
-                    if target_type != "snapshot":
-                        logging.info(f"Invalid prediction type in target not found handling: {target_type}, failed!")
-                        continue
-
-                    if int(target_index) < 0 or int(target_index) >= len(snapshot_id_mapping):
-                        logging.info(f"target index can not match real objects in target not found handling: {target_index}, failed!")
-                        continue
-                    target_index = snapshot_id_mapping[int(target_index)]
-                    pred_target_snapshot = list(scene.snapshots.values())[int(target_index)]
-
-                    assert pred_target_snapshot.image not in selected_snapshot_ids, f"{pred_target_snapshot.image} already selected"
-                    selected_snapshot_ids.append(pred_target_snapshot.image)
-                    logging.info(f"Handling target not found: choose snapshot {pred_target_snapshot.image}")
-
-            # save the selected images
-            for ss_id in selected_snapshot_ids:
-                os.system(f"cp {os.path.join(episode_snapshot_dir, ss_id)} {os.path.join(episode_object_observe_dir, f'snapshot_{ss_id}')}")
-
-
-
-        # print the items in the scene graph
-        snapshot_dict = {}
-        for obj_id, obj in scene.objects.items():
-            if obj['image'] not in snapshot_dict:
-                snapshot_dict[obj['image']] = []
-            snapshot_dict[obj['image']].append(
-                f"{obj_id}: {obj['class_name']} {obj['num_detections']}"
-            )
         logging.info(f"Scene graph of question {question_id}:")
         logging.info(f"Question: {question}")
         logging.info(f"Answer: {answer}")
-        for snapshot_id, obj_list in snapshot_dict.items():
-            logging.info(f"{snapshot_id}:")
-            for obj_str in obj_list:
-                logging.info(f"\t{obj_str}")
 
         with open(os.path.join(str(cfg.output_dir), f"success_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
             pickle.dump(success_list, f)
         with open(os.path.join(str(cfg.output_dir), f"path_length_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
             pickle.dump(path_length_list, f)
+        with open(os.path.join(str(cfg.output_dir), f"fail_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
+            pickle.dump(fail_list, f)
 
     with open(os.path.join(str(cfg.output_dir), f"success_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
         pickle.dump(success_list, f)
     with open(os.path.join(str(cfg.output_dir), f"path_length_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
         pickle.dump(path_length_list, f)
+    with open(os.path.join(str(cfg.output_dir), f"fail_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
+        pickle.dump(fail_list, f)
 
     logging.info(f'All scenes finish')
 

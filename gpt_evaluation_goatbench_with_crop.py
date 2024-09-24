@@ -3,6 +3,7 @@ import matplotlib.image
 import quaternion
 import os
 import random
+
 os.environ["TRANSFORMERS_VERBOSITY"] = "error"  # disable warning
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["HABITAT_SIM_LOG"] = (
@@ -38,7 +39,8 @@ from src.geom import get_cam_intr, get_scene_bnds
 from src.tsdf_new_cg import TSDFPlanner, Frontier, SnapShot
 from src.scene_goatbench_v2 import Scene
 from src.eval_utils_goatbench import rgba2rgb
-from src.eval_utils_gpt_v2 import explore_step
+from src.eval_utils_gpt_goatbench_prompt import explore_step
+
 
 # use image prompt to mark objects contained in the snapshot
 
@@ -120,14 +122,14 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             open(os.path.join(str(cfg.output_dir), f"success_by_task_{start_ratio}_{end_ratio}.pkl"), "rb")
         )
     else:
-        #success_by_task = {}  # task type -> success
+        # success_by_task = {}  # task type -> success
         success_by_task = defaultdict(list)
     if os.path.exists(os.path.join(str(cfg.output_dir), f"spl_by_task_{start_ratio}_{end_ratio}.pkl")):
         spl_by_task = pickle.load(
             open(os.path.join(str(cfg.output_dir), f"spl_by_task_{start_ratio}_{end_ratio}.pkl"), "rb")
         )
     else:
-        #spl_by_task = {}  # task type -> spl
+        # spl_by_task = {}  # task type -> spl
         spl_by_task = defaultdict(list)
     assert len(success_by_snapshot) == len(spl_by_snapshot) == len(success_by_distance) == len(spl_by_distance), f"{len(success_by_snapshot)} != {len(spl_by_snapshot)} != {len(success_by_distance)} != {len(spl_by_distance)}"
     assert sum([len(task_res) for task_res in success_by_task.values()]) == sum([len(task_res) for task_res in spl_by_task.values()]) == len(success_by_snapshot), f"{sum([len(task_res) for task_res in success_by_task.values()])} != {sum([len(task_res) for task_res in spl_by_task.values()])} != {len(success_by_snapshot)}"
@@ -137,7 +139,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
         scene_name = scene_data_file.split(".")[0]
         scene_id = [scene_id for scene_id in all_scene_ids if scene_name in scene_id][0]
         # workaround for debugging
-        #if scene_id != "00820-mL8ThkuaVTM":
+        # if scene_id != "00820-mL8ThkuaVTM":
         #    continue
         scene_data = json.load(open(os.path.join(cfg.test_data_dir, scene_data_file), "r"))
         total_episodes = len(scene_data["episodes"])
@@ -318,12 +320,10 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     "answer": goal_category,
                     "object_id": goal_obj_ids,  # this is a list of obj id, since for object class type, there will be multiple target objects
                     "class": goal_category,
-                    "position": goal_positions, # also a list of positions for possible multiple objects
+                    "position": goal_positions,  # also a list of positions for possible multiple objects
                     "task_type": goal_type
                 }
                 # format question according to the goal type
-                #if goal_type != "image":
-                #    continue
                 if goal_type == "object":
                     subtask_metadata['question'] = f"Where is the {goal_category}?"
                 elif goal_type == "description":
@@ -331,10 +331,10 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 else:  # goal_type == "image"
                     subtask_metadata['question'] = f"Could you find the object captured in the following image?"
                     view_pos_dict = subtask_goal[0]["view_points"][0]['agent_state']
-                    obs,_ = scene.get_observation(pts=view_pos_dict["position"], rotation=view_pos_dict["rotation"])
+                    obs, _ = scene.get_observation(pts=view_pos_dict["position"], rotation=view_pos_dict["rotation"])
                     plt.imsave(os.path.join(str(cfg.output_dir), f"{subtask_id}", "image_goal.png"), rgba2rgb(obs["color_sensor"]))
                     subtask_metadata["image"] = f"{cfg.output_dir}/{subtask_id}/image_goal.png"
-                
+
                 # record the history of the agent's path
                 pts_pixs = np.empty((0, 2))
                 pts_pixs = np.vstack((pts_pixs, tsdf_planner.habitat2voxel(pts)[:2]))
@@ -450,17 +450,30 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     for rgb_id, snapshot in scene.snapshots.items():
                         step_dict["snapshot_objects"][rgb_id] = snapshot.cluster
 
-                        # add visual prompt to snapshots
-                        BOUNDING_BOX_ANNOTATOR = sv.BoundingBoxAnnotator(thickness=3, color=sv.Color(255, 255, 255))
-                        annot_snapshot = all_snapshots[rgb_id].copy()
+                        # crop the snapshot to contain only the objects in the snapshot
+                        cropped_snapshot = all_snapshots[rgb_id].copy()
                         selected_bbox_idx = [idx for idx in range(len(snapshot.visual_prompt)) if snapshot.visual_prompt[idx].data['obj_id'][0] in snapshot.cluster]
                         selected_bbox = snapshot.visual_prompt[selected_bbox_idx]
-                        annot_snapshot = BOUNDING_BOX_ANNOTATOR.annotate(annot_snapshot, selected_bbox)
 
-                        # tempt saving for debug
-                        plt.imsave(os.path.join(episode_snapshot_dir, f"{rgb_id}_annot.png"), annot_snapshot)
+                        H, W = cropped_snapshot.shape[:2]
+                        x_min = np.min(selected_bbox.xyxy[:, 0])
+                        x_max = np.max(selected_bbox.xyxy[:, 2])
+                        y_min = np.min(selected_bbox.xyxy[:, 1])
+                        y_max = np.max(selected_bbox.xyxy[:, 3])
+                        margin = 200
+                        x_min = int(max(0, x_min - margin))
+                        x_max = int(min(cropped_snapshot.shape[1], x_max + margin))
+                        y_min = int(max(0, y_min - margin))
+                        y_max = int(min(cropped_snapshot.shape[0], y_max + margin))
+                        cropped_snapshot = cropped_snapshot[y_min:y_max, x_min:x_max]
 
-                        step_dict["snapshot_imgs"][rgb_id] = resize_image(annot_snapshot, cfg.prompt_h, cfg.prompt_w)
+                        resize_h = int((y_max - y_min) * cfg.prompt_h / H)
+                        resize_w = int((x_max - x_min) * cfg.prompt_w / W)
+
+                        # # tempt saving for debug
+                        # plt.imsave(os.path.join(episode_snapshot_dir, f"{rgb_id}_crop.png"), resize_image(cropped_snapshot, resize_h, resize_w))
+
+                        step_dict["snapshot_imgs"][rgb_id] = resize_image(cropped_snapshot, resize_h, resize_w)
 
                     update_success = tsdf_planner.update_frontier_map(pts=pts_normal, cfg=cfg.planner)
                     if not update_success:
@@ -534,7 +547,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                             step_dict["frontier_imgs"] = [frontier["img"] for frontier in step_dict["frontiers"]]
                         else:
                             step_dict["frontier_imgs"] = []
-                        step_dict["question"] = subtask_metadata["question"]#question
+                        step_dict["question"] = subtask_metadata["question"]  # question
                         step_dict["scene"] = scene_id
                         step_dict["task_type"] = subtask_metadata["task_type"]
                         step_dict["class"] = subtask_metadata["class"]
@@ -547,7 +560,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                             break
                         try:
                             target_type, target_index = outputs.split(" ")[0], outputs.split(" ")[1]
-                            #print(f"Prediction: {target_type}, {target_index}")
+                            # print(f"Prediction: {target_type}, {target_index}")
                             logging.info(f"Prediction: {target_type}, {target_index}")
                         except:
                             logging.info(f"Wrong output format, failed!")
@@ -743,7 +756,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     logging.info(f"Success: {target_obj_ids_estimate} in chosen snapshot {max_point_choice.image}!")
                 else:
                     success_by_snapshot[subtask_id] = 0.0
-                    logging.info(f"Fail: {target_obj_ids_estimate} not in chosen snapshot {max_point_choice.image}!")
+                    logging.info(f"Fail: {target_obj_ids_estimate} not in chosen snapshot!")
 
                 # calculate the distance to the nearest view point
                 all_distances = []
@@ -829,7 +842,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             if not cfg.save_visualization and not cfg.save_frontier_video:
                 os.system(f"rm -r {episode_data_dir}")
 
-
     # save the results
     assert len(success_by_snapshot) == len(spl_by_snapshot) == len(success_by_distance) == len(
         spl_by_distance), f"{len(success_by_snapshot)} != {len(spl_by_snapshot)} != {len(success_by_distance)} != {len(spl_by_distance)}"
@@ -899,6 +911,7 @@ if __name__ == "__main__":
     logging_path = os.path.join(str(cfg.output_dir), f"log_{args.start_ratio:.2f}_{args.end_ratio:.2f}.log")
 
     os.system(f"cp {args.cfg_file} {cfg.output_dir}")
+
 
     class ElapsedTimeFormatter(logging.Formatter):
         def __init__(self, fmt=None, datefmt=None):

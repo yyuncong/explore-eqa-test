@@ -3,6 +3,7 @@ import matplotlib.image
 import quaternion
 import os
 import random
+
 os.environ["TRANSFORMERS_VERBOSITY"] = "error"  # disable warning
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["HABITAT_SIM_LOG"] = (
@@ -37,7 +38,7 @@ from src.geom import get_cam_intr, get_scene_bnds
 from src.tsdf_new_cg import TSDFPlanner, Frontier, SnapShot
 from src.scene_goatbench import Scene
 from src.eval_utils_goatbench import rgba2rgb
-from src.eval_utils_gpt import explore_step
+from src.eval_utils_gpt_goatbench_prompt import explore_step
 
 
 def resize_image(image, target_h, target_w):
@@ -118,14 +119,14 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             open(os.path.join(str(cfg.output_dir), f"success_by_task_{start_ratio}_{end_ratio}.pkl"), "rb")
         )
     else:
-        #success_by_task = {}  # task type -> success
+        # success_by_task = {}  # task type -> success
         success_by_task = defaultdict(list)
     if os.path.exists(os.path.join(str(cfg.output_dir), f"spl_by_task_{start_ratio}_{end_ratio}.pkl")):
         spl_by_task = pickle.load(
             open(os.path.join(str(cfg.output_dir), f"spl_by_task_{start_ratio}_{end_ratio}.pkl"), "rb")
         )
     else:
-        #spl_by_task = {}  # task type -> spl
+        # spl_by_task = {}  # task type -> spl
         spl_by_task = defaultdict(list)
     assert len(success_by_snapshot) == len(spl_by_snapshot) == len(success_by_distance) == len(spl_by_distance), f"{len(success_by_snapshot)} != {len(spl_by_snapshot)} != {len(success_by_distance)} != {len(spl_by_distance)}"
     assert sum([len(task_res) for task_res in success_by_task.values()]) == sum([len(task_res) for task_res in spl_by_task.values()]) == len(success_by_snapshot), f"{sum([len(task_res) for task_res in success_by_task.values()])} != {sum([len(task_res) for task_res in spl_by_task.values()])} != {len(success_by_snapshot)}"
@@ -135,7 +136,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
         scene_name = scene_data_file.split(".")[0]
         scene_id = [scene_id for scene_id in all_scene_ids if scene_name in scene_id][0]
         # workaround for debugging
-        #if scene_id != "00820-mL8ThkuaVTM":
+        # if scene_id != "00820-mL8ThkuaVTM":
         #    continue
         scene_data = json.load(open(os.path.join(cfg.test_data_dir, scene_data_file), "r"))
         total_episodes = len(scene_data["episodes"])
@@ -146,6 +147,9 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             logging.info(f"Episode {episode_idx + 1}/{total_episodes}")
             logging.info(f"Loading scene {scene_id}")
             episode_id = episode["episode_id"]
+
+            # if '00853' not in scene_id:
+            #     continue
 
             # filter the task according to goatbench
             filtered_tasks = []
@@ -320,19 +324,17 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     "task_type": goal_type
                 }
                 # format question according to the goal type
-                #if goal_type != "image":
-                #    continue
                 if goal_type == "object":
-                    subtask_metadata['question'] = f"Where is the {goal_category}?"
+                    subtask_metadata['question'] = f"Can you find the {goal_category}?"
                 elif goal_type == "description":
-                    subtask_metadata['question'] = f"Could you find the object described as \'{subtask_goal[0]['lang_desc']}\'?"
+                    subtask_metadata['question'] = f"Could you find the object exactly described as \'{subtask_goal[0]['lang_desc']}\'?"
                 else:  # goal_type == "image"
-                    subtask_metadata['question'] = f"Could you find the object captured in the following image?"
+                    subtask_metadata['question'] = f"Could you find the place and object captured in the following image? You need to pay attention to the environment and find the exactly same scene."
                     view_pos_dict = subtask_goal[0]["view_points"][0]['agent_state']
-                    obs,_ = scene.get_observation(pts=view_pos_dict["position"], rotation=view_pos_dict["rotation"])
+                    obs, _ = scene.get_observation(pts=view_pos_dict["position"], rotation=view_pos_dict["rotation"])
                     plt.imsave(os.path.join(str(cfg.output_dir), f"{subtask_id}", "image_goal.png"), rgba2rgb(obs["color_sensor"]))
                     subtask_metadata["image"] = f"{cfg.output_dir}/{subtask_id}/image_goal.png"
-                
+
                 # record the history of the agent's path
                 pts_pixs = np.empty((0, 2))
                 pts_pixs = np.vstack((pts_pixs, tsdf_planner.habitat2voxel(pts)[:2]))
@@ -522,7 +524,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                             step_dict["frontier_imgs"] = [frontier["img"] for frontier in step_dict["frontiers"]]
                         else:
                             step_dict["frontier_imgs"] = []
-                        step_dict["question"] = subtask_metadata["question"]#question
+                        step_dict["question"] = subtask_metadata["question"]  # question
                         step_dict["scene"] = scene_id
                         step_dict["task_type"] = subtask_metadata["task_type"]
                         step_dict["class"] = subtask_metadata["class"]
@@ -535,7 +537,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                             break
                         try:
                             target_type, target_index = outputs.split(" ")[0], outputs.split(" ")[1]
-                            #print(f"Prediction: {target_type}, {target_index}")
+                            # print(f"Prediction: {target_type}, {target_index}")
                             logging.info(f"Prediction: {target_type}, {target_index}")
                         except:
                             logging.info(f"Wrong output format, failed!")
@@ -731,7 +733,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     logging.info(f"Success: {target_obj_ids_estimate} in chosen snapshot {max_point_choice.image}!")
                 else:
                     success_by_snapshot[subtask_id] = 0.0
-                    logging.info(f"Fail: {target_obj_ids_estimate} not in chosen snapshot {max_point_choice.image}!")
+                    logging.info(f"Fail: {target_obj_ids_estimate} not in chosen snapshot {max_point_choice}!")
 
                 # calculate the distance to the nearest view point
                 all_distances = []
@@ -887,6 +889,7 @@ if __name__ == "__main__":
     logging_path = os.path.join(str(cfg.output_dir), f"log_{args.start_ratio:.2f}_{args.end_ratio:.2f}.log")
 
     os.system(f"cp {args.cfg_file} {cfg.output_dir}")
+
 
     class ElapsedTimeFormatter(logging.Formatter):
         def __init__(self, fmt=None, datefmt=None):

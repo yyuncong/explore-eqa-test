@@ -370,7 +370,12 @@ def explore_step(step, cfg):
 
         response_valid = False
         if choice_type == "snapshot" and choice_id.isdigit() and 0 <= int(choice_id) < len(snapshot_full_imgs):
-            object_choice_type, object_choice_id = response.split(",")[1].strip().split(" ")
+            try:
+                object_choice_type, object_choice_id = response.split(",")[1].strip().split(" ")
+            except Exception as e:
+                print(f"Error in splitting response: {response}")
+                print(e)
+                continue
             if object_choice_type == "object" and object_choice_id.isdigit() and 0 <= int(object_choice_id) < len(list(snapshot_crop_mapping.values())[int(choice_id)]):
                 response_valid = True
         elif choice_type == "frontier" and choice_id.isdigit() and 0 <= int(choice_id) < len(frontier_imgs):

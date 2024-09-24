@@ -105,30 +105,39 @@ def get_step_info(step):
         frontier_imgs.append(encode_tensor2base64(frontier))
 
     # 2.3 get snapshots
-    snapshot_imgs, snapshot_classes = [], []
+    snapshot_classes = {}  # rgb_id -> list of classes
+    snapshot_full_imgs = {}  # rgb_id -> full img
+    snapshot_crops = {}  # rgb_id -> list of crops
     obj_map = step['obj_map']
     seen_classes = set()
     for i, rgb_id in enumerate(step["snapshot_imgs"].keys()):
-        snapshot_img = step["snapshot_imgs"][rgb_id]
-        snapshot_imgs.append(encode_tensor2base64(snapshot_img))
-        snapshot_class = [obj_map[int(sid)] for sid in step["snapshot_objects"][rgb_id]]
+        snapshot_img = step["snapshot_imgs"][rgb_id]["full_img"]
+        snapshot_full_imgs[rgb_id] = encode_tensor2base64(snapshot_img)
+        snapshot_crops[rgb_id] = [
+            encode_tensor2base64(crop_data["crop"]) for crop_data in step["snapshot_imgs"][rgb_id]["object_crop"]
+        ]
+        snapshot_class = [crop_data["obj_class"] for crop_data in step["snapshot_imgs"][rgb_id]["object_crop"]]
         # remove duplicates
-        snapshot_class = sorted(list(set(snapshot_class)))
-        seen_classes.update(snapshot_class)
-        snapshot_classes.append(
-            snapshot_class
-        )
+        seen_classes.update(sorted(list(set(snapshot_class))))
+        snapshot_classes[rgb_id] = snapshot_class
+
     # 2.3.3 prefiltering, note that we need the obj_id_mapping
-    keep_index = list(range(len(snapshot_imgs)))
+    keep_index = list(range(len(snapshot_full_imgs)))
+    keep_index_snapshot = {
+        rgb_id: list(range(len(snapshot_crops[rgb_id]))) for rgb_id in snapshot_crops
+    }
     if step.get("use_prefiltering") is True:
-        n_prev_snapshot = len(snapshot_imgs)
-        snapshot_classes, keep_index = prefiltering(
+        n_prev_snapshot = len(snapshot_full_imgs)
+        snapshot_classes, keep_index, keep_index_snapshot = prefiltering(
             question, snapshot_classes, seen_classes, step["top_k_categories"], image_goal
         )
-        snapshot_imgs = [snapshot_imgs[i] for i in keep_index]
-        logging.info(f"Prefiltering snapshot: {n_prev_snapshot} -> {len(snapshot_imgs)}")
+        # snapshot_imgs = [snapshot_imgs[i] for i in keep_index]
+        snapshot_full_imgs = {rgb_id: snapshot_full_imgs[rgb_id] for rgb_id in keep_index_snapshot.keys()}
+        for rgb_id in snapshot_classes.keys():
+            snapshot_crops[rgb_id] = [snapshot_crops[rgb_id][i] for i in keep_index_snapshot[rgb_id]]
+        logging.info(f"Prefiltering snapshot: {n_prev_snapshot} -> {len(snapshot_full_imgs)}")
 
-    return question, image_goal, egocentric_imgs, frontier_imgs, snapshot_imgs, snapshot_classes, keep_index
+    return question, image_goal, egocentric_imgs, frontier_imgs, snapshot_full_imgs, snapshot_classes, snapshot_crops, keep_index, keep_index_snapshot
 
 
 def format_explore_prompt(
@@ -137,6 +146,7 @@ def format_explore_prompt(
     frontier_imgs,
     snapshot_imgs,
     snapshot_classes,
+    snapshot_crops,
     egocentric_view=False,
     use_snapshot_class=True,
     image_goal=None
@@ -147,9 +157,9 @@ def format_explore_prompt(
     content = []
     # 1 here is some basic info
     text = "Definitions:\n"
-    text += "Snapshot: A focused observation of several objects. Choosing a snapshot means that the object asked in the question is directly and clearly visible in the snapshot, and you are choosing this snapshot as the final answer of the question. " + \
-            "You can choose a snapshot only once for each question, meaning that you should select a snapshot only when you can clearly observe the target objects required in the question. " + \
-            "Otherwise, you need to choose a frontier for further exploration.\n"
+    text += "Snapshot: A focused observation of several objects. It contains a full image of the cluster of objects, and separate image crops of each object. " + \
+            "Choosing a snapshot means that the object asked in the question is within the cluster of objects that the snapshot represents, and you will choose that object as the final answer of the question. " + \
+            "Therefore, if you choose a snapshot, you should also choose the object in the snapshot that you think is the answer to the question.\n"
     text += "Frontier: An unexplored region that could potentially lead to new information for answering the question. Selecting a frontier means that you will further explore that direction.\n"
     # TODO: add simple example: frontier, snapshot
     # set | use '/n' to separate different parts
@@ -172,19 +182,21 @@ def format_explore_prompt(
         content.append((text, egocentric_imgs[-1]))
         content.append(("\n",))
     # 3 here is the snapshot images
-    text = "The followings are all the snapshots that you can choose (followed with contained object classes)\n"
-    text += "Please note that the contained classes may not be accurate (wrong classes/missing classes) due to the limitation of the object detection model. "
+    text = "The followings are all the snapshots that you can choose. Following each snapshot image are the class name and image crop of each object contained in the snapshot.\n"
+    text += "Please note that the class name may not be accurate due to the limitation of the object detection model. "
     text += "So you still need to utilize the images to make the decision.\n"
     content.append((text,))
     if len(snapshot_imgs) == 0:
         content.append(("No Snapshot is available\n",))
     else:
-        for i in range(len(snapshot_imgs)):
-            content.append((f"Snapshot {i} ", snapshot_imgs[i]))
-            if use_snapshot_class:
-                text = ", ".join(snapshot_classes[i])
-                content.append((text,))
+        for i, rgb_id in enumerate(snapshot_imgs.keys()):
+            content.append((f"Snapshot {i} ", snapshot_imgs[rgb_id]))
+            for j in range(len(snapshot_crops[rgb_id])):
+                content.append((
+                    f"Object {j}: {snapshot_classes[rgb_id][j]}", snapshot_crops[rgb_id][j]
+                ))
             content.append(("\n",))
+
     # 4 here is the frontier images
     text = "The followings are all the Frontiers that you can explore: \n"
     content.append((text,))
@@ -195,8 +207,8 @@ def format_explore_prompt(
             content.append((f"Frontier {i} ", frontier_imgs[i]))
             content.append(("\n",))
     # 5 here is the format of the answer
-    text = "Please provide your answer in the following format: 'Snapshot i' or 'Frontier i', where i is the index of the snapshot or frontier you choose. "
-    text += "For example, if you choose the first snapshot, please type 'Snapshot 0'.\n"
+    text = "Please provide your answer in the following format: 'Snapshot i, Object j' or 'Frontier i', where i, j are the index of the snapshot or frontier you choose. "
+    text += "For example, if you choose the fridge in the first snapshot, please return 'Snapshot 0, Object 2', where 2 is the index of the fridge in that snapshot.\n"
     text += "You can explain the reason for your choice, but put it in a new line after the choice.\n"
     # text += "Answer: "
     content.append((text,))
@@ -287,25 +299,33 @@ def prefiltering(
         question, seen_classes, top_k, image_goal
     )
     # print(f"Selected classes: {selected_classes}")
-    keep_index = [i for i in range(len(snapshot_classes)) if len(set(snapshot_classes[i]) & set(selected_classes)) > 0]
+    keep_index = [i for i, k in enumerate(snapshot_classes.keys()) if len(set(snapshot_classes[k]) & set(selected_classes)) > 0]
     # print("snapshot classes before filtering: ", snapshot_classes)
-    snapshot_classes = [snapshot_classes[i] for i in keep_index]
+    keep_snapshot_id = [list(snapshot_classes.keys())[i] for i in keep_index]
+    snapshot_classes = {rgb_id: snapshot_classes[rgb_id] for rgb_id in keep_snapshot_id}
     # print("snapshot classes after filtering: ", snapshot_classes)
-    snapshot_classes = [sorted(list(set(s_cls) & set(selected_classes))) for s_cls in snapshot_classes]
+    # snapshot_classes = [sorted(list(set(s_cls) & set(selected_classes))) for s_cls in snapshot_classes]
     # print("snapshot classes after class-wise filtering",snapshot_classes)
-    return snapshot_classes, keep_index
+
+    keep_index_snapshot = {}
+    for rgb_id in keep_snapshot_id:
+        keep_index_snapshot[rgb_id] = [i for i in range(len(snapshot_classes[rgb_id])) if snapshot_classes[rgb_id][i] in selected_classes]
+        snapshot_classes[rgb_id] = [snapshot_classes[rgb_id][i] for i in keep_index_snapshot[rgb_id]]
+
+    return snapshot_classes, keep_index, keep_index_snapshot
 
 
 def explore_step(step, cfg):
     step["use_prefiltering"] = cfg.prefiltering
     step["top_k_categories"] = cfg.top_k_categories
-    question, image_goal, egocentric_imgs, frontier_imgs, snapshot_imgs, snapshot_classes, snapshot_id_mapping = get_step_info(step)
+    question, image_goal, egocentric_imgs, frontier_imgs, snapshot_full_imgs, snapshot_classes, snapshot_crops, snapshot_id_mapping, snapshot_crop_mapping = get_step_info(step)
     sys_prompt, content = format_explore_prompt(
         question,
         egocentric_imgs,
         frontier_imgs,
-        snapshot_imgs,
+        snapshot_full_imgs,
         snapshot_classes,
+        snapshot_crops,
         egocentric_view=step.get("use_egocentric_views", False),
         use_snapshot_class=True,
         image_goal=image_goal
@@ -336,15 +356,17 @@ def explore_step(step, cfg):
             reason = ""
         response = response.lower()
         try:
-            choice_type, choice_id = response.split(" ")
+            choice_type, choice_id = response.split(",")[0].strip().split(" ")
         except Exception as e:
             print(f"Error in splitting response: {response}")
             print(e)
             continue
 
         response_valid = False
-        if choice_type == "snapshot" and choice_id.isdigit() and 0 <= int(choice_id) < len(snapshot_imgs):
-            response_valid = True
+        if choice_type == "snapshot" and choice_id.isdigit() and 0 <= int(choice_id) < len(snapshot_full_imgs):
+            object_choice_type, object_choice_id = response.split(",")[1].strip().split(" ")
+            if object_choice_type == "object" and object_choice_id.isdigit() and 0 <= int(object_choice_id) < len(list(snapshot_crop_mapping.values())[int(choice_id)]):
+                response_valid = True
         elif choice_type == "frontier" and choice_id.isdigit() and 0 <= int(choice_id) < len(frontier_imgs):
             response_valid = True
 
@@ -353,7 +375,7 @@ def explore_step(step, cfg):
             final_response = response
             break
 
-    return final_response, snapshot_id_mapping
+    return final_response, snapshot_id_mapping, snapshot_crop_mapping
 
 
 

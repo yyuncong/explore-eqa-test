@@ -38,7 +38,7 @@ from src.geom import get_cam_intr, get_scene_bnds
 from src.tsdf_new_cg import TSDFPlanner, Frontier, SnapShot
 from src.scene_goatbench_v2 import Scene
 from src.eval_utils_goatbench import rgba2rgb
-from src.eval_utils_gpt_goatbench_prompt import explore_step
+from src.eval_utils_gpt_goatbench_prompt_with_crop import explore_step
 
 
 # use image prompt to mark objects contained in the snapshot
@@ -450,33 +450,35 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     step_dict["snapshot_objects"] = {}
                     step_dict["snapshot_imgs"] = {}
                     for rgb_id, snapshot in scene.snapshots.items():
+                        resized_rgb = resize_image(all_snapshots[rgb_id], cfg.prompt_h, cfg.prompt_w)
+
                         step_dict["snapshot_objects"][rgb_id] = snapshot.cluster
+                        step_dict["snapshot_imgs"][rgb_id] = {
+                            "full_img": resized_rgb,
+                            "object_crop": []
+                        }
 
                         # crop the snapshot to contain only the objects in the snapshot
-                        cropped_snapshot = all_snapshots[rgb_id].copy()
                         selected_bbox_idx = [idx for idx in range(len(snapshot.visual_prompt)) if snapshot.visual_prompt[idx].data['obj_id'][0] in snapshot.cluster]
-                        selected_bbox = snapshot.visual_prompt[selected_bbox_idx]
+                        selected_bbox = snapshot.visual_prompt[selected_bbox_idx].xyxy.copy()
+                        selected_obj_ids = [snapshot.visual_prompt[idx].data['obj_id'][0] for idx in selected_bbox_idx]
 
-                        H, W = cropped_snapshot.shape[:2]
-                        x_min = np.min(selected_bbox.xyxy[:, 0])
-                        x_max = np.max(selected_bbox.xyxy[:, 2])
-                        y_min = np.min(selected_bbox.xyxy[:, 1])
-                        y_max = np.max(selected_bbox.xyxy[:, 3])
-                        margin = 200
-                        x_min = int(max(0, x_min - margin))
-                        x_max = int(min(cropped_snapshot.shape[1], x_max + margin))
-                        y_min = int(max(0, y_min - margin))
-                        y_max = int(min(cropped_snapshot.shape[0], y_max + margin))
-                        cropped_snapshot = cropped_snapshot[y_min:y_max, x_min:x_max]
+                        # scale the bbox
+                        H, W = all_snapshots[rgb_id].shape[:2]
+                        scale_h, scale_w = cfg.prompt_h / H, cfg.prompt_w / W
+                        selected_bbox[:, 0] *= scale_w
+                        selected_bbox[:, 2] *= scale_w
+                        selected_bbox[:, 1] *= scale_h
+                        selected_bbox[:, 3] *= scale_h
+                        selected_bbox = selected_bbox.astype(int)
 
-                        resize_h = int((y_max - y_min) * cfg.prompt_h / H)
-                        resize_w = int((x_max - x_min) * cfg.prompt_w / W)
-
-                        # tempt saving for debug
-                        if cfg.save_visualization:
-                            plt.imsave(os.path.join(episode_snapshot_dir, f"{rgb_id}_crop.png"), resize_image(cropped_snapshot, resize_h, resize_w))
-
-                        step_dict["snapshot_imgs"][rgb_id] = resize_image(cropped_snapshot, resize_h, resize_w)
+                        # get the image crop for each object
+                        for obj_id, bbox in zip(selected_obj_ids, selected_bbox):
+                            step_dict["snapshot_imgs"][rgb_id]["object_crop"].append({
+                                "obj_class": object_id_to_name[obj_id],
+                                "obj_id": obj_id,
+                                "crop": resized_rgb[bbox[1]:bbox[3], bbox[0]:bbox[2]]
+                            })
 
                     update_success = tsdf_planner.update_frontier_map(pts=pts_normal, cfg=cfg.planner)
                     if not update_success:
@@ -556,13 +558,13 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         step_dict["class"] = subtask_metadata["class"]
                         step_dict["image"] = subtask_metadata["image"]
 
-                        outputs, snapshot_id_mapping = explore_step(step_dict, cfg)
+                        outputs, snapshot_id_mapping, snapshot_crop_mapping = explore_step(step_dict, cfg)
                         if outputs is None:
                             # encounter generation error
                             logging.info(f"Subtask id {subtask_id} invalid: model generation error!")
                             break
                         try:
-                            target_type, target_index = outputs.split(" ")[0], outputs.split(" ")[1]
+                            target_type, target_index = outputs.split(",")[0].strip().split(" ")
                             # print(f"Prediction: {target_type}, {target_index}")
                             logging.info(f"Prediction: {target_type}, {target_index}")
                         except:
@@ -585,13 +587,31 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                                 logging.info(f"Prediction out of range: {target_index}, {len(scene.objects)}, failed!")
                                 break
                             pred_target_snapshot = list(scene.snapshots.values())[int(target_index)]
-                            logging.info(
-                                "pred_target_class: " + str(' '.join([object_id_to_name[obj_id] for obj_id in pred_target_snapshot.cluster]))
+                            pred_target_snapshot_id = list(scene.snapshots.keys())[int(target_index)]
+                            logging.info(f"Next choice Snapshot of {pred_target_snapshot.image}")
+
+                            # get the object choice
+                            object_choice, object_choice_id = outputs.split(",")[1].strip().split(" ")
+                            if object_choice != "object":
+                                logging.info(f"Invalid object choice: {object_choice}, failed!")
+                                break
+                            object_choice_id = int(object_choice_id)
+                            if object_choice_id < 0 or object_choice_id >= len(snapshot_crop_mapping[pred_target_snapshot_id]):
+                                logging.info(f"Object choice out of range: {object_choice_id}, failed!")
+                                break
+                            object_choice_id = snapshot_crop_mapping[pred_target_snapshot_id][object_choice_id]
+                            pred_target_obj_id = step_dict["snapshot_imgs"][pred_target_snapshot_id]["object_crop"][object_choice_id]["obj_id"]
+                            logging.info(f"Next choice Object: {pred_target_obj_id}, {scene.objects[pred_target_obj_id]['class_name']}")
+
+                            max_point_choice = SnapShot(
+                                image=pred_target_snapshot.image,
+                                color=(random.random(), random.random(), random.random()),
+                                obs_point=np.empty(3),
+                                full_obj_list={pred_target_obj_id: scene.objects[pred_target_obj_id]['conf']},
+                                cluster=[pred_target_obj_id],
                             )
 
-                            logging.info(f"Next choice Snapshot of {pred_target_snapshot.image}")
                             tsdf_planner.frontiers_weight = np.zeros((len(tsdf_planner.frontiers)))
-                            max_point_choice = pred_target_snapshot
 
                             # print the items in the scene graph
                             snapshot_dict = {}
@@ -626,7 +646,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                             objects=scene.objects,
                             cfg=cfg.planner,
                             pathfinder=scene.pathfinder,
-                            observe_snapshot=False,  # do not observe the snapshot, just go to the snapshot center
                         )
                         if not update_success:
                             logging.info(f"Subtask id {subtask_id} invalid: set_next_navigation_point failed!")

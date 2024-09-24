@@ -472,8 +472,9 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         resize_h = int((y_max - y_min) * cfg.prompt_h / H)
                         resize_w = int((x_max - x_min) * cfg.prompt_w / W)
 
-                        # # tempt saving for debug
-                        # plt.imsave(os.path.join(episode_snapshot_dir, f"{rgb_id}_crop.png"), resize_image(cropped_snapshot, resize_h, resize_w))
+                        # tempt saving for debug
+                        if cfg.save_visualization:
+                            plt.imsave(os.path.join(episode_snapshot_dir, f"{rgb_id}_crop.png"), resize_image(cropped_snapshot, resize_h, resize_w))
 
                         step_dict["snapshot_imgs"][rgb_id] = resize_image(cropped_snapshot, resize_h, resize_w)
 

@@ -25,7 +25,6 @@ import glob
 import open_clip
 from ultralytics import SAM, YOLOWorld
 from hydra import initialize, compose
-import supervision as sv
 from habitat_sim.utils.common import quat_to_angle_axis, quat_from_coeffs
 import habitat_sim
 from src.habitat import (
@@ -150,6 +149,9 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             logging.info(f"Episode {episode_idx + 1}/{total_episodes}")
             logging.info(f"Loading scene {scene_id}")
             episode_id = episode["episode_id"]
+
+            # if '00853' not in scene_id:
+            #     continue
 
             # filter the task according to goatbench
             filtered_tasks = []
@@ -325,11 +327,11 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 }
                 # format question according to the goal type
                 if goal_type == "object":
-                    subtask_metadata['question'] = f"Where is the {goal_category}?"
+                    subtask_metadata['question'] = f"Can you find the {goal_category}?"
                 elif goal_type == "description":
-                    subtask_metadata['question'] = f"Could you find the object described as \'{subtask_goal[0]['lang_desc']}\'?"
+                    subtask_metadata['question'] = f"Could you find the object exactly described as \'{subtask_goal[0]['lang_desc']}\'?"
                 else:  # goal_type == "image"
-                    subtask_metadata['question'] = f"Could you find the object captured in the following image?"
+                    subtask_metadata['question'] = f"Could you find the place and object captured in the following image? You need to pay attention to the environment and find the exactly same scene."
                     view_pos_dict = subtask_goal[0]["view_points"][0]['agent_state']
                     obs, _ = scene.get_observation(pts=view_pos_dict["position"], rotation=view_pos_dict["rotation"])
                     plt.imsave(os.path.join(str(cfg.output_dir), f"{subtask_id}", "image_goal.png"), rgba2rgb(obs["color_sensor"]))

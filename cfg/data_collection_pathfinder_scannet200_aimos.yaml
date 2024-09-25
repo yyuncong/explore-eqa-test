@@ -9,7 +9,8 @@ scene_data_path_val: "/gpfs/u/home/LMCG/LMCGnngn/scratch/multisensory/MLLM/data/
 semantic_bbox_data_path: '/gpfs/u/home/LMCG/LMCGnngn/scratch/multisensory/MLLM/data/hm3d/hm3d_obj_bbox_merged'
 dataset_output_dir: "exploration_data"
 yolo_world_model_name: "yolo_world/x"
-yolo_model_name: '/gpfs/u/home/LMCG/LMCGhazh/scratch/yanghan/explore-eqa-test/yolov8x-world-finetuned.pt'
+yolo_model_name: yolov8x-world.pt  # '/gpfs/u/home/LMCG/LMCGhazh/scratch/yanghan/explore-eqa-test/yolov8x-world-finetuned.pt'
+class_set: scannet200  # yolo_finetune or scannet200
 
 # Sampling navigation point
 min_travel_dist: 5.0
@@ -38,13 +39,13 @@ paths_per_question: 1
 init_clearance: 0.3
 max_step_dist_ratio: 1.5
 max_step_ratio: 2.5
-extra_view_phase_1: 6
-extra_view_angle_deg_phase_1: 40
-extra_view_phase_2: 6  # in phase 2, have more observations
-extra_view_angle_deg_phase_2: 40
+extra_view_phase_1: 4
+extra_view_angle_deg_phase_1: 60
+extra_view_phase_2: 4  # in phase 2, have more observations
+extra_view_angle_deg_phase_2: 60
 
 # For partial initialization
-min_initialize_step: 20
+min_initialize_step: 10
 max_initialize_step: 120
 
 # Semantic map

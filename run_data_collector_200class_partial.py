@@ -57,9 +57,17 @@ def main(cfg):
     detection_model = YOLO(cfg.yolo_model_name)  # yolov8x-world.pt
 
     # load finetuned yolo classes
-    class_id_to_name = json.load(open('yolo_finetune/class_id_to_class_name.json', 'r'))
-    class_id_to_name = {int(k): v for k, v in class_id_to_name.items()}
-    detection_model.set_classes(list(class_id_to_name.values()))
+    if cfg.class_set == 'yolo_finetune':
+        class_id_to_name = json.load(open('yolo_finetune/class_id_to_class_name.json', 'r'))
+        class_id_to_name = {int(k): v for k, v in class_id_to_name.items()}
+        detection_model.set_classes(list(class_id_to_name.values()))
+    elif cfg.class_set == 'scannet200':
+        with open('data/scannet200_classes.txt', 'r') as f:
+            all_lines = [cls.strip() for cls in f.readlines()]
+        class_id_to_name = {i: all_lines[i] for i in range(len(all_lines))}
+        detection_model.set_classes(all_lines)
+    else:
+        raise ValueError(f"Invalid class set: {cfg.class_set}")
 
     # Load dataset
     with open(os.path.join(cfg.question_data_path)) as f:
@@ -348,11 +356,16 @@ def main(cfg):
                             obs_point=pts,
                             return_annotated=True
                         )
-                        # save the image as 720 x 720
-                        plt.imsave(
-                            os.path.join(object_feature_save_dir, obs_file_name),
-                            np.asarray(Image.fromarray(rgb[..., :3]).resize((360, 360)))
-                        )
+                        if cfg.save_visualization:
+                            plt.imsave(
+                                os.path.join(object_feature_save_dir, obs_file_name),
+                                annotated_image
+                            )
+                        else:
+                            plt.imsave(
+                                os.path.join(object_feature_save_dir, obs_file_name),
+                                np.asarray(Image.fromarray(rgb[..., :3]).resize((360, 360)))
+                            )
                         all_added_obj_ids += added_obj_ids
 
                         # TSDF fusion

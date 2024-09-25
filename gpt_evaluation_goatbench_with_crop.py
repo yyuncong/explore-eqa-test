@@ -68,12 +68,12 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
     random.shuffle(scene_data_list)
 
     # split the test data by scene
-    # scene_data_list = scene_data_list[int(start_ratio * num_scene):int(end_ratio * num_scene)]
+    scene_data_list = scene_data_list[int(start_ratio * num_scene):int(end_ratio * num_scene)]
     num_episode = 0
     for scene_data_file in scene_data_list:
         with open(os.path.join(cfg.test_data_dir, scene_data_file), 'r') as f:
-            num_episode += int(len(json.load(f)['episodes']) * (end_ratio - start_ratio))
-    logging.info(f"Total number of episodes: {num_episode}")
+            num_episode += len(json.load(f)['episodes'])
+    logging.info(f"Total number of episodes: {num_episode}; Selected episodes: {len(scene_data_list)}")
     logging.info(f"Total number of scenes: {len(scene_data_list)}")
 
     all_scene_ids = os.listdir(cfg.scene_data_path_train + '/train') + os.listdir(cfg.scene_data_path_val + '/val')
@@ -141,11 +141,14 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
         # if scene_id != "00820-mL8ThkuaVTM":
         #    continue
         scene_data = json.load(open(os.path.join(cfg.test_data_dir, scene_data_file), "r"))
+
+        # here we only consider the first episode
+        scene_data["episodes"] = scene_data["episodes"][:1]
         total_episodes = len(scene_data["episodes"])
 
         navigation_goals = scene_data["goals"]  # obj_id to obj_data, apply for all episodes in this scene
 
-        for episode_idx, episode in enumerate(scene_data["episodes"][int(start_ratio * total_episodes):int(end_ratio * total_episodes)]):
+        for episode_idx, episode in enumerate(scene_data["episodes"]):
             logging.info(f"Episode {episode_idx + 1}/{total_episodes}")
             logging.info(f"Loading scene {scene_id}")
             episode_id = episode["episode_id"]
@@ -329,9 +332,9 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 if goal_type == "object":
                     subtask_metadata['question'] = f"Can you find the {goal_category}?"
                 elif goal_type == "description":
-                    subtask_metadata['question'] = f"Could you find the object exactly described as \'{subtask_goal[0]['lang_desc']}\'?"
+                    subtask_metadata['question'] = f"Could you find the object exactly described as the \'{subtask_goal[0]['lang_desc']}\'?"
                 else:  # goal_type == "image"
-                    subtask_metadata['question'] = f"Could you find the place and object captured in the following image? You need to pay attention to the environment and find the exactly same scene."
+                    subtask_metadata['question'] = f"Could you find the exact object captured at the center of the following image? You need to pay attention to the environment and find the exact object."
                     view_pos_dict = subtask_goal[0]["view_points"][0]['agent_state']
                     obs, _ = scene.get_observation(pts=view_pos_dict["position"], rotation=view_pos_dict["rotation"])
                     plt.imsave(os.path.join(str(cfg.output_dir), f"{subtask_id}", "image_goal.png"), rgba2rgb(obs["color_sensor"]))
@@ -449,6 +452,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
 
                     step_dict["snapshot_objects"] = {}
                     step_dict["snapshot_imgs"] = {}
+                    step_dict["use_full_obj_list"] = cfg.use_full_obj_list
                     for rgb_id, snapshot in scene.snapshots.items():
                         resized_rgb = resize_image(all_snapshots[rgb_id], cfg.prompt_h, cfg.prompt_w)
 
@@ -459,7 +463,10 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         }
 
                         # crop the snapshot to contain only the objects in the snapshot
-                        selected_bbox_idx = [idx for idx in range(len(snapshot.visual_prompt)) if snapshot.visual_prompt[idx].data['obj_id'][0] in snapshot.cluster]
+                        if cfg.use_full_obj_list:
+                            selected_bbox_idx = [idx for idx in range(len(snapshot.visual_prompt)) if snapshot.visual_prompt[idx].data['obj_id'][0] in snapshot.full_obj_list.keys()]
+                        else:
+                            selected_bbox_idx = [idx for idx in range(len(snapshot.visual_prompt)) if snapshot.visual_prompt[idx].data['obj_id'][0] in snapshot.cluster]
                         selected_bbox = snapshot.visual_prompt[selected_bbox_idx].xyxy.copy()
                         selected_obj_ids = [snapshot.visual_prompt[idx].data['obj_id'][0] for idx in selected_bbox_idx]
 

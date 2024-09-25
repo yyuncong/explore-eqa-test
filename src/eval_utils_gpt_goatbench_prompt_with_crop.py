@@ -108,6 +108,7 @@ def get_step_info(step):
     snapshot_classes = {}  # rgb_id -> list of classes
     snapshot_full_imgs = {}  # rgb_id -> full img
     snapshot_crops = {}  # rgb_id -> list of crops
+    snapshot_clusters = {}  # rgb_id -> list of clusters
     obj_map = step['obj_map']
     seen_classes = set()
     for i, rgb_id in enumerate(step["snapshot_imgs"].keys()):
@@ -117,9 +118,11 @@ def get_step_info(step):
             encode_tensor2base64(crop_data["crop"]) for crop_data in step["snapshot_imgs"][rgb_id]["object_crop"]
         ]
         snapshot_class = [crop_data["obj_class"] for crop_data in step["snapshot_imgs"][rgb_id]["object_crop"]]
+        cluster_class = [obj_map[int(obj_id)] for obj_id in step["snapshot_objects"][rgb_id]]
         # remove duplicates
         seen_classes.update(sorted(list(set(snapshot_class))))
         snapshot_classes[rgb_id] = snapshot_class
+        snapshot_clusters[rgb_id] = cluster_class
 
     # 2.3.3 prefiltering, note that we need the obj_id_mapping
     keep_index = list(range(len(snapshot_full_imgs)))
@@ -127,9 +130,10 @@ def get_step_info(step):
         rgb_id: list(range(len(snapshot_crops[rgb_id]))) for rgb_id in snapshot_crops
     }
     if step.get("use_prefiltering") is True:
+        use_full_obj_list = step["use_full_obj_list"]
         n_prev_snapshot = len(snapshot_full_imgs)
         snapshot_classes, keep_index, keep_index_snapshot = prefiltering(
-            question, snapshot_classes, seen_classes, step["top_k_categories"], image_goal
+            question, snapshot_classes, snapshot_clusters, seen_classes, step["top_k_categories"], image_goal, use_full_obj_list
         )
         # snapshot_imgs = [snapshot_imgs[i] for i in keep_index]
         snapshot_full_imgs = {rgb_id: snapshot_full_imgs[rgb_id] for rgb_id in keep_index_snapshot.keys()}
@@ -291,15 +295,17 @@ def get_prefiltering_classes(
 def prefiltering(
     question,
     snapshot_classes,
+    snapshot_clusters,
     seen_classes,
     top_k=10,
-    image_goal=None
+    image_goal=None,
+    use_full_obj_list=False
 ):
     selected_classes = get_prefiltering_classes(
         question, seen_classes, top_k, image_goal
     )
     # print(f"Selected classes: {selected_classes}")
-    keep_index = [i for i, k in enumerate(snapshot_classes.keys()) if len(set(snapshot_classes[k]) & set(selected_classes)) > 0]
+    keep_index = [i for i, k in enumerate(snapshot_clusters.keys()) if len(set(snapshot_clusters[k]) & set(selected_classes)) > 0]
     # print("snapshot classes before filtering: ", snapshot_classes)
     keep_snapshot_id = [list(snapshot_classes.keys())[i] for i in keep_index]
     snapshot_classes = {rgb_id: snapshot_classes[rgb_id] for rgb_id in keep_snapshot_id}

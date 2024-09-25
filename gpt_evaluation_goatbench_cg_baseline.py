@@ -65,12 +65,12 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
     random.shuffle(scene_data_list)
 
     # split the test data by scene
-    # scene_data_list = scene_data_list[int(start_ratio * num_scene):int(end_ratio * num_scene)]
+    scene_data_list = scene_data_list[int(start_ratio * num_scene):int(end_ratio * num_scene)]
     num_episode = 0
     for scene_data_file in scene_data_list:
         with open(os.path.join(cfg.test_data_dir, scene_data_file), 'r') as f:
-            num_episode += int(len(json.load(f)['episodes']) * (end_ratio - start_ratio))
-    logging.info(f"Total number of episodes: {num_episode}")
+            num_episode += len(json.load(f)['episodes'])
+    logging.info(f"Total number of episodes: {num_episode}; Selected episodes: {len(scene_data_list)}")
     logging.info(f"Total number of scenes: {len(scene_data_list)}")
 
     all_scene_ids = os.listdir(cfg.scene_data_path_val + '/val')
@@ -118,14 +118,14 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             open(os.path.join(str(cfg.output_dir), f"success_by_task_{start_ratio}_{end_ratio}.pkl"), "rb")
         )
     else:
-        #success_by_task = {}  # task type -> success
+        # success_by_task = {}  # task type -> success
         success_by_task = defaultdict(list)
     if os.path.exists(os.path.join(str(cfg.output_dir), f"spl_by_task_{start_ratio}_{end_ratio}.pkl")):
         spl_by_task = pickle.load(
             open(os.path.join(str(cfg.output_dir), f"spl_by_task_{start_ratio}_{end_ratio}.pkl"), "rb")
         )
     else:
-        #spl_by_task = {}  # task type -> spl
+        # spl_by_task = {}  # task type -> spl
         spl_by_task = defaultdict(list)
     assert len(success_by_snapshot) == len(spl_by_snapshot) == len(success_by_distance) == len(spl_by_distance), f"{len(success_by_snapshot)} != {len(spl_by_snapshot)} != {len(success_by_distance)} != {len(spl_by_distance)}"
     assert sum([len(task_res) for task_res in success_by_task.values()]) == sum([len(task_res) for task_res in spl_by_task.values()]) == len(success_by_snapshot), f"{sum([len(task_res) for task_res in success_by_task.values()])} != {sum([len(task_res) for task_res in spl_by_task.values()])} != {len(success_by_snapshot)}"
@@ -135,11 +135,14 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
         scene_name = scene_data_file.split(".")[0]
         scene_id = [scene_id for scene_id in all_scene_ids if scene_name in scene_id][0]
         scene_data = json.load(open(os.path.join(cfg.test_data_dir, scene_data_file), "r"))
+
+        # here we only consider the first episode
+        scene_data["episodes"] = scene_data["episodes"][:1]
         total_episodes = len(scene_data["episodes"])
 
         navigation_goals = scene_data["goals"]  # obj_id to obj_data, apply for all episodes in this scene
 
-        for episode_idx, episode in enumerate(scene_data["episodes"][int(start_ratio * total_episodes):int(end_ratio * total_episodes)]):
+        for episode_idx, episode in enumerate(scene_data["episodes"]):
             logging.info(f"Episode {episode_idx + 1}/{total_episodes}")
             logging.info(f"Loading scene {scene_id}")
             episode_id = episode["episode_id"]

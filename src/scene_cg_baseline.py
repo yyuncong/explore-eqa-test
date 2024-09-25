@@ -268,7 +268,7 @@ class Scene:
 
         image_crops, image_feats, text_feats = compute_clip_features_batched(
             image_rgb, curr_det, clip_model, clip_preprocess, clip_tokenizer, obj_classes.get_classes_arr(), self.cfg_cg.device,
-            prompt_h=self.cfg.prompt_h, prompt_w=self.cfg.prompt_w
+            #prompt_h=self.cfg.prompt_h, prompt_w=self.cfg.prompt_w
         )
         # image_crops: list of PIL images
         raw_gobs = {

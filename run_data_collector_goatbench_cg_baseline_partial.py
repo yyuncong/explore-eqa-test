@@ -34,7 +34,7 @@ from src.habitat import (
 )
 from src.geom import get_cam_intr, get_scene_bnds, get_collision_distance
 #from src.tsdf_clustering import TSDFPlanner, Frontier, SnapShot
-from src.tsdf_clustering_200class import TSDFPlanner, Frontier, SnapShot
+from src.tsdf_cg_baseline import TSDFPlanner, Frontier, SnapShot
 from src.detection_utils import compute_recall,format_snapshot
 from inference.models import YOLOWorld
 from ultralytics import YOLOWorld as YOLO
@@ -57,9 +57,17 @@ def main(cfg):
     detection_model = YOLO(cfg.yolo_model_name)  # yolov8x-world.pt
 
     # load finetuned yolo classes
-    class_id_to_name = json.load(open('yolo_finetune/class_id_to_class_name.json', 'r'))
-    class_id_to_name = {int(k): v for k, v in class_id_to_name.items()}
-    detection_model.set_classes(list(class_id_to_name.values()))
+    if cfg.class_set == 'yolo_finetune':
+        class_id_to_name = json.load(open('yolo_finetune/class_id_to_class_name.json', 'r'))
+        class_id_to_name = {int(k): v for k, v in class_id_to_name.items()}
+        detection_model.set_classes(list(class_id_to_name.values()))
+    elif cfg.class_set == 'scannet200':
+        with open('data/scannet200_classes.txt', 'r') as f:
+            all_lines = [cls.strip() for cls in f.readlines()]
+        class_id_to_name = {i: all_lines[i] for i in range(len(all_lines))}
+        detection_model.set_classes(all_lines)
+    else:
+        raise ValueError(f"Invalid class set: {cfg.class_set}")
 
     # Load dataset
     with open(os.path.join(cfg.question_data_path)) as f:
@@ -106,12 +114,8 @@ def main(cfg):
         navmesh_path = os.path.join(cfg.scene_data_path, split, scene_id, scene_id.split("-")[1] + ".basis.navmesh")
         semantic_texture_path = os.path.join(cfg.scene_data_path, split, scene_id, scene_id.split("-")[1] + ".semantic.glb")
         scene_semantic_annotation_path = os.path.join(cfg.scene_data_path, split, scene_id, scene_id.split("-")[1] + ".semantic.txt")
-        bbox_data_path = os.path.join(cfg.semantic_bbox_data_path, scene_id + ".json")
         if not os.path.exists(scene_mesh_path) or not os.path.exists(navmesh_path) or not os.path.exists(semantic_texture_path) or not os.path.exists(scene_semantic_annotation_path):
             logging.info(f"Scene {scene_id} not exists")
-            continue
-        if not os.path.exists(bbox_data_path):
-            logging.info(f"Scene {scene_id} bbox data not exists")
             continue
 
         # assert os.path.exists(scene_mesh_path) and os.path.exists(navmesh_path), f'{scene_mesh_path}, {navmesh_path}'
@@ -145,20 +149,22 @@ def main(cfg):
         agent_state = habitat_sim.AgentState()
         logging.info(f"Load scene {scene_id} successfully")
 
-        # load semantic object bbox data
-        bounding_box_data = json.load(open(os.path.join(cfg.semantic_bbox_data_path, scene_id + ".json"), "r"))
-        object_id_to_bbox = {int(item['id']): {'bbox': item['bbox'], 'class': item['class_name']} for item in bounding_box_data}
-        object_id_to_name = {int(item['id']): item['class_name'] for item in bounding_box_data}
+        with open(scene_semantic_annotation_path, "r") as f:
+            all_lines = [line.strip() for line in f.readlines()][1:]
+            object_id_to_name = {int(line.split(',')[0]): line.split(',')[2].replace("\"", "") for line in all_lines}
 
         for question_data in all_questions_in_scene:
             # for each question, generate several paths, starting from different starting points
             for path_idx in range(cfg.path_id_offset, cfg.path_id_offset + cfg.paths_per_question):
                 question_ind += 1
+
                 target_obj_id = question_data['object_id']
                 target_position = question_data['position']
+                target_rotation = question_data['rotation']
                 episode_data_dir = os.path.join(str(cfg.dataset_output_dir), f"{question_data['question_id']}_path_{path_idx}")
                 episode_frontier_dir = os.path.join(episode_data_dir, "frontier_rgb")
-                object_feature_save_dir = os.path.join(episode_data_dir, 'object_features')
+                egocentric_save_dir = os.path.join(episode_data_dir, 'egocentric_views')
+                image_crop_save_dir = os.path.join(episode_data_dir, 'image_crop')
 
                 if target_obj_id not in object_id_to_name:
                     logging.info(f"Target object {target_obj_id} not in the scene {scene_id} bbox data")
@@ -174,7 +180,8 @@ def main(cfg):
 
                 os.makedirs(episode_data_dir, exist_ok=True)
                 os.makedirs(episode_frontier_dir, exist_ok=True)
-                os.makedirs(object_feature_save_dir, exist_ok=True)
+                os.makedirs(egocentric_save_dir, exist_ok=True)
+                os.makedirs(image_crop_save_dir, exist_ok=True)
 
                 # get the starting points of other generated paths for this object, if there exists any
                 # get all the folder in the form os.path.join(str(cfg.dataset_output_dir), f"{question_data['question_id']}_path_*")
@@ -402,21 +409,32 @@ def main(cfg):
                         added_obj_ids, annotated_image = tsdf_planner.update_scene_graph(
                             detection_model=detection_model,
                             rgb=rgb[..., :3],
+                            depth=depth,
                             semantic_obs=semantic_obs,
-                            gt_obj_id_to_name=object_id_to_name,
-                            gt_obj_id_to_bbox=object_id_to_bbox,
-                            scannet_class_id_to_name=class_id_to_name,
+                            obj_id_to_name=object_id_to_name,
+                            class_id_to_name=class_id_to_name,
+                            intrinsics=cam_intr,
+                            cam_pos=cam_pose,
                             cfg=cfg.scene_graph,
                             file_name=obs_file_name,
                             obs_point=pts,
                             return_annotated=True
                         )
-                        # save the image as 720 x 720
-                        plt.imsave(
-                            os.path.join(object_feature_save_dir, obs_file_name),
-                            np.asarray(Image.fromarray(rgb[..., :3]).resize((360, 360)))
-                        )
+                        if state == 'explore':
+                            if cfg.save_visualization or cfg.save_frontier_video:
+                                plt.imsave(
+                                    os.path.join(egocentric_save_dir, obs_file_name),
+                                    annotated_image
+                                )
+                            else:
+                                plt.imsave(
+                                    os.path.join(egocentric_save_dir, obs_file_name),
+                                    np.asarray(Image.fromarray(rgb[..., :3]).resize((360, 360)))
+                                )
                         all_added_obj_ids += added_obj_ids
+
+                        if (cnt_step * total_views + view_idx) % cfg.scene_graph.filter_obj_interval == 0:
+                            tsdf_planner.periodic_cleanup_objects(pts=pts, min_distance=cfg.scene_graph.obj_include_dist, min_detections=cfg.scene_graph.obj_min_detections)
 
                         # TSDF fusion
                         tsdf_planner.integrate(
@@ -430,14 +448,7 @@ def main(cfg):
                             explored_depth=cfg.explored_depth,
                         )
 
-                    # cluster all the newly added objects
-                    all_added_obj_ids = [obj_id for obj_id in all_added_obj_ids if obj_id in tsdf_planner.simple_scene_graph]
-                    # as well as the objects nearby
-                    for obj_id, obj in tsdf_planner.simple_scene_graph.items():
-                        if np.linalg.norm(obj.bbox_center[[0, 2]] - pts[[0, 2]]) < cfg.scene_graph.obj_include_dist + 0.5:
-                            all_added_obj_ids.append(obj_id)
-                    tsdf_planner.update_snapshots(obj_ids=set(all_added_obj_ids))
-                    logging.info(f"Step {cnt_step} {len(tsdf_planner.simple_scene_graph)} objects, {len(tsdf_planner.snapshots)} snapshots")
+                    logging.info(f"Step {cnt_step} {len(tsdf_planner.simple_scene_graph)} objects")
 
                     update_success = tsdf_planner.update_frontier_map(pts=pts_normal, cfg=cfg.planner)
                     if not update_success:
@@ -500,6 +511,7 @@ def main(cfg):
                             path_points=path_points,
                             pathfinder=pathfinder,
                             target_obj_id=target_obj_id,
+                            min_detections=cfg.scene_graph.obj_min_detections,
                             cfg=cfg.planner,
                         )
                         if max_point_choice is None:
@@ -536,53 +548,36 @@ def main(cfg):
                         break
                     pts_normal, angle, pts_pix, fig, path_points, target_arrived = return_values
 
-                    # save snapshots
-                    step_dict["snapshots"] = format_snapshot(tsdf_planner.snapshots.values(), tsdf_planner.simple_scene_graph)
+                    # add object to step dict
+                    step_dict["objects"] = []
+                    for idx, (obj_id, obj) in enumerate(tsdf_planner.simple_scene_graph.items()):
+                        # extract the most common class name as the final class name
+                        class_name, count = '', 0
+                        for class_name_, count_ in obj.classes.items():
+                            if count_ > count:
+                                class_name, count = class_name_, count_
 
-                    # sanity check
-                    assert len(step_dict["snapshots"]) == len(tsdf_planner.snapshots), f"{len(step_dict['snapshots'])} != {len(tsdf_planner.snapshots)}"
-                    obj_exclude_count = sum([1 if sum(obj.classes.values()) < 2 else 0 for obj in tsdf_planner.simple_scene_graph.values()])
-                    total_objs_count = sum(
-                        [len(snapshot.cluster) for snapshot in tsdf_planner.snapshots.values()]
-                    )
-                    assert len(tsdf_planner.simple_scene_graph) == total_objs_count + obj_exclude_count, f"{len(tsdf_planner.simple_scene_graph)} != {total_objs_count} + {obj_exclude_count}"
-                    total_objs_count = sum(
-                        [len(set(snapshot.cluster)) for snapshot in tsdf_planner.snapshots.values()]
-                    )
-                    assert len(tsdf_planner.simple_scene_graph) == total_objs_count + obj_exclude_count, f"{len(tsdf_planner.simple_scene_graph)} != {total_objs_count} + {obj_exclude_count}"
-                    for obj_id in tsdf_planner.simple_scene_graph.keys():
-                        exist_count = 0
-                        for ss in tsdf_planner.snapshots.values():
-                            if obj_id in ss.cluster:
-                                exist_count += 1
-                        if sum(tsdf_planner.simple_scene_graph[obj_id].classes.values()) < 2:
-                            assert exist_count == 0, f"{exist_count} != 0 for obj_id {obj_id}"
-                        else:
-                            assert exist_count == 1, f"{exist_count} != 1 for obj_id {obj_id}"
-                    for ss in tsdf_planner.snapshots.values():
-                        assert len(ss.cluster) == len(set(ss.cluster)), f"{ss.cluster} has duplicates"
-                        assert len(ss.full_obj_list.keys()) == len(set(ss.full_obj_list.keys())), f"{ss.full_obj_list.keys()} has duplicates"
-                        for obj_id in ss.cluster:
-                            assert obj_id in ss.full_obj_list, f"{obj_id} not in {ss.full_obj_list.keys()}"
-                        for obj_id in ss.full_obj_list.keys():
-                            assert obj_id in tsdf_planner.simple_scene_graph, f"{obj_id} not in scene graph"
-                    # check whether the snapshots in scene.snapshots and scene.frames are the same
-                    for file_name, ss in tsdf_planner.snapshots.items():
-                        assert ss.cluster == tsdf_planner.frames[file_name].cluster, f"{ss}\n!=\n{tsdf_planner.frames[file_name]}"
-                        assert ss.full_obj_list == tsdf_planner.frames[file_name].full_obj_list, f"{ss}\n==\n{tsdf_planner.frames[file_name]}"
+                        step_dict["objects"].append(
+                            {
+                                "img_id": f"{obj_id}.png",
+                                "obj_id": int(obj_id),
+                                "recognize_class": class_name,
+                                "gt_class": object_id_to_name[obj_id]
+                            }
+                        )
 
                     if state == 'explore':
                         # save the ground truth choice
                         if type(max_point_choice) == SnapShot:
-                            filename = max_point_choice.image
-                            prediction = [float(ss["img_id"] == filename) for ss in step_dict["snapshots"]]
+                            target_id_snapshot = max_point_choice.cluster[0]
+                            prediction = [float(obj.object_id == target_id_snapshot) for obj in tsdf_planner.simple_scene_graph.values()]
                             prediction += [0.0 for _ in range(len(step_dict["frontiers"]))]
                         elif type(max_point_choice) == Frontier:
-                            prediction = [0.0 for _ in range(len(step_dict["snapshots"]))]
+                            prediction = [0.0 for _ in range(len(tsdf_planner.simple_scene_graph))]
                             prediction += [float(ft_dict["rgb_id"] == max_point_choice.image) for ft_dict in step_dict["frontiers"]]
                         else:
                             raise ValueError("Invalid max_point_choice type")
-                        assert len(prediction) == len(step_dict["snapshots"]) + len(step_dict["frontiers"]), f"{len(prediction)} != {len(step_dict['snapshots'])} + {len(step_dict['frontiers'])}"
+                        assert len(prediction) == len(tsdf_planner.simple_scene_graph) + len(step_dict["frontiers"]), f"{len(prediction)} != {len(tsdf_planner.simple_scene_graph)} + {len(step_dict['frontiers'])}"
                         if sum(prediction) != 1.0:
                             logging.info(f"Error! Prediction sum is not 1.0: {sum(prediction)}")
                             logging.info(max_point_choice)
@@ -598,14 +593,14 @@ def main(cfg):
 
                         # sanity check
                         num_frontier = len(step_dict["frontiers"])
-                        num_snapshot = len(step_dict["snapshots"])
+                        num_object = len(step_dict["objects"])
                         chosen_idx = np.argwhere(np.array(step_dict["prediction"]) > 0.5).squeeze()
-                        if chosen_idx >= num_snapshot:
-                            chosen_idx -= num_snapshot
+                        if chosen_idx >= num_object:
+                            chosen_idx -= num_object
                             assert step_dict["frontiers"][chosen_idx]["rgb_id"] == max_point_choice.image, f"{step_dict['frontiers'][chosen_idx]['rgb_id']} != {max_point_choice.image}"
                             assert type(max_point_choice) == Frontier, f"{type(max_point_choice)} != Frontier"
                         else:
-                            assert step_dict["snapshots"][chosen_idx]["img_id"] == max_point_choice.image, f"{step_dict['snapshots'][chosen_idx]['img_id']} != {max_point_choice.image}"
+                            assert step_dict["objects"][chosen_idx]["obj_id"] == target_obj_id, f"{step_dict['objects'][chosen_idx]['obj_id']} != {target_obj_id}"
                             assert type(max_point_choice) == SnapShot, f"{type(max_point_choice)} != SnapShot"
 
                         # Save step data
@@ -648,39 +643,15 @@ def main(cfg):
                                     if type(max_point_choice) == Frontier and max_point_choice.image == tsdf_planner.frontiers[i].image:
                                         axs[h_idx, w_idx].set_title('Chosen')
                                 elif i == num_images - 1 and type(max_point_choice) == SnapShot:
-                                    img_path = os.path.join(object_feature_save_dir, max_point_choice.image)
-                                    img = matplotlib.image.imread(img_path)
+                                    target_id_snapshot = max_point_choice.cluster[0]
+                                    img = tsdf_planner.simple_scene_graph[target_id_snapshot].image_crop
+
                                     axs[h_idx, w_idx].imshow(img)
-                                    axs[h_idx, w_idx].set_title('Snapshot Chosen')
+                                    axs[h_idx, w_idx].set_title('Object Chosen')
                         global_caption = f"{question_data['question']}\n{question_data['answer']}"
                         fig.suptitle(global_caption, fontsize=16)
                         plt.tight_layout(rect=(0., 0., 1., 0.95))
                         plt.savefig(os.path.join(frontier_video_path, f'{cnt_step}.png'))
-                        plt.close()
-
-                    if cfg.save_tsdf_video:
-                        tsdf_video_path = os.path.join(episode_data_dir, "tsdf_video")
-                        os.makedirs(tsdf_video_path, exist_ok=True)
-                        num_images = len(tsdf_planner.snapshots.keys())
-                        side_length = int(np.sqrt(num_images)) + 1
-                        side_length = max(2, side_length)
-                        fig, axs = plt.subplots(side_length, side_length, figsize=(40, 40))
-                        snapshots = list(tsdf_planner.snapshots.keys())
-                        for h_idx in range(side_length):
-                            for w_idx in range(side_length):
-                                axs[h_idx, w_idx].axis('off')
-                                i = h_idx * side_length + w_idx
-                                if i < num_images:
-                                    img_path = os.path.join(object_feature_save_dir, tsdf_planner.snapshots[snapshots[i]].image)
-                                    img = matplotlib.image.imread(img_path)
-                                    axs[h_idx, w_idx].imshow(img)
-                                    axs[h_idx, w_idx].set_title(f"Snapshot {i}")
-                                    if type(max_point_choice) == SnapShot and max_point_choice.image == tsdf_planner.snapshots[snapshots[i]].image:
-                                        axs[h_idx, w_idx].set_title(f"Snapshot {i} Chosen")
-                        global_caption = f"{question_data['question']}\n{question_data['answer']}"
-                        fig.suptitle(global_caption, fontsize=16)
-                        plt.tight_layout(rect=(0., 0., 1., 0.95))
-                        plt.savefig(os.path.join(tsdf_video_path, f'{cnt_step}.png'))
                         plt.close()
 
                     # update position and rotation
@@ -706,6 +677,14 @@ def main(cfg):
                         if cfg.save_visualization:
                             os.makedirs(target_obs_save_dir, exist_ok=True)
                             plt.imsave(os.path.join(target_obs_save_dir, f"{cnt_step}_target_observation.png"), rgb)
+
+                        # also, save all the image crops
+                        for obj_id, obj in tsdf_planner.simple_scene_graph.items():
+                            plt.imsave(
+                                os.path.join(image_crop_save_dir, f"{obj_id}.png"),
+                                obj.image_crop
+                            )
+
                         break
 
                 if target_found:
@@ -727,24 +706,14 @@ def main(cfg):
 
 
                 if os.path.exists(episode_data_dir):
-                    # remove unused snapshots and frontiers
+                    # remove unused frontiers
                     all_info_paths = glob.glob(os.path.join(episode_data_dir, "*.json"))
                     all_info_paths = [pth for pth in all_info_paths if 'metadata' not in pth]
-                    all_snapshots = []
                     all_frontiers = []
                     for pth in all_info_paths:
                         step_data = json.load(open(pth, 'r'))
-                        all_snapshots += [item['img_id'] for item in step_data['snapshots']]
                         all_frontiers += [item['rgb_id'] for item in step_data['frontiers']]
-                    all_snapshots = set(all_snapshots)
                     all_frontiers = set(all_frontiers)
-                    # remove unused snapshots
-                    all_saved_snapshots = os.listdir(object_feature_save_dir)
-                    for ss_id in all_saved_snapshots:
-                        ss_step = int(ss_id.split('-')[0])
-                        # only remove the unused snapshot collected during initialization
-                        if ss_step < initialize_step and ss_id not in all_snapshots:
-                            os.system(f"rm {os.path.join(object_feature_save_dir, ss_id)}")
                     # remove unused frontiers
                     all_saved_frontiers = os.listdir(episode_frontier_dir)
                     for ft_id in all_saved_frontiers:

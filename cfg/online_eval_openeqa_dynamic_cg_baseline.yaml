@@ -5,15 +5,16 @@ output_parent_dir: /work/pi_chuangg_umass_edu/yuncong/results
 scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
 scene_data_path: /work/pi_chuangg_umass_edu/yuncong/data/scene_datasets/hm3d/
 questions_list_path: 'data/generated_questions-eval.json'
-model_path:
+model_path: /work/pi_chuangg_umass_edu/yuncong/ds_lora/cg_baseline_4e-06_patch1_ds_rand_filter_top10_coeff0.3_ego1token12_lora_qaug
 
 concept_graph_config_path: "conceptgraph/hydra_configs"
 concept_graph_config_name: "rerun_realtime_mapping"
 
 visual_feature_size: 24
 patch_size: 8
+egocentric_patch_size: 2
 choose_every_step: true
-egocentric_views:
+egocentric_views: true
 action_memory: false
 prefiltering: true
 top_k_categories: 10
@@ -49,10 +50,13 @@ max_snapshot_threshold: 999
 
 # Navigation
 init_clearance: 0.3
-max_step_room_size_ratio:
-extra_view_phase_1:
-extra_view_angle_deg_phase_1:
-max_target_observation:
+max_step_room_size_ratio: 3
+extra_view_phase_1: 4
+extra_view_angle_deg_phase_1: 60
+extra_view_phase_2: 6
+extra_view_angle_deg_phase_2: 40
+max_target_observation: 4
+
 
 # Semantic map
 explored_depth: 1.7

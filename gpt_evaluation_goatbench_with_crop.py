@@ -900,7 +900,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
         for results_path in all_results_paths:
             with open(results_path, "rb") as f:
                 all_results.update(pickle.load(f))
-        logging.info(f"Total {filename} results: {100 * np.mean(list(all_results.values())):.2f}")
+        logging.info(f"Total {filename} results: {100 * np.mean(list(all_results.values())):.2f}, len: {len(all_results)}")
         with open(os.path.join(str(cfg.output_dir), f"{filename}.pkl"), "wb") as f:
             pickle.dump(all_results, f)
     filenames_to_merge = ['success_by_task', 'spl_by_task']
@@ -915,7 +915,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         all_results[task_name] = []
                     all_results[task_name] += task_res
         for task_name, task_res in all_results.items():
-            logging.info(f"Total {filename} results for {task_name}: {100 * np.mean(task_res):.2f}")
+            logging.info(f"Total {filename} results for {task_name}: {100 * np.mean(task_res):.2f}, len: {len(task_res)}")
         with open(os.path.join(str(cfg.output_dir), f"{filename}.pkl"), "wb") as f:
             pickle.dump(all_results, f)
 

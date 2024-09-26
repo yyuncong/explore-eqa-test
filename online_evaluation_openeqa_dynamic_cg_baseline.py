@@ -34,7 +34,7 @@ from src.habitat import (
 from src.geom import get_cam_intr, get_scene_bnds
 from src.tsdf_new_cg import TSDFPlanner, Frontier, SnapShot
 from src.scene_cg_baseline import Scene
-from src.eval_utils_snapshot_new import (
+from src.eval_utils_cg_baseline import (
     prepare_step_dict,
     get_item,
     encode,
@@ -56,115 +56,115 @@ from llava.mm_utils import get_model_name_from_path
 from easydict import EasyDict
 
 
-# def infer_prefilter(model, tokenizer, sample):
-#     # return prefiltered object list
-#     filter_input_ids = sample.filter_input_ids.to("cuda")
-#     if len(torch.where(sample.filter_input_ids==22550)[1]) == 0:
-#         logging.info(f"invalid: no token 'answer'!")
-#         return None
-#     answer_ind = torch.where(sample.filter_input_ids==22550)[1][0].item()
-#     filter_input_ids = filter_input_ids[:, :answer_ind+2]
-#     # logging.info('prefiltering prompt')
-#     # logging.info(
-#     #     tokenizer.decode(filter_input_ids[0][filter_input_ids[0] != tokenizer.pad_token_id])
-#     # )
-#     with torch.no_grad():
-#         with torch.inference_mode() and torch.autocast(device_type="cuda"):
-#             filter_output_ids = model.generate(
-#                 filter_input_ids,
-#                 feature_dict=None,
-#                 do_sample=False,
-#                 max_new_tokens=100,
-#             )
-#     # parse the prefilter output
-#         filter_outputs = tokenizer.decode(filter_output_ids[0, filter_input_ids.shape[1]:]).replace("</s>", "").strip()
-#     # print("the output of prefiltering", filter_outputs)
-#     # logging.info(f"prefiltering output: {filter_outputs}")
-#     if filter_outputs == "No object available":
-#         return []
-#     else:
-#         filter_outputs = filter_outputs.split("\n")
-#         # print("parsed output of prefiltering", filter_outputs)
-#         return filter_outputs
-#
-# def infer_selection(model, tokenizer, sample):
-#     feature_dict = EasyDict(
-#         scene_feature = sample.scene_feature.to("cuda"),
-#         scene_insert_loc = sample.scene_insert_loc,
-#         scene_length = sample.scene_length,
-#     )
-#     input_ids = sample.input_ids.to("cuda")
-#     # logging.info('final input to the model')
-#     # logging.info(
-#     #     tokenizer.decode(input_ids[0][input_ids[0] != tokenizer.pad_token_id])
-#     # )
-#     # input()
-#     # the loss of : exists in infer_selection
-#     # but in final prompt
-#     if len(torch.where(sample.input_ids==22550)[1]) == 0:
-#         logging.info(f"invalid: no token 'answer'!")
-#         return None
-#         eixt(0)  # ???
-#     answer_ind = torch.where(sample.input_ids==22550)[1][0].item()
-#     input_ids = input_ids[:, :answer_ind+2]
-#     with torch.no_grad():
-#         with torch.inference_mode() and torch.autocast(device_type="cuda"):
-#             output_ids = model.generate(
-#                 input_ids,
-#                 feature_dict=feature_dict,
-#                 do_sample=False,
-#                 max_new_tokens=10,
-#             )
-#         outputs = tokenizer.decode(output_ids[0, input_ids.shape[1]:]).replace("</s>", "").strip()
-#     return outputs
-#
-# def inference(model, tokenizer, step_dict, cfg):
-#     step_dict["use_prefiltering"] = cfg.prefiltering
-#     #step_dict["use_egocentric_views"] = cfg.egocentric_views
-#     #step_dict["use_action_memory"] = cfg.action_memory
-#     step_dict["top_k_categories"] = cfg.top_k_categories
-#     step_dict["add_positional_encodings"] = cfg.add_positional_encodings
-#
-#     num_visual_tokens = (cfg.visual_feature_size // cfg.patch_size) ** 2
-#     step_dict["num_visual_tokens"] = num_visual_tokens
-#     # print("pos", step_dict["add_positional_encodings"])
-#     # try:
-#     sample = get_item(
-#         tokenizer, step_dict
-#     )
-#     # except:
-#     #     logging.info(f"Get item failed! (most likely no frontiers and no objects)")
-#     #     return None
-#
-#     if cfg.prefiltering:
-#         filter_outputs = infer_prefilter(model,tokenizer,sample)
-#         if filter_outputs is None:
-#             return None
-#         selection_dict = sample.selection_dict[0]
-#         selection_input, snapshot_id_mapping = construct_selection_prompt(
-#             tokenizer,
-#             selection_dict.text_before_snapshot,
-#             selection_dict.feature_before_snapshot,
-#             selection_dict.frontier_text,
-#             selection_dict.frontier_features,
-#             selection_dict.snapshot_info_dict,
-#             4096,
-#             True,
-#             filter_outputs,
-#             cfg.top_k_categories,
-#             num_visual_tokens
-#         )
-#         sample = collate_wrapper([selection_input])
-#         outputs = infer_selection(model,tokenizer,sample)
-#         return outputs, snapshot_id_mapping
-#     else:
-#         # already loss Answer/:
-#         #print('before input into inference')
-#         #print(
-#         #    tokenizer.decode(sample.input_ids[0][sample.input_ids[0] != tokenizer.pad_token_id])
-#         #)
-#         outputs = infer_selection(model,tokenizer,sample)
-#         return outputs
+def infer_prefilter(model, tokenizer, sample):
+    # return prefiltered object list
+    filter_input_ids = sample.filter_input_ids.to("cuda")
+    if len(torch.where(sample.filter_input_ids==22550)[1]) == 0:
+        logging.info(f"invalid: no token 'answer'!")
+        return None
+    answer_ind = torch.where(sample.filter_input_ids==22550)[1][0].item()
+    filter_input_ids = filter_input_ids[:, :answer_ind+2]
+    # logging.info('prefiltering prompt')
+    # logging.info(
+    #     tokenizer.decode(filter_input_ids[0][filter_input_ids[0] != tokenizer.pad_token_id])
+    # )
+    with torch.no_grad():
+        with torch.inference_mode() and torch.autocast(device_type="cuda"):
+            filter_output_ids = model.generate(
+                filter_input_ids,
+                feature_dict=None,
+                do_sample=False,
+                max_new_tokens=100,
+            )
+    # parse the prefilter output
+        filter_outputs = tokenizer.decode(filter_output_ids[0, filter_input_ids.shape[1]:]).replace("</s>", "").strip()
+    # print("the output of prefiltering", filter_outputs)
+    # logging.info(f"prefiltering output: {filter_outputs}")
+    if filter_outputs == "No object available":
+        return []
+    else:
+        filter_outputs = filter_outputs.split("\n")
+        # print("parsed output of prefiltering", filter_outputs)
+        return filter_outputs
+
+def infer_selection(model, tokenizer, sample):
+    feature_dict = EasyDict(
+        scene_feature = sample.scene_feature.to("cuda"),
+        scene_insert_loc = sample.scene_insert_loc,
+        scene_length = sample.scene_length,
+    )
+    input_ids = sample.input_ids.to("cuda")
+    # logging.info('final input to the model')
+    # logging.info(
+    #     tokenizer.decode(input_ids[0][input_ids[0] != tokenizer.pad_token_id])
+    # )
+    # input()
+    # the loss of : exists in infer_selection
+    # but in final prompt
+    if len(torch.where(sample.input_ids==22550)[1]) == 0:
+        logging.info(f"invalid: no token 'answer'!")
+        return None
+        eixt(0)  # ???
+    answer_ind = torch.where(sample.input_ids==22550)[1][0].item()
+    input_ids = input_ids[:, :answer_ind+2]
+    with torch.no_grad():
+        with torch.inference_mode() and torch.autocast(device_type="cuda"):
+            output_ids = model.generate(
+                input_ids,
+                feature_dict=feature_dict,
+                do_sample=False,
+                max_new_tokens=10,
+            )
+        outputs = tokenizer.decode(output_ids[0, input_ids.shape[1]:]).replace("</s>", "").strip()
+    return outputs
+
+def inference(model, tokenizer, step_dict, cfg):
+    step_dict["use_prefiltering"] = cfg.prefiltering
+    #step_dict["use_egocentric_views"] = cfg.egocentric_views
+    #step_dict["use_action_memory"] = cfg.action_memory
+    step_dict["top_k_categories"] = cfg.top_k_categories
+    step_dict["add_positional_encodings"] = cfg.add_positional_encodings
+
+    num_visual_tokens = (cfg.visual_feature_size // cfg.patch_size) ** 2
+    step_dict["num_visual_tokens"] = num_visual_tokens
+    # print("pos", step_dict["add_positional_encodings"])
+    # try:
+    sample = get_item(
+        tokenizer, step_dict
+    )
+    # except:
+    #     logging.info(f"Get item failed! (most likely no frontiers and no objects)")
+    #     return None
+
+    if cfg.prefiltering:
+        filter_outputs = infer_prefilter(model,tokenizer,sample)
+        if filter_outputs is None:
+            return None
+        selection_dict = sample.selection_dict[0]
+        selection_input, object_id_mapping = construct_selection_prompt(
+            tokenizer,
+            selection_dict.text_before_object,
+            selection_dict.feature_before_object,
+            selection_dict.frontier_text,
+            selection_dict.frontier_features,
+            selection_dict.object_info_dict,
+            4096,
+            True,
+            filter_outputs,
+            cfg.top_k_categories,
+            num_visual_tokens
+        )
+        sample = collate_wrapper([selection_input])
+        outputs = infer_selection(model,tokenizer,sample)
+        return outputs, object_id_mapping
+    else:
+        # already loss Answer/:
+        #print('before input into inference')
+        #print(
+        #    tokenizer.decode(sample.input_ids[0][sample.input_ids[0] != tokenizer.pad_token_id])
+        #)
+        outputs = infer_selection(model,tokenizer,sample)
+        return outputs
 
 
 def main(cfg, start_ratio=0.0, end_ratio=1.0):
@@ -361,10 +361,11 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         frame_idx=cnt_step * total_views + view_idx,
                         target_obj_mask=None,
                     )
+                    #print(type(rgb))
                     img_feature = encode(model, image_processor, rgb).mean(0)
                     img_feature = merge_patches(
                         img_feature.view(cfg.visual_feature_size, cfg.visual_feature_size, -1),
-                        cfg.patch_size
+                        cfg.egocentric_patch_size #cfg.patch_size
                     )
                     rgb_egocentric_views_features.append(img_feature.to("cpu"))
                     if cfg.save_visualization or cfg.save_frontier_video:
@@ -472,13 +473,23 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 vlm_id_to_ft_id = {v: k for k, v in ft_id_to_vlm_id.items()}
 
                 step_dict["objects"] = {}
+                step_dict["object_features"] = {}
                 for obj_id, obj in scene.objects.items():
                     step_dict["objects"][obj_id] = obj["image_crop"]  # obj_id -> image_crop: pil_image
-                    assert False, "Check here and then remove this line!" # TODO: image_crop is pil_image, need to somehow convert to feature
+                    step_dict["object_features"][obj_id] = encode(
+                        model, image_processor, np.array(obj["image_crop"])
+                    ).to("cpu")
+                    step_dict["object_features"][obj_id] = merge_patches(
+                        step_dict["object_features"][obj_id].view(cfg.visual_feature_size, cfg.visual_feature_size, -1),
+                        cfg.patch_size
+                    )
+                    #assert False, "Check here and then remove this line!" # TODO: image_crop is pil_image, need to somehow convert to feature
 
                 if cfg.egocentric_views:
                     assert len(rgb_egocentric_views_features) == total_views
-                    rgb_egocentric_views_features_tensor = torch.cat(rgb_egocentric_views_features, dim=0)
+                    #rgb_egocentric_views_features_tensor = torch.cat(rgb_egocentric_views_features, dim=0)
+                    # only keep the main angle features
+                    rgb_egocentric_views_features_tensor = rgb_egocentric_views_features[-1]
                     step_dict["egocentric_view_features"] = rgb_egocentric_views_features_tensor
                     step_dict["use_egocentric_views"] = True
 

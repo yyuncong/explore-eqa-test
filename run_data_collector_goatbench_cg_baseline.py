@@ -160,7 +160,6 @@ def main(cfg):
 
                 target_obj_id = question_data['object_id']
                 target_position = question_data['position']
-                target_rotation = question_data['rotation']
                 episode_data_dir = os.path.join(str(cfg.dataset_output_dir), f"{question_data['question_id']}_path_{path_idx}")
                 episode_frontier_dir = os.path.join(episode_data_dir, "frontier_rgb")
                 egocentric_save_dir = os.path.join(episode_data_dir, 'egocentric_views')

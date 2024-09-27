@@ -166,7 +166,7 @@ def format_explore_prompt(
         content.append((text, egocentric_imgs[-1]))
         content.append(("\n",))
     # 3 here is the snapshot images
-    text = "The followings are all the snapshots that you can explore (followed with contained object classes)\n"
+    text = "The followings are all the snapshots that you can choose (followed with contained object classes)\n"
     text += "Please note that the contained classes may not be accurate (wrong classes/missing classes) due to the limitation of the object detection model. "
     text += "So you still need to utilize the images to make the decision.\n"
     content.append((text,))

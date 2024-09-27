@@ -180,9 +180,9 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
         target_found = False
         explore_dist = 0.0
         cnt_step = -1
-        target_observation_count = 0
 
         all_snapshots = {}
+        all_target_observations = []
         while cnt_step < num_step - 1:
             cnt_step += 1
             logging.info(f"\n== step: {cnt_step}")
@@ -252,7 +252,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             for obj_id, obj in scene.objects.items():
                 if np.linalg.norm(obj['bbox'].center[[0, 2]] - pts[[0, 2]]) < cfg.scene_graph.obj_include_dist + 0.5:
                     all_added_obj_ids.append(obj_id)
-            scene.update_snapshots(obj_ids=set(all_added_obj_ids))
+            scene.update_snapshots(obj_ids=set(all_added_obj_ids), min_detection=cfg.min_detection)
             logging.info(f"Step {cnt_step} {len(scene.objects)} objects, {len(scene.snapshots)} snapshots")
 
             # update the mapping of object id to class name, since the objects have been updated
@@ -403,7 +403,8 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     objects=scene.objects,
                     cfg=cfg.planner,
                     pathfinder=scene.pathfinder,
-                    random_position=False # if target_observation_count == 0 else True  # use the best observation point for the first observation, and random for the rest
+                    random_position=False,
+                    observe_snapshot=False  # directly go to the center of the snapshot
                 )
                 if not update_success:
                     logging.info(f"Question id {question_id} invalid: set_next_navigation_point failed!")
@@ -425,7 +426,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             pts_normal, angle, pts_pix, fig, _, target_arrived = return_values
 
             # sanity check
-            obj_exclude_count = sum([1 if obj['num_detections'] < 2 else 0 for obj in scene.objects.values()])
+            obj_exclude_count = sum([1 if obj['num_detections'] < cfg.min_detection else 0 for obj in scene.objects.values()])
             total_objs_count = sum(
                 [len(snapshot.cluster) for snapshot in scene.snapshots.values()]
             )
@@ -439,7 +440,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 for ss in scene.snapshots.values():
                     if obj_id in ss.cluster:
                         exist_count += 1
-                if scene.objects[obj_id]['num_detections'] < 2:
+                if scene.objects[obj_id]['num_detections'] < cfg.min_detection:
                     assert exist_count == 0, f"{exist_count} != 0 for obj_id {obj_id}, {scene.objects[obj_id]['class_name']}"
                 else:
                     assert exist_count == 1, f"{exist_count} != 1 for obj_id {obj_id}, {scene.objects[obj_id]['class_name']}"
@@ -507,36 +508,34 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
 
             logging.info(f"Current position: {pts}, {explore_dist:.3f}")
 
-            if type(max_point_choice) == SnapShot:# and target_arrived:
+            if type(max_point_choice) == SnapShot:
                 # get an observation and break
                 obs, _ = scene.get_observation(pts, angle)
                 rgb = obs["color_sensor"]
+                rgb = rgba2rgb(rgb)
+                all_target_observations.append(rgb)
 
-                plt.imsave(
-                    os.path.join(episode_object_observe_dir, f"target_{target_observation_count}.png"), rgb
-                )
-                # also, save the snapshot image itself
+                # save the snapshot image itself
                 snapshot_filename = max_point_choice.image.split(".")[0]
                 os.system(f"cp {os.path.join(episode_snapshot_dir, max_point_choice.image)} {os.path.join(episode_object_observe_dir, f'snapshot_{snapshot_filename}.png')}")
 
-                target_observation_count += 1
-                if target_observation_count >= max_target_observation:
-                    target_found = True
-                    break
+                if target_arrived:
+                    logging.info(f"Target arrived at {pts}, {explore_dist:.3f}")
 
-                target_pos = np.mean([scene.objects[obj_id]['bbox'].center[[0, 2]] for obj_id in max_point_choice.cluster], axis=0)
-                agent_pos = pts[[0, 2]]
-                if np.linalg.norm(target_pos - agent_pos) < cfg.target_distance_threshold:
-                    logging.info(f"Target found! Distance: {np.linalg.norm(target_pos - agent_pos)}")
-                    target_found = True
-                    break
+                    if len(all_target_observations) >= max_target_observation:
+                        target_found = True
+                        logging.info(f"Question id {question_id} finished after arriving at target! In total {len(all_target_observations)} target observations")
+                        break
         
             # if agent postion is within 1m of the snapshot position then target_found is True
             # calculate the target position by averaging all objects' positions in max_point_choice.cluster                
 
-        # here once the model has chosen one snapshot, we count it as a success
-        # if target_observation_count > 0:
-        #     target_found = True
+        if len(all_target_observations) > 0:
+            target_found = True
+
+        # save the last "max_target_observation" target observations
+        for i, target_observation in enumerate(all_target_observations[-max_target_observation:]):
+            plt.imsave(os.path.join(episode_object_observe_dir, f"target_observation_{i}.png"), target_observation)
 
         if target_found:
             success_count += 1
@@ -640,10 +639,10 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
         logging.info(f"Scene graph of question {question_id}:")
         logging.info(f"Question: {question}")
         logging.info(f"Answer: {answer}")
-        # for snapshot_id, obj_list in snapshot_dict.items():
-        #     logging.info(f"{snapshot_id}:")
-        #     for obj_str in obj_list:
-        #         logging.info(f"\t{obj_str}")
+        for snapshot_id, obj_list in snapshot_dict.items():
+            logging.info(f"{snapshot_id}:")
+            for obj_str in obj_list:
+                logging.info(f"\t{obj_str}")
 
         with open(os.path.join(str(cfg.output_dir), f"success_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
             pickle.dump(success_list, f)

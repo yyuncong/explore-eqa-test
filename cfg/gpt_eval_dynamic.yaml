@@ -1,16 +1,16 @@
 # General
 seed: 77
-exp_name: gpt_explore_dynamic_scannet_3image_1obs_noego
+exp_name: exp_aeqa_gpt_default
 output_parent_dir: /work/pi_chuangg_umass_edu/yuncong/results
 scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
 scene_data_path: /work/pi_chuangg_umass_edu/yuncong/data/scene_datasets/hm3d/
-questions_list_path: 'data/generated_questions-eval.json'
+questions_list_path: 'data/generated_questions-184.json'
 
 concept_graph_config_path: "conceptgraph/hydra_configs"
 concept_graph_config_name: "rerun_realtime_mapping"
 
-choose_every_step: true #false #true
-egocentric_views: false
+choose_every_step: true
+egocentric_views: true
 action_memory: false
 prefiltering: true
 top_k_categories: 10
@@ -18,10 +18,9 @@ top_k_categories: 10
 min_detection: 2
 
 # about detection model
-#yolo_model_name: /home/yuncongyang_umass_edu/scene_understanding/yanghan/explore-eqa-test/yolov8x-world-finetuned.pt  # yolov8x-world.pt
-#class_set: yolo_finetune  # hm3d, yolo_finetune, scannet200
-yolo_model_name: /home/yuncongyang_umass_edu/scene_understanding/yanghan/explore-eqa-test/yolov8x-world.pt
+yolo_model_name: yolov8x-world.pt
 class_set: scannet200
+
 # Camera, image
 camera_height: 1.5
 camera_tilt_deg: -30
@@ -31,6 +30,8 @@ hfov: 120
 tsdf_grid_size: 0.1
 margin_w_ratio: 0.25
 margin_h_ratio: 0.6
+
+use_full_obj_list: false
 
 save_visualization: false
 save_frontier_video: false

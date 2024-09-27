@@ -397,6 +397,11 @@ class Scene:
             for obj_id in detection_list.keys()
         }
 
+        det_visual_prompt = sv.Detections(
+            xyxy=gobs['xyxy'],
+            class_id=gobs['class_id'],
+        )
+
         # if no objects yet in the map,
         # just add all the objects from the current frame
         # then continue, no need to match or merge
@@ -404,6 +409,8 @@ class Scene:
             logging.debug(f"No objects in the map yet, adding all detections of length {len(detection_list)}")
             self.objects.update(detection_list)
 
+            det_visual_prompt.data['obj_id'] = list(detection_list.keys())
+            frame.visual_prompt = det_visual_prompt
             self.frames[img_path] = frame
 
             annotated_image = image_rgb
@@ -435,13 +442,16 @@ class Scene:
             )
 
             # Now merge the detected objects into the existing objects based on the match indices
-            visualize_captions, target_obj_id, added_obj_ids = self.merge_obj_matches(
+            visualize_captions, target_obj_id, added_obj_ids, all_obj_ids = self.merge_obj_matches(
                 detection_list=detection_list,
                 match_indices=match_indices,
                 obj_classes=obj_classes,
                 snapshot=frame,
                 target_obj_id=target_obj_id
             )
+
+            det_visual_prompt.data['obj_id'] = all_obj_ids
+            frame.visual_prompt = det_visual_prompt
 
             # add the snapshot into the snapshot list
             self.frames[img_path] = frame
@@ -496,8 +506,9 @@ class Scene:
         obj_classes: ObjectClasses,
         snapshot: SnapShot,
         target_obj_id: Optional[int] = None  # if given, then track whether the target object is merged into a previous object (so the id would change)
-    ) -> Tuple[List[str], Optional[int], List[int]]:
+    ) -> Tuple[List[str], Optional[int], List[int], List[int]]:
         visualize_captions = []
+        all_obj_ids = []
         added_obj_ids = []
         for idx, (detected_obj_id, existing_obj_match_id) in enumerate(match_indices):
             if existing_obj_match_id is None:
@@ -505,6 +516,7 @@ class Scene:
                 visualize_captions.append(
                     f"{detected_obj_id} {self.objects[detected_obj_id]['class_name']} {self.objects[detected_obj_id]['conf']:.3f} N"
                 )
+                all_obj_ids.append(detected_obj_id)
                 added_obj_ids.append(detected_obj_id)
             else:
                 # merge detected object into existing object
@@ -536,12 +548,13 @@ class Scene:
                 visualize_captions.append(
                     f"{existing_obj_match_id} {self.objects[existing_obj_match_id]['class_name']} {detected_obj['conf']:.3f} {merged_obj['num_detections']}"
                 )
+                all_obj_ids.append(existing_obj_match_id)
 
                 # if current object is the target object, and it is merged into an existing object, then change the target object id to the existing object id
                 if target_obj_id == detected_obj_id:
                     target_obj_id = existing_obj_match_id
 
-        return visualize_captions, target_obj_id, added_obj_ids
+        return visualize_captions, target_obj_id, added_obj_ids, all_obj_ids
 
     def make_detection_list_from_pcd_and_gobs(
             self, gobs, image_path, obj_classes
@@ -594,6 +607,7 @@ class Scene:
     def update_snapshots(
         self,
         obj_ids,
+        min_detection=2,
     ):
         self.cleanup_empty_frames_snapshots()
 
@@ -608,7 +622,7 @@ class Scene:
         obj_ids = list(set(obj_ids))
 
         # find and exclude the objects that have only one observation
-        obj_exclude = [obj_id for obj_id in self.objects.keys() if self.objects[obj_id]['num_detections'] < 2]
+        obj_exclude = [obj_id for obj_id in self.objects.keys() if self.objects[obj_id]['num_detections'] < min_detection]
         obj_ids = [obj_id for obj_id in obj_ids if obj_id not in obj_exclude]
 
         obj_centers = np.zeros((len(obj_ids), 2))
@@ -643,7 +657,7 @@ class Scene:
 
         # sanity check
         for obj_id, obj in self.objects.items():
-            if obj['num_detections'] < 2:
+            if obj['num_detections'] < min_detection:
                 assert obj['image'] is None, f"{obj_id} has only one detection but has image"
             else:
                 assert obj['image'] is not None, f"{obj_id} has no image"

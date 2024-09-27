@@ -180,9 +180,9 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
         target_found = False
         explore_dist = 0.0
         cnt_step = -1
-        target_observation_count = 0
 
         all_snapshots = {}
+        all_target_observations = []
         while cnt_step < num_step - 1:
             cnt_step += 1
             logging.info(f"\n== step: {cnt_step}")
@@ -553,36 +553,34 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
 
             logging.info(f"Current position: {pts}, {explore_dist:.3f}")
 
-            if type(max_point_choice) == SnapShot: # and target_arrived:
+            if type(max_point_choice) == SnapShot:
                 # get an observation and break
                 obs, _ = scene.get_observation(pts, angle)
                 rgb = obs["color_sensor"]
+                rgb = rgba2rgb(rgb)
+                all_target_observations.append(rgb)
 
-                plt.imsave(
-                    os.path.join(episode_object_observe_dir, f"target_{target_observation_count}.png"), rgb
-                )
-                # also, save the snapshot image itself
+                # save the snapshot image itself
                 snapshot_filename = max_point_choice.image.split(".")[0]
                 os.system(f"cp {os.path.join(episode_snapshot_dir, max_point_choice.image)} {os.path.join(episode_object_observe_dir, f'snapshot_{snapshot_filename}.png')}")
 
-                target_observation_count += 1
-                if target_observation_count >= max_target_observation:
-                    target_found = True
-                    break
+                if target_arrived:
+                    logging.info(f"Target arrived at {pts}, {explore_dist:.3f}")
 
-                target_pos = np.mean([scene.objects[obj_id]['bbox'].center[[0, 2]] for obj_id in max_point_choice.cluster], axis=0)
-                agent_pos = pts[[0, 2]]
-                if np.linalg.norm(target_pos - agent_pos) < cfg.target_distance_threshold:
-                    logging.info(f"Target found! Distance: {np.linalg.norm(target_pos - agent_pos)}")
-                    target_found = True
-                    break
+                    if len(all_target_observations) >= max_target_observation:
+                        target_found = True
+                        logging.info(f"Question id {question_id} finished after arriving at target! In total {len(all_target_observations)} target observations")
+                        break
 
             # if agent postion is within 1m of the snapshot position then target_found is True
             # calculate the target position by averaging all objects' positions in max_point_choice.cluster
 
-        # here once the model has chosen one snapshot, we count it as a success
-        # if target_observation_count > 0:
-        #     target_found = True
+        if len(all_target_observations) > 0:
+            target_found = True
+
+        # save the last "max_target_observation" target observations
+        for i, target_observation in enumerate(all_target_observations[-max_target_observation:]):
+            plt.imsave(os.path.join(episode_object_observe_dir, f"target_observation_{i}.png"), target_observation)
 
         if target_found:
             success_count += 1

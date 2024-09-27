@@ -519,6 +519,10 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 snapshot_filename = max_point_choice.image.split(".")[0]
                 os.system(f"cp {os.path.join(episode_snapshot_dir, max_point_choice.image)} {os.path.join(episode_object_observe_dir, f'snapshot_{snapshot_filename}.png')}")
 
+                target_snapshot_center = np.mean([scene.objects[obj_id]['bbox'].center[[0, 2]] for obj_id in max_point_choice.cluster], axis=0)
+                if np.linalg.norm(target_snapshot_center - pts[[0, 2]]) < cfg.snapshot_arrive_distance:
+                    target_arrived = True
+
                 if target_arrived:
                     logging.info(f"Target arrived at {pts}, {explore_dist:.3f}")
 
@@ -650,6 +654,11 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             pickle.dump(path_length_list, f)
         with open(os.path.join(str(cfg.output_dir), f"fail_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
             pickle.dump(fail_list, f)
+
+        # clear up memory
+        if not cfg.save_visualization:
+            os.system(f"rm -r {episode_snapshot_dir}")
+            os.system(f"rm -r {episode_frontier_dir}")
 
     with open(os.path.join(str(cfg.output_dir), f"success_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
         pickle.dump(success_list, f)

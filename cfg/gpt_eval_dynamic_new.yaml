@@ -20,6 +20,7 @@ yolo_model_name: yolov8x-world.pt
 class_set: scannet200
 
 min_detection: 1
+snapshot_arrive_distance: 1.0
 
 # Camera, image
 camera_height: 1.5

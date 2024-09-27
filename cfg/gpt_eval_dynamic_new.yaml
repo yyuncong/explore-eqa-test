@@ -9,7 +9,7 @@ questions_list_path: 'data/generated_questions-184.json'
 concept_graph_config_path: "conceptgraph/hydra_configs"
 concept_graph_config_name: "rerun_realtime_mapping"
 
-choose_every_step: true #false #true
+choose_every_step: true
 egocentric_views: true
 action_memory: false
 prefiltering: true

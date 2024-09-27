@@ -167,7 +167,7 @@ def inference(model, tokenizer, step_dict, cfg):
         return outputs
 
 
-def main(cfg, start_ratio=0.0, end_ratio=1.0):
+def main(cfg, args, start_ratio=0.0, end_ratio=1.0):
     # use hydra to load concept graph related configs
     with initialize(config_path="conceptgraph/hydra_configs", job_name="app"):
         cfg_cg = compose(config_name=cfg.concept_graph_config_name)
@@ -184,8 +184,10 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
     total_questions = len(questions_list)
     # sort the data according to the question id
     questions_list = sorted(questions_list, key=lambda x: x['question_id'])
+    split_length = (total_questions//args.split_number) + 1
+    questions_list = questions_list[args.split_index*split_length:(args.split_index+1)*split_length]
     logging.info(f"Total number of questions: {total_questions}")
-    questions_list = questions_list[int(start_ratio * total_questions):int(end_ratio * total_questions)]
+    #questions_list = questions_list[int(start_ratio * total_questions):int(end_ratio * total_questions)]
     # shuffle the data
     # random.shuffle(questions_list)
     logging.info(f"number of questions after splitting: {len(questions_list)}")
@@ -512,6 +514,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
 
                 if cfg.prefiltering:
                     outputs, obj_id_mapping = inference(model, tokenizer, step_dict, cfg)
+                    print(obj_id_mapping)
                 else:
                     outputs = inference(model, tokenizer, step_dict, cfg)
                     obj_id_mapping = None
@@ -733,6 +736,12 @@ if __name__ == "__main__":
     parser.add_argument("-cf", "--cfg_file", help="cfg file path", default="", type=str)
     parser.add_argument("--start_ratio", help="start ratio", default=0.0, type=float)
     parser.add_argument("--end_ratio", help="end ratio", default=1.0, type=float)
+    parser.add_argument("--split_number",
+                        help = "the number of question list splits",
+                        type = int, default = 1)
+    parser.add_argument("--split_index",
+                        help = "the index of of question split",
+                        type = int, default = 0)
     args = parser.parse_args()
     cfg = OmegaConf.load(args.cfg_file)
     OmegaConf.resolve(cfg)
@@ -775,4 +784,4 @@ if __name__ == "__main__":
 
     # run
     logging.info(f"***** Running {cfg.exp_name} *****")
-    main(cfg, args.start_ratio, args.end_ratio)
+    main(cfg, args, args.start_ratio, args.end_ratio)

@@ -98,6 +98,11 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             fail_list = pickle.load(f)
     else:
         fail_list = []
+    if os.path.exists(os.path.join(str(cfg.output_dir), f"gpt_answer_{start_ratio}_{end_ratio}.json")):
+        with open(os.path.join(str(cfg.output_dir), f"gpt_answer_{start_ratio}_{end_ratio}.json"), "r") as f:
+            gpt_answer_list = json.load(f)
+    else:
+        gpt_answer_list = []
 
     success_count = 0
     max_target_observation = cfg.max_target_observation
@@ -183,6 +188,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
 
         all_snapshots = {}
         all_target_observations = []
+        gpt_answer = None
         while cnt_step < num_step - 1:
             cnt_step += 1
             logging.info(f"\n== step: {cnt_step}")
@@ -331,7 +337,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 step_dict["question"] = question
                 step_dict["scene"] = scene_id
 
-                outputs, snapshot_id_mapping = explore_step(step_dict, cfg)
+                outputs, snapshot_id_mapping, reason = explore_step(step_dict, cfg)
                 if outputs is None:
                     # encounter generation error
                     logging.info(f"Question id {question_id} invalid: model generation error!")
@@ -378,6 +384,10 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         snapshot_dict[obj['image']].append(
                             f"{obj_id}: {obj['class_name']} {obj['num_detections']}"
                         )
+
+                    # add the reason for the choice
+                    gpt_answer = reason  # use the latest reason
+
                     # for snapshot_id, obj_list in snapshot_dict.items():
                     #     logging.info(f"{snapshot_id}:")
                     #     for obj_str in obj_list:
@@ -404,7 +414,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     cfg=cfg.planner,
                     pathfinder=scene.pathfinder,
                     random_position=False,
-                    observe_snapshot=False  # directly go to the center of the snapshot
                 )
                 if not update_success:
                     logging.info(f"Question id {question_id} invalid: set_next_navigation_point failed!")
@@ -519,17 +528,11 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 snapshot_filename = max_point_choice.image.split(".")[0]
                 os.system(f"cp {os.path.join(episode_snapshot_dir, max_point_choice.image)} {os.path.join(episode_object_observe_dir, f'snapshot_{snapshot_filename}.png')}")
 
-                target_snapshot_center = np.mean([scene.objects[obj_id]['bbox'].center[[0, 2]] for obj_id in max_point_choice.cluster], axis=0)
-                if np.linalg.norm(target_snapshot_center - pts[[0, 2]]) < cfg.snapshot_arrive_distance:
-                    target_arrived = True
-
                 if target_arrived:
-                    logging.info(f"Target arrived at {pts}, {explore_dist:.3f}")
+                    target_found = True
+                    logging.info(f"Question id {question_id} finished after arriving at target! In total {len(all_target_observations)} target observations")
+                    break
 
-                    if len(all_target_observations) >= max_target_observation:
-                        target_found = True
-                        logging.info(f"Question id {question_id} finished after arriving at target! In total {len(all_target_observations)} target observations")
-                        break
         
             # if agent postion is within 1m of the snapshot position then target_found is True
             # calculate the target position by averaging all objects' positions in max_point_choice.cluster                
@@ -554,7 +557,12 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             logging.info(f"Question id {question_id} failed, {explore_dist} length")
         logging.info(f"{question_idx + 1}/{total_questions}: Success rate: {success_count}/{question_idx + 1}")
         logging.info(f"Mean path length for success exploration: {np.mean(list(path_length_list.values()))}")
-        # logging.info(f'Scene {scene_id} finish')
+
+        # save the gpt answer
+        gpt_answer_list.append({
+            "question_id": question_id,
+            "answer": gpt_answer
+        })
 
         # if target not found, select images from existing snapshots for question answering
         if not target_found:
@@ -643,6 +651,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
         logging.info(f"Scene graph of question {question_id}:")
         logging.info(f"Question: {question}")
         logging.info(f"Answer: {answer}")
+        logging.info(f"Prediction: {gpt_answer}")
         for snapshot_id, obj_list in snapshot_dict.items():
             logging.info(f"{snapshot_id}:")
             for obj_str in obj_list:
@@ -654,6 +663,8 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             pickle.dump(path_length_list, f)
         with open(os.path.join(str(cfg.output_dir), f"fail_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
             pickle.dump(fail_list, f)
+        with open(os.path.join(str(cfg.output_dir), f"gpt_answer_{start_ratio}_{end_ratio}.json"), "w") as f:
+            json.dump(gpt_answer_list, f)
 
         # clear up memory
         if not cfg.save_visualization:
@@ -685,6 +696,15 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
         pickle.dump(success_list, f)
     with open(os.path.join(str(cfg.output_dir), "path_length_list.pkl"), "wb") as f:
         pickle.dump(path_length_list, f)
+
+    gpt_answer_list = []
+    all_gpt_answer_list_paths = glob.glob(os.path.join(str(cfg.output_dir), "gpt_answer_*.json"))
+    for gpt_answer_list_path in all_gpt_answer_list_paths:
+        with open(gpt_answer_list_path, "r") as f:
+            gpt_answer_list += json.load(f)
+
+    with open(os.path.join(str(cfg.output_dir), "gpt_answer.json"), "w") as f:
+        json.dump(gpt_answer_list, f)
 
 
 if __name__ == "__main__":

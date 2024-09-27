@@ -9,7 +9,7 @@ from typing import Optional
 import logging
 
 client = AzureOpenAI(
-    azure_endpoint="https://chuangsweden.openai.azure.com",
+    azure_endpoint="https://jiaben.openai.azure.com/",
     api_key=os.getenv('AZURE_OPENAI_KEY'),
     api_version="2024-02-15-preview",
 )
@@ -136,21 +136,18 @@ def format_explore_prompt(
     use_snapshot_class = True,
     image_goal = None
 ):
-    sys_prompt = "Task: You are an agent in an indoor scene tasked with answering questions by observing the surroundings and exploring the environment. To answer the question, you are required to choose either a Snapshot or a Frontier image as the direction to explore.\n"
+    sys_prompt = "Task: You are an agent in an indoor scene tasked with answering questions by observing the surroundings and exploring the environment. To answer the question, you are required to choose either a Snapshot as the answer or a Frontier to further explore.\n"
+    sys_prompt += "Definitions:\n"
+    sys_prompt += "Snapshot: A focused observation of several objects. Choosing a snapshot means that you are selecting the one or more visible objects in the snapshot as the target objects to help answer the question.\n"
+    sys_prompt += "Frontier: An unexplored region that could potentially lead to new information for answering the question. Selecting a frontier means that you will further explore that direction.\n"
     # TODO: format interleaved text and images
     # a list of (text, image) tuples, if theres no image, use (text,)
     content = []
     # 1 here is some basic info
-    #text = "Task: You are an agent in an indoor scene tasked with answering quesions by observing the surroundings and exploring the environment. To answer the question, you are required to choose either a snapshot or a frontier based on the egocentric views of your surroundings.\n"
-    text = "Definitions:\n"
-    text += "Snapshot: A focused observation of several objects. Choosing a snapshot means that you are selecting the observed objects in the snapshot as the target objects to help answer the question.\n"
-    text += "Frontier: An unexplored region that could potentially lead to new information for answering the question. Selecting a frontier means that you will further explore that direction.\n"
-    # TODO: add simple example: frontier, snapshot 
-    # set | use '/n' to separate different parts
-    # uppercase?
+
     # 2 here is the question
     # TODO: add the image goal here
-    text += f"Question: {question}"
+    text = f"Question: {question}"
     if image_goal is not None:
         content.append((text, image_goal))
         content.append(("\n",))
@@ -180,7 +177,7 @@ def format_explore_prompt(
                 content.append((text,))
             content.append(("\n",))
     # 4 here is the frontier images
-    text = "The followings are all the Frontiers that we can explore: \n"
+    text = "The followings are all the Frontiers that you can explore: \n"
     content.append((text,))
     if len(frontier_imgs) == 0:
         content.append(("No Frontier is available\n",))
@@ -191,7 +188,9 @@ def format_explore_prompt(
     # 5 here is the format of the answer
     text = "Please provide your answer in the following format: 'Snapshot i' or 'Frontier i', where i is the index of the snapshot or frontier you choose. "
     text += "For example, if you choose the first snapshot, please type 'Snapshot 0'.\n"
-    text += "You can explain the reason for your choice, but put it in a new line after the choice.\n"
+    text += "Moreover, if you choose a Frontier, you need to explain why you would like to choose that direction to explore. "
+    text += "If you choose a Snapshot, you need to directly give an answer to the question (if you don't have enough information to give an answer, then don't choose a Snapshot). "
+    text += "Please put the explanation or answer in a new line after the choice.\n"
     #text += "Answer: "
     content.append((text,))
     return sys_prompt, content
@@ -301,29 +300,31 @@ def explore_step(step, cfg):
         use_snapshot_class = True,
         image_goal = image_goal
     )
-    
-    # logging.info(f"Input prompt:")
+
+    logging.info(f"Input prompt:")
     message = sys_prompt
     for c in content:
         message += c[0]
         if len(c) == 2:
             message += f"[{c[1][:10]}...]"
-    # logging.info(message)
+    logging.info(message)
 
     retry_bound = 3
     final_response = None
+    final_reason = None
     for _ in range(retry_bound):
-        response = call_openai_api(sys_prompt, content)
+        full_response = call_openai_api(sys_prompt, content)
 
-        if response is None:
+        if full_response is None:
             print("call_openai_api returns None, retrying")
             continue
 
-        response = response.strip()
-        if "\n" in response:
-            response = response.split("\n")
-            response, reason = response[0], response[-1]
+        full_response = full_response.strip()
+        if "\n" in full_response:
+            full_response = full_response.split("\n")
+            response, reason = full_response[0], full_response[-1]
         else:
+            response = full_response
             reason = ""
         response = response.lower()
         try:
@@ -342,10 +343,11 @@ def explore_step(step, cfg):
         if response_valid:
             logging.info(f"Response: [{response}], Reason: [{reason}]")
             final_response = response
+            final_reason = reason
             break
 
 
-    return final_response, snapshot_id_mapping
+    return final_response, snapshot_id_mapping, final_reason
    
     
     

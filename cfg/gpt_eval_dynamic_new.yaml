@@ -20,7 +20,6 @@ yolo_model_name: yolov8x-world.pt
 class_set: scannet200
 
 min_detection: 1
-snapshot_arrive_distance: 1.0
 
 # Camera, image
 camera_height: 1.5
@@ -66,7 +65,7 @@ planner:
   max_dist_from_cur_phase_2: 1  # when the target object is found, go to the target object with this step length
   max_unexplored_check_frontier: 3
   max_unoccupied_check_frontier: 1
-  final_observe_distance: 1.5  # in phase 2, find a place that is this far from the target object to observe it
+  final_observe_distance: 0.75  # in phase 2, find a place that is this far from the target object to observe it
   surrounding_explored_radius: 0.7
 
   # about frontier selection

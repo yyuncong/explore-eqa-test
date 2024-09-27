@@ -449,7 +449,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     objects=scene.objects,
                     cfg=cfg.planner,
                     pathfinder=scene.pathfinder,
-                    random_position=False if target_observation_count == 0 else True  # use the best observation point for the first observation, and random for the rest
+                    random_position=False # if target_observation_count == 0 else True  # use the best observation point for the first observation, and random for the rest
                 )
                 if not update_success:
                     logging.info(f"Question id {question_id} invalid: set_next_navigation_point failed!")
@@ -553,7 +553,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
 
             logging.info(f"Current position: {pts}, {explore_dist:.3f}")
 
-            if type(max_point_choice) == SnapShot and target_arrived:
+            if type(max_point_choice) == SnapShot: # and target_arrived:
                 # get an observation and break
                 obs, _ = scene.get_observation(pts, angle)
                 rgb = obs["color_sensor"]
@@ -570,9 +570,19 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     target_found = True
                     break
 
+                target_pos = np.mean([scene.objects[obj_id]['bbox'].center[[0, 2]] for obj_id in max_point_choice.cluster], axis=0)
+                agent_pos = pts[[0, 2]]
+                if np.linalg.norm(target_pos - agent_pos) < cfg.target_distance_threshold:
+                    logging.info(f"Target found! Distance: {np.linalg.norm(target_pos - agent_pos)}")
+                    target_found = True
+                    break
+
+            # if agent postion is within 1m of the snapshot position then target_found is True
+            # calculate the target position by averaging all objects' positions in max_point_choice.cluster
+
         # here once the model has chosen one snapshot, we count it as a success
-        if target_observation_count > 0:
-            target_found = True
+        # if target_observation_count > 0:
+        #     target_found = True
 
         if target_found:
             success_count += 1

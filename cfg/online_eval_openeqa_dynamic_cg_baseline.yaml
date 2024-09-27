@@ -1,6 +1,6 @@
 # General
 seed: 77
-exp_name: exp_openeqa_dynamic_cg_baseline_184
+exp_name: exp_openeqa_dynamic_cg_baseline_184_batch
 output_parent_dir: /work/pi_chuangg_umass_edu/yuncong/results
 scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
 scene_data_path: /work/pi_chuangg_umass_edu/yuncong/data/scene_datasets/hm3d/
@@ -50,8 +50,8 @@ max_snapshot_threshold: 999
 
 # Navigation
 init_clearance: 0.3
-max_step_room_size_ratio: 3
-extra_view_phase_1: 4
+max_step_room_size_ratio: 1.5 #3
+extra_view_phase_1: 2
 extra_view_angle_deg_phase_1: 60
 extra_view_phase_2: 6
 extra_view_angle_deg_phase_2: 40

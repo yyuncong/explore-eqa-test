@@ -521,8 +521,11 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
 
                 if target_arrived:
                     logging.info(f"Target arrived at {pts}, {explore_dist:.3f}")
-                    target_found = True
-                    break
+
+                    if len(all_target_observations) >= max_target_observation:
+                        target_found = True
+                        logging.info(f"Question id {question_id} finished after arriving at target! In total {len(all_target_observations)} target observations")
+                        break
         
             # if agent postion is within 1m of the snapshot position then target_found is True
             # calculate the target position by averaging all objects' positions in max_point_choice.cluster                

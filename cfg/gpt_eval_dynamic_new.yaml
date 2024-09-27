@@ -1,6 +1,6 @@
 # General
 seed: 77
-exp_name: gpt_explore_dynamic_scannet_3image_10topk_1.3_4_ego_newprompt
+exp_name: gpt_aeqa_dynamic_obs_till_last_default
 output_parent_dir: /work/pi_chuangg_umass_edu/yuncong/results
 scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
 scene_data_path: /work/pi_chuangg_umass_edu/yuncong/data/scene_datasets/hm3d/
@@ -15,13 +15,12 @@ action_memory: false
 prefiltering: true
 top_k_categories: 10
 
-target_distance_threshold: 1.3
-
 # about detection model
-#yolo_model_name: /home/yuncongyang_umass_edu/scene_understanding/yanghan/explore-eqa-test/yolov8x-world-finetuned.pt  # yolov8x-world.pt
-#class_set: yolo_finetune  # hm3d, yolo_finetune, scannet200
-yolo_model_name: /home/yuncongyang_umass_edu/scene_understanding/yanghan/explore-eqa-test/yolov8x-world.pt
+yolo_model_name: yolov8x-world.pt
 class_set: scannet200
+
+min_detection: 1
+
 # Camera, image
 camera_height: 1.5
 camera_tilt_deg: -30

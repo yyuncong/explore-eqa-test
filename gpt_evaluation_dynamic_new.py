@@ -672,8 +672,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
 
         # clear up memory
         if not cfg.save_visualization:
-            os.system(f"rm -r {episode_snapshot_dir}")
-            os.system(f"rm -r {episode_frontier_dir}")
+            os.system(f"rm -r {episode_data_dir}")
 
     with open(os.path.join(str(cfg.output_dir), f"success_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
         pickle.dump(success_list, f)

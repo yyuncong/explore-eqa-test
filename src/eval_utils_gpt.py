@@ -138,8 +138,10 @@ def format_explore_prompt(
 ):
     sys_prompt = "Task: You are an agent in an indoor scene tasked with answering questions by observing the surroundings and exploring the environment. To answer the question, you are required to choose either a Snapshot as the answer or a Frontier to further explore.\n"
     sys_prompt += "Definitions:\n"
-    sys_prompt += "Snapshot: A focused observation of several objects. Choosing a snapshot means that you are selecting the one or more visible objects in the snapshot as the target objects to help answer the question.\n"
-    sys_prompt += "Frontier: An unexplored region that could potentially lead to new information for answering the question. Selecting a frontier means that you will further explore that direction.\n"
+    sys_prompt += "Snapshot: A focused observation of several objects. Choosing a Snapshot means that this snapshot image contains enough information for you to answer the question. "
+    sys_prompt += "If you choose a Snapshot, you need to directly give an answer to the question. If you don't have enough information to give an answer, then don't choose a Snapshot.\n"
+    sys_prompt += "Frontier: An observation of an unexplored region that could potentially lead to new information for answering the question. Selecting a frontier means that you will further explore that direction. "
+    sys_prompt += "If you choose a Frontier, you need to explain why you would like to choose that direction to explore.\n"
     # TODO: format interleaved text and images
     # a list of (text, image) tuples, if theres no image, use (text,)
     content = []
@@ -165,7 +167,7 @@ def format_explore_prompt(
     # 3 here is the snapshot images
     text = "The followings are all the snapshots that you can choose (followed with contained object classes)\n"
     text += "Please note that the contained classes may not be accurate (wrong classes/missing classes) due to the limitation of the object detection model. "
-    text += "So you still need to utilize the images to make the decision.\n"
+    text += "So you still need to utilize the images to make decisions.\n"
     content.append((text,))
     if len(snapshot_imgs) == 0:
         content.append(("No Snapshot is available\n",))
@@ -186,11 +188,11 @@ def format_explore_prompt(
             content.append((f"Frontier {i} ", frontier_imgs[i]))
             content.append(("\n",))
     # 5 here is the format of the answer
-    text = "Please provide your answer in the following format: 'Snapshot i' or 'Frontier i', where i is the index of the snapshot or frontier you choose. "
-    text += "For example, if you choose the first snapshot, please type 'Snapshot 0'.\n"
-    text += "Moreover, if you choose a Frontier, you need to explain why you would like to choose that direction to explore. "
-    text += "If you choose a Snapshot, you need to directly give an answer to the question (if you don't have enough information to give an answer, then don't choose a Snapshot). "
-    text += "Please put the explanation or answer in a new line after the choice.\n"
+    text = "Please provide your answer in the following format: 'Snapshot i\n[Answer]' or 'Frontier i\n[Reason]', where i is the index of the snapshot or frontier you choose. "
+    text += "For example, if you choose the first snapshot, you can return 'Snapshot 0\nThe fruit bowl is on the kitchen counter.'. "
+    text += "If you choose the second frontier, you can return 'Frontier 1\nI see a door that may lead to the living room.'.\n"
+    text += "Note that if you choose a snapshot to answer the question, (1) you should give a direct answer that can be understood by others. Don't mention words like 'snapshot', 'on the left of the image', etc; "
+    text += "(2) you can also utilize other snapshots, frontiers and egocentric views to gather more information, but you should always choose one most relevant snapshot to answer the question.\n"
     #text += "Answer: "
     content.append((text,))
     return sys_prompt, content
@@ -323,6 +325,7 @@ def explore_step(step, cfg):
         if "\n" in full_response:
             full_response = full_response.split("\n")
             response, reason = full_response[0], full_response[-1]
+            response, reason = response.strip(), reason.strip()
         else:
             response = full_response
             reason = ""

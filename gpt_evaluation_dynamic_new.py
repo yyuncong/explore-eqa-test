@@ -559,10 +559,11 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
         logging.info(f"Mean path length for success exploration: {np.mean(list(path_length_list.values()))}")
 
         # save the gpt answer
-        gpt_answer_list.append({
-            "question_id": question_id,
-            "answer": gpt_answer
-        })
+        if gpt_answer is not None:
+            gpt_answer_list.append({
+                "question_id": question_id,
+                "answer": gpt_answer
+            })
 
         # if target not found, select images from existing snapshots for question answering
         if not target_found:
@@ -704,7 +705,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             gpt_answer_list += json.load(f)
 
     with open(os.path.join(str(cfg.output_dir), "gpt_answer.json"), "w") as f:
-        json.dump(gpt_answer_list, f)
+        json.dump(gpt_answer_list, f, indent=4)
 
 
 if __name__ == "__main__":

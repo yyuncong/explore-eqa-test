@@ -46,7 +46,7 @@ total_splits=$2
 #python run_openeqa_clustering.py -cf cfg/openeqa_clustering.yaml
 #python online_evaluation_ours_new_1.py -cf cfg/online_eval_ours_new.yaml
 #python online_evaluation_ours_clustering.py -cf cfg/online_eval_ours_clustering.yaml
-python online_evaluation_openeqa_dynamic_continuous.py \
+python online_evaluation_openeqa_dynamic.py \
 -cf cfg/online_eval_openeqa_dynamic.yaml \
 --split_index $split_index \
 --split_number $total_splits

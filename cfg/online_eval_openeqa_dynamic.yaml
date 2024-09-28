@@ -1,6 +1,6 @@
 # General
 seed: 77
-exp_name: exp_openeqa_dynamic_snapshot_184
+exp_name: exp_openeqa_dynamic_snapshot_184_dynamic_batch
 output_parent_dir: /work/pi_chuangg_umass_edu/yuncong/results
 scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
 scene_data_path: /work/pi_chuangg_umass_edu/yuncong/data/scene_datasets/hm3d/

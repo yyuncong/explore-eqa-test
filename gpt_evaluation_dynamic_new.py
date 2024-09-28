@@ -274,6 +274,9 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             update_success = tsdf_planner.update_frontier_map(pts=pts_normal, cfg=cfg.planner)
             if not update_success:
                 logging.info("Warning! Update frontier map failed!")
+                if cnt_step == 0:  # if the first step fails, we should stop
+                    logging.info(f"Question id {question_id} invalid: update_frontier_map failed!")
+                    break
 
             if target_found:
                 break

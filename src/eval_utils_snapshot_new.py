@@ -214,7 +214,6 @@ def encode(model, image_processor, img):
 
 # jiachen TODO: add prefiltering and parts from eval_dataset here
 def prepare_prompt_before_snapshot(step):
-    num_visual_tokens = step["num_visual_tokens"]
     text =  f"Question: {step['question']}\n" 
     multi_src_feature = []
     if step.get("use_egocentric_views") is True:
@@ -368,25 +367,6 @@ def prepare_prefiltering_prompt(question, tokenizer, classes, max_length, topk):
     filter_attention_mask = filter_text["attention_mask"]
     return filter_input_ids, filter_length, filter_attention_mask
 
-# def test_tokenizer(tokenizer):
-#     print("snapshot", tokenizer.encode("snapshot"))
-#     print("object", tokenizer.encode("object"))
-#     # print(tokenizer.decode(tokenizer.encode("bath tub")))
-#     # print(tokenizer.encode("bath tub"))
-#     # print(tokenizer.decode(tokenizer.encode(" bath tub")))
-#     # print(tokenizer.encode(" bath tub"))
-#     # print(tokenizer.decode(tokenizer.encode("<scene> bath tub")))
-#     # print(tokenizer.encode("<scene> bath tub"))
-#     # print(tokenizer.decode(tokenizer.encode("<scene>  bath tub")))
-#     # print(tokenizer.encode("<scene>  bath tub"))
-#     # print(tokenizer.decode(tokenizer.encode("<scene>bath tub")))
-#     # print(tokenizer.encode("<scene>bath tub"))
-#     # print(tokenizer.decode(tokenizer.encode("<scene> pillow")))  
-#     # print(tokenizer.encode("<scene>"))
-#     # print(tokenizer.decode(tokenizer.encode("<scene> ")))
-#     # print(tokenizer.decode(tokenizer.encode("<scene> chair")))
-#     # print(tokenizer.decode(tokenizer.encode("chair <scene>")))
-#     # print(input_ids.shape)
 
 def construct_selection_prompt(
     tokenizer,

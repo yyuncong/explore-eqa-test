@@ -302,7 +302,12 @@ def main(cfg, args, start_ratio=0.0, end_ratio=1.0):
         os.makedirs(episode_object_observe_dir, exist_ok=True)
         os.makedirs(episode_frontier_dir, exist_ok=True)
         os.makedirs(episode_snapshot_dir, exist_ok=True)
-
+        '''
+        if len(os.listdir(episode_object_observe_dir)) > 0:
+            logging.info(f"Question id {question_id} already has enough target observations!")
+            success_count += 1
+            continue
+        '''
         pts = np.asarray(init_pts)
         angle, axis = quat_to_angle_axis(init_quat)
         angle = angle * axis[1] / np.abs(axis[1])
@@ -531,7 +536,7 @@ def main(cfg, args, start_ratio=0.0, end_ratio=1.0):
 
                 if cfg.prefiltering:
                     outputs, obj_id_mapping = inference(model, tokenizer, step_dict, cfg)
-                    print(obj_id_mapping)
+                    #print(obj_id_mapping)
                 else:
                     outputs = inference(model, tokenizer, step_dict, cfg)
                     obj_id_mapping = None

@@ -167,7 +167,7 @@ def inference(model, tokenizer, step_dict, cfg):
         return outputs
 
 
-def main(cfg, start_ratio=0.0, end_ratio=1.0):
+def main(cfg, args, start_ratio=0.0, end_ratio=1.0):
     # use hydra to load concept graph related configs
     with initialize(config_path="conceptgraph/hydra_configs", job_name="app"):
         cfg_cg = compose(config_name=cfg.concept_graph_config_name)
@@ -184,13 +184,17 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
     total_questions = len(questions_list)
     # sort the data according to the question id
     questions_list = sorted(questions_list, key=lambda x: x['question_id'])
+    split_length = (total_questions//args.split_number) + 1
+    start_question = args.split_index*split_length
+    end_question = min((args.split_index+1)*split_length,total_questions)
+    questions_list = questions_list[start_question:end_question]
     logging.info(f"Total number of questions: {total_questions}")
-    questions_list = questions_list[int(start_ratio * total_questions):int(end_ratio * total_questions)]
+    #questions_list = questions_list[int(start_ratio * total_questions):int(end_ratio * total_questions)]
     # shuffle the data
     # random.shuffle(questions_list)
     logging.info(f"number of questions after splitting: {len(questions_list)}")
     logging.info(f"question path: {cfg.questions_list_path}")
-
+    
     ## Initialize the detection models
     detection_model = YOLOWorld(cfg.yolo_model_name)
     logging.info(f"Load YOLO model {cfg.yolo_model_name} successful!")
@@ -223,16 +227,21 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
     logging.info(f"Load VLM successful!")
 
     # load success list and path length list
-    if os.path.exists(os.path.join(str(cfg.output_dir), f"success_list_{start_ratio}_{end_ratio}.pkl")):
-        with open(os.path.join(str(cfg.output_dir), f"success_list_{start_ratio}_{end_ratio}.pkl"), "rb") as f:
+    if os.path.exists(os.path.join(str(cfg.output_dir), f"success_list_{start_question}_{end_question}.pkl")):
+        with open(os.path.join(str(cfg.output_dir), f"success_list_{start_question}_{end_question}.pkl"), "rb") as f:
             success_list = pickle.load(f)
     else:
         success_list = []
-    if os.path.exists(os.path.join(str(cfg.output_dir), f"path_length_list_{start_ratio}_{end_ratio}.pkl")):
-        with open(os.path.join(str(cfg.output_dir), f"path_length_list_{start_ratio}_{end_ratio}.pkl"), "rb") as f:
+    if os.path.exists(os.path.join(str(cfg.output_dir), f"path_length_list_{start_question}_{end_question}.pkl")):
+        with open(os.path.join(str(cfg.output_dir), f"path_length_list_{start_question}_{end_question}.pkl"), "rb") as f:
             path_length_list = pickle.load(f)
     else:
         path_length_list = {}
+    if os.path.exists(os.path.join(str(cfg.output_dir), f"fail_list_{start_question}_{end_question}.pkl")):
+        with open(os.path.join(str(cfg.output_dir), f"fail_list_{start_question}_{end_question}.pkl"), "rb") as f:
+            fail_list = pickle.load(f)
+    else:
+        fail_list = []
 
     success_count = 0
     max_target_observation = cfg.max_target_observation
@@ -243,6 +252,11 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
         question = question_data['question']
         answer = question_data['answer']
 
+        if question_id in success_list or question_id in fail_list:
+            logging.info(f"Question {question_id} already processed")
+            success_count += 1
+            continue
+        
         # Extract question
         scene_id = question_data["episode_history"]
 
@@ -273,12 +287,12 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
         os.makedirs(episode_object_observe_dir, exist_ok=True)
         os.makedirs(episode_frontier_dir, exist_ok=True)
         os.makedirs(episode_snapshot_dir, exist_ok=True)
-
+        '''
         if len(os.listdir(episode_object_observe_dir)) > 0:
             logging.info(f"Question id {question_id} already has enough target observations!")
             success_count += 1
             continue
-
+        '''
         pts = np.asarray(init_pts)
         angle, axis = quat_to_angle_axis(init_quat)
         angle = angle * axis[1] / np.abs(axis[1])
@@ -324,8 +338,12 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             cnt_step += 1
             logging.info(f"\n== step: {cnt_step}")
             step_dict = {}
-            angle_increment = cfg.extra_view_angle_deg_phase_1 * np.pi / 180
-            total_views = 1 + cfg.extra_view_phase_1
+            if cnt_step == 0:
+                angle_increment = cfg.extra_view_angle_deg_phase_2 * np.pi / 180
+                total_views = 1 + cfg.extra_view_phase_2
+            else:
+                angle_increment = cfg.extra_view_angle_deg_phase_1 * np.pi / 180
+                total_views = 1 + cfg.extra_view_phase_1
             all_angles = [angle + angle_increment * (i - total_views // 2) for i in range(total_views)]
             # let the main viewing angle be the last one to avoid potential overwriting problems
             main_angle = all_angles.pop(total_views // 2)
@@ -338,7 +356,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 obs, cam_pose = scene.get_observation(pts, ang)
                 rgb = obs["color_sensor"]
                 depth = obs["depth_sensor"]
-                semantic_obs = obs["semantic_sensor"]
+                #semantic_obs = obs["semantic_sensor"]
                 rgb = rgba2rgb(rgb)
 
                 cam_pose_normal = pose_habitat_to_normal(cam_pose)
@@ -359,7 +377,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     img_feature = encode(model, image_processor, rgb).mean(0)
                     img_feature = merge_patches(
                         img_feature.view(cfg.visual_feature_size, cfg.visual_feature_size, -1),
-                        cfg.patch_size
+                        cfg.egocentric_patch_size
                     )
                     all_snapshot_features[obs_file_name] = img_feature.to("cpu")
                     rgb_egocentric_views_features.append(img_feature.to("cpu"))
@@ -485,7 +503,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
 
                 if cfg.egocentric_views:
                     assert len(rgb_egocentric_views_features) == total_views
-                    rgb_egocentric_views_features_tensor = torch.cat(rgb_egocentric_views_features, dim=0)
+                    rgb_egocentric_views_features_tensor = rgb_egocentric_views_features[-1]
                     step_dict["egocentric_view_features"] = rgb_egocentric_views_features_tensor
                     step_dict["use_egocentric_views"] = True
 
@@ -722,6 +740,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             path_length_list[question_id] = explore_dist
             logging.info(f"Question id {question_id} finish with {cnt_step} steps, {explore_dist} length")
         else:
+            fail_list.append(question_id)
             logging.info(f"Question id {question_id} failed, {explore_dist} length")
         logging.info(f"{question_idx + 1}/{total_questions}: Success rate: {success_count}/{question_idx + 1}")
         logging.info(f"Mean path length for success exploration: {np.mean(list(path_length_list.values()))}")
@@ -835,15 +854,19 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             for obj_str in obj_list:
                 logging.info(f"\t{obj_str}")
 
-        with open(os.path.join(str(cfg.output_dir), f"success_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
+        with open(os.path.join(str(cfg.output_dir), f"success_list_{start_question}_{end_question}.pkl"), "wb") as f:
             pickle.dump(success_list, f)
-        with open(os.path.join(str(cfg.output_dir), f"path_length_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
+        with open(os.path.join(str(cfg.output_dir), f"path_length_list_{start_question}_{end_question}.pkl"), "wb") as f:
             pickle.dump(path_length_list, f)
+        with open(os.path.join(str(cfg.output_dir), f"fail_list_{start_question}_{end_question}.pkl"), "wb") as f:
+            pickle.dump(fail_list, f)
 
-    with open(os.path.join(str(cfg.output_dir), f"success_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
+    with open(os.path.join(str(cfg.output_dir), f"success_list_{start_question}_{end_question}.pkl"), "wb") as f:
         pickle.dump(success_list, f)
-    with open(os.path.join(str(cfg.output_dir), f"path_length_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
+    with open(os.path.join(str(cfg.output_dir), f"path_length_list_{start_question}_{end_question}.pkl"), "wb") as f:
         pickle.dump(path_length_list, f)
+    with open(os.path.join(str(cfg.output_dir), f"fail_list_{start_question}_{end_question}.pkl"), "wb") as f:
+        pickle.dump(fail_list, f)
 
     logging.info(f'All scenes finish')
 
@@ -874,6 +897,12 @@ if __name__ == "__main__":
     parser.add_argument("-cf", "--cfg_file", help="cfg file path", default="", type=str)
     parser.add_argument("--start_ratio", help="start ratio", default=0.0, type=float)
     parser.add_argument("--end_ratio", help="end ratio", default=1.0, type=float)
+    parser.add_argument("--split_number",
+                        help = "the number of question list splits",
+                        type = int, default = 1)
+    parser.add_argument("--split_index",
+                        help = "the index of of question split",
+                        type = int, default = 0)
     args = parser.parse_args()
     cfg = OmegaConf.load(args.cfg_file)
     OmegaConf.resolve(cfg)
@@ -882,7 +911,7 @@ if __name__ == "__main__":
     cfg.output_dir = os.path.join(cfg.output_parent_dir, cfg.exp_name)
     if not os.path.exists(cfg.output_dir):
         os.makedirs(cfg.output_dir, exist_ok=True)  # recursive
-    logging_path = os.path.join(str(cfg.output_dir), f"log_{args.start_ratio:.2f}_{args.end_ratio:.2f}.log")
+    logging_path = os.path.join(str(cfg.output_dir), f"log_{args.split_index}_{args.split_number}.log")
 
     os.system(f"cp {args.cfg_file} {cfg.output_dir}")
 
@@ -916,4 +945,4 @@ if __name__ == "__main__":
 
     # run
     logging.info(f"***** Running {cfg.exp_name} *****")
-    main(cfg, args.start_ratio, args.end_ratio)
+    main(cfg, args, args.start_ratio, args.end_ratio)

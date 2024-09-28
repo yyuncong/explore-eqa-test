@@ -10,6 +10,15 @@
 #SBATCH --constraint="vram40"
 
 module load miniconda/22.11.1-1
+module load gcc/13.2.0
 conda activate explore-eqa
 
-python online_evaluation_goatbench.py -cf cfg/online_eval_goatbench.yaml --start_ratio 0.0 --end_ratio 0.1
+split_index=$1
+total_splits=$2
+
+python online_evaluation_goatbench.py \
+-cf cfg/online_eval_goatbench.yaml \
+--start_ratio 0.0 \
+--end_ratio 0.1 \
+--split_index $split_index \
+--split_number $total_splits

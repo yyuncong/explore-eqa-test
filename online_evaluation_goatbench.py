@@ -186,7 +186,7 @@ def inference(model, tokenizer, step_dict, cfg):
         return outputs
 
 
-def main(cfg, start_ratio=0.0, end_ratio=1.0):
+def main(cfg, args, start_ratio=0.0, end_ratio=1.0):
     # use hydra to load concept graph related configs
     with initialize(config_path="conceptgraph/hydra_configs", job_name="app"):
         cfg_cg = compose(config_name=cfg.concept_graph_config_name)
@@ -200,6 +200,16 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
 
     # Load dataset
     scene_data_list = os.listdir(cfg.test_data_dir)
+    logging.info(f"Total number of scenes: {len(scene_data_list)}")
+    total_scene = len(scene_data_list)
+    split_length = total_scene // args.split_number
+    if split_length * args.split_number < total_scene:
+        split_length += 1
+    start_scene = split_length * args.split_index
+    end_scene = min(split_length * (args.split_index + 1), total_scene)
+    scene_data_list = scene_data_list[start_scene:end_scene]
+    logging.info(f"Total number of scenes(after split): {len(scene_data_list)}")
+    
     num_scene = len(scene_data_list)
     random.shuffle(scene_data_list)
 
@@ -526,8 +536,12 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     global_step += 1
                     logging.info(f"\n== step: {cnt_step}, global step: {global_step} ==")
                     step_dict = {}
-                    angle_increment = cfg.extra_view_angle_deg_phase_1 * np.pi / 180
-                    total_views = 1 + cfg.extra_view_phase_1
+                    if cnt_step == 0:
+                        angle_increment = cfg.extra_view_angle_deg_phase_2 * np.pi / 180
+                        total_views = 1 + cfg.extra_view_phase_2
+                    else:
+                        angle_increment = cfg.extra_view_angle_deg_phase_1 * np.pi / 180
+                        total_views = 1 + cfg.extra_view_phase_1
                     all_angles = [angle + angle_increment * (i - total_views // 2) for i in range(total_views)]
                     # let the main viewing angle be the last one to avoid potential overwriting problems
                     main_angle = all_angles.pop(total_views // 2)
@@ -560,12 +574,16 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                                 gt_target_obj_ids=goal_obj_ids,
                             )
                             img_feature = encode(model, image_processor, rgb).mean(0)
-                            img_feature = merge_patches(
+                            snapshot_feature = merge_patches(
                                 img_feature.view(cfg.visual_feature_size, cfg.visual_feature_size, -1),
                                 cfg.patch_size
                             )
-                            all_snapshot_features[obs_file_name] = img_feature.to("cpu")
-                            rgb_egocentric_views_features.append(img_feature.to("cpu"))
+                            egocentric_feature = merge_patches(
+                                img_feature.view(cfg.visual_feature_size, cfg.visual_feature_size, -1),
+                                cfg.egocentric_patch_size
+                            )
+                            all_snapshot_features[obs_file_name] = snapshot_feature.to("cpu")
+                            rgb_egocentric_views_features.append(egocentric_feature.to("cpu"))
                             if cfg.save_visualization or cfg.save_frontier_video:
                                 plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), annotated_rgb)
                             # update the mapping of hm3d object id to our detected object id
@@ -698,8 +716,10 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         vlm_id_to_ft_id = {v: k for k, v in ft_id_to_vlm_id.items()}
 
                         if cfg.egocentric_views:
+                            # only take main view 
                             assert len(rgb_egocentric_views_features) == total_views
-                            rgb_egocentric_views_features_tensor = torch.cat(rgb_egocentric_views_features, dim=0)
+                            #rgb_egocentric_views_features_tensor = torch.cat(rgb_egocentric_views_features, dim=0)
+                            rgb_egocentric_views_features_tensor = rgb_egocentric_views_features[-1]
                             step_dict["egocentric_view_features"] = rgb_egocentric_views_features_tensor
                             step_dict["use_egocentric_views"] = True
 
@@ -1074,6 +1094,8 @@ if __name__ == "__main__":
     parser.add_argument("-cf", "--cfg_file", help="cfg file path", default="", type=str)
     parser.add_argument("--start_ratio", help="start ratio", default=0.0, type=float)
     parser.add_argument("--end_ratio", help="end ratio", default=1.0, type=float)
+    parser.add_argument("--split_number", help="split number", default=1, type=int)
+    parser.add_argument("--split_index", help="split index", default=0, type=int)
     args = parser.parse_args()
     cfg = OmegaConf.load(args.cfg_file)
     OmegaConf.resolve(cfg)
@@ -1082,7 +1104,7 @@ if __name__ == "__main__":
     cfg.output_dir = os.path.join(cfg.output_parent_dir, cfg.exp_name)
     if not os.path.exists(cfg.output_dir):
         os.makedirs(cfg.output_dir, exist_ok=True)  # recursive
-    logging_path = os.path.join(str(cfg.output_dir), f"log_{args.start_ratio:.2f}_{args.end_ratio:.2f}.log")
+    logging_path = os.path.join(str(cfg.output_dir), f"log_{args.start_ratio:.2f}_{args.end_ratio:.2f}_{args.split_number}_{args.split_index}.log")
 
     os.system(f"cp {args.cfg_file} {cfg.output_dir}")
 
@@ -1116,4 +1138,4 @@ if __name__ == "__main__":
 
     # run
     logging.info(f"***** Running {cfg.exp_name} *****")
-    main(cfg, start_ratio=args.start_ratio, end_ratio=args.end_ratio)
+    main(cfg, args, start_ratio=args.start_ratio, end_ratio=args.end_ratio)

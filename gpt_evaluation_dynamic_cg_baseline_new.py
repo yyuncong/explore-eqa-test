@@ -98,6 +98,11 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             fail_list = pickle.load(f)
     else:
         fail_list = []
+    if os.path.exists(os.path.join(str(cfg.output_dir), f"gpt_answer_{start_ratio}_{end_ratio}.json")):
+        with open(os.path.join(str(cfg.output_dir), f"gpt_answer_{start_ratio}_{end_ratio}.json"), "r") as f:
+            gpt_answer_list = json.load(f)
+    else:
+        gpt_answer_list = []
 
     success_count = 0
     max_target_observation = cfg.max_target_observation
@@ -182,6 +187,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
         cnt_step = -1
 
         all_target_observations = []
+        gpt_answer = None
         while cnt_step < num_step - 1:
             cnt_step += 1
             logging.info(f"\n== step: {cnt_step}")
@@ -252,6 +258,9 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             update_success = tsdf_planner.update_frontier_map(pts=pts_normal, cfg=cfg.planner)
             if not update_success:
                 logging.info("Warning! Update frontier map failed!")
+                if cnt_step == 0:  # if the first step fails, we should stop
+                    logging.info(f"Question id {question_id} invalid: update_frontier_map failed!")
+                    break
 
             if target_found:
                 break
@@ -319,7 +328,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 step_dict["question"] = question
                 step_dict["scene"] = scene_id
 
-                outputs, obj_id_mapping = explore_step(step_dict, cfg)
+                outputs, obj_id_mapping, reason = explore_step(step_dict, cfg)
                 if outputs is None:
                     # encounter generation error
                     logging.info(f"Question id {question_id} invalid: model generation error!")
@@ -362,6 +371,9 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
 
                     tsdf_planner.frontiers_weight = np.zeros((len(tsdf_planner.frontiers)))
                     max_point_choice = pred_target_snapshot
+
+                    # add the reason for the choice
+                    gpt_answer = reason  # use the latest reason
                 else:
                     target_index = int(target_index)
                     if target_index not in vlm_id_to_ft_id.keys():
@@ -383,7 +395,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     objects=scene.objects,
                     cfg=cfg.planner,
                     pathfinder=scene.pathfinder,
-                    random_position=False
+                    random_position=False,
                 )
                 if not update_success:
                     logging.info(f"Question id {question_id} invalid: set_next_navigation_point failed!")
@@ -477,12 +489,9 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     logging.info(f"{e}")
 
                 if target_arrived:
-                    logging.info(f"Target arrived at {pts}, {explore_dist:.3f}")
-
-                    if len(all_target_observations) >= max_target_observation:
-                        target_found = True
-                        logging.info(f"Question id {question_id} finished after arriving at target! In total {len(all_target_observations)} target observations")
-                        break
+                    target_found = True
+                    logging.info(f"Question id {question_id} finished after arriving at target! In total {len(all_target_observations)} target observations")
+                    break
 
         if len(all_target_observations) > 0:
             target_found = True
@@ -504,11 +513,18 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             logging.info(f"Question id {question_id} failed, {explore_dist} length")
         logging.info(f"{question_idx + 1}/{total_questions}: Success rate: {success_count}/{question_idx + 1}")
         logging.info(f"Mean path length for success exploration: {np.mean(list(path_length_list.values()))}")
-        # logging.info(f'Scene {scene_id} finish')
+
+        # save the gpt answer
+        if gpt_answer is not None:
+            gpt_answer_list.append({
+                "question_id": question_id,
+                "answer": gpt_answer
+            })
 
         logging.info(f"Scene graph of question {question_id}:")
         logging.info(f"Question: {question}")
         logging.info(f"Answer: {answer}")
+        logging.info(f"Prediction: {gpt_answer}")
 
         with open(os.path.join(str(cfg.output_dir), f"success_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
             pickle.dump(success_list, f)
@@ -516,6 +532,13 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             pickle.dump(path_length_list, f)
         with open(os.path.join(str(cfg.output_dir), f"fail_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
             pickle.dump(fail_list, f)
+        with open(os.path.join(str(cfg.output_dir), f"gpt_answer_{start_ratio}_{end_ratio}.json"), "w") as f:
+            json.dump(gpt_answer_list, f, indent=4)
+
+        # clear up memory
+        if not cfg.save_visualization:
+            os.system(f"rm -r {episode_snapshot_dir}")
+            os.system(f"rm -r {episode_frontier_dir}")
 
     with open(os.path.join(str(cfg.output_dir), f"success_list_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
         pickle.dump(success_list, f)
@@ -542,6 +565,15 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
         pickle.dump(success_list, f)
     with open(os.path.join(str(cfg.output_dir), "path_length_list.pkl"), "wb") as f:
         pickle.dump(path_length_list, f)
+
+    gpt_answer_list = []
+    all_gpt_answer_list_paths = glob.glob(os.path.join(str(cfg.output_dir), "gpt_answer_*.json"))
+    for gpt_answer_list_path in all_gpt_answer_list_paths:
+        with open(gpt_answer_list_path, "r") as f:
+            gpt_answer_list += json.load(f)
+
+    with open(os.path.join(str(cfg.output_dir), "gpt_answer.json"), "w") as f:
+        json.dump(gpt_answer_list, f, indent=4)
 
 
 if __name__ == "__main__":

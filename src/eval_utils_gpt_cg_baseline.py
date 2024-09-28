@@ -9,7 +9,7 @@ from typing import Optional
 import logging
 
 client = AzureOpenAI(
-    azure_endpoint="https://chuangsweden.openai.azure.com",
+    azure_endpoint="https://jiaben.openai.azure.com/",
     api_key=os.getenv('AZURE_OPENAI_KEY'),
     api_version="2024-02-15-preview",
 )
@@ -139,21 +139,20 @@ def format_explore_prompt(
     use_object_class = True,
     image_goal = None
 ):
-    sys_prompt = "Task: You are an agent in an indoor scene tasked with answering questions by observing the surroundings and exploring the environment. To answer the question, you are required to choose either an Object or a Frontier image as the direction to explore.\n"
+    sys_prompt = "Task: You are an agent in an indoor scene tasked with answering questions by observing the surroundings and exploring the environment. To answer the question, you are required to choose either an Object as the answer or a Frontier to further explore.\n"
+    sys_prompt += "Definitions:\n"
+    sys_prompt += "Object: An image crop of an observed object. Choosing an object means that you are selecting this object as the target object to help answering the question. "
+    sys_prompt += "If you choose an Object, you need to directly give an answer to the question. If you don't have enough information to give an answer, then don't choose an Object.\n"
+    sys_prompt += "Frontier: An observation of an unexplored region that could potentially lead to new information for answering the question. Selecting a frontier means that you will further explore that direction. "
+    sys_prompt += "If you choose a Frontier, you need to explain why you would like to choose that direction to explore.\n"
     # TODO: format interleaved text and images
     # a list of (text, image) tuples, if theres no image, use (text,)
     content = []
     # 1 here is some basic info
-    #text = "Task: You are an agent in an indoor scene tasked with answering quesions by observing the surroundings and exploring the environment. To answer the question, you are required to choose either a snapshot or a frontier based on the egocentric views of your surroundings.\n"
-    text = "Definitions:\n"
-    text += "Object: An image crop of an observed object. Choosing an object means that you are selecting this object as the target object to help answering the question.\n"
-    text += "Frontier: An unexplored region that could potentially lead to new information for answering the question. Selecting a frontier means that you will further explore that direction.\n"
-    # TODO: add simple example: frontier, snapshot 
-    # set | use '/n' to separate different parts
-    # uppercase?
+
     # 2 here is the question
     # TODO: add the image goal here
-    text += f"Question: {question}"
+    text = f"Question: {question}"
     if image_goal is not None:
         content.append((text, image_goal))
         content.append(("\n",))
@@ -182,7 +181,7 @@ def format_explore_prompt(
                 content.append((obj_classes[i],))
             content.append(("\n",))
     # 4 here is the frontier images
-    text = "The followings are all the Frontiers that we can explore: \n"
+    text = "The followings are all the Frontiers that you can explore: \n"
     content.append((text,))
     if len(frontier_imgs) == 0:
         content.append(("No Frontier is available\n",))
@@ -191,9 +190,11 @@ def format_explore_prompt(
             content.append((f"Frontier {i} ", frontier_imgs[i]))
             content.append(("\n",))
     # 5 here is the format of the answer
-    text = "Please provide your answer in the following format: 'Object i' or 'Frontier i', where i is the index of the Object or Frontier you choose. "
-    text += "For example, if you choose the first object, please type 'Object 0'.\n"
-    text += "You can explain the reason for your choice, but put it in a new line after the choice.\n"
+    text = "Please provide your answer in the following format: 'Object i\n[Answer]' or 'Frontier i\n[Reason]', where i is the index of the Object or Frontier you choose. "
+    text += "For example, if you choose the first object, you can return 'Object 0\nThe tv is on.'. "
+    text += "If you choose the second frontier, you can return 'Frontier 1\nI see a door that may lead to the living room.'.\n"
+    text += "Note that if you choose a snapshot to answer the question, (1) you should give a direct answer that can be understood by others. Don't mention words like 'snapshot', 'on the left of the image', etc; "
+    text += "(2) you can also utilize other objects, frontiers and egocentric views to gather more information, but you should always choose one most relevant object to answer the question.\n"
     #text += "Answer: "
     content.append((text,))
     return sys_prompt, content
@@ -297,29 +298,32 @@ def explore_step(step, cfg):
         use_object_class= True,
         image_goal=image_goal
     )
-    
-    # logging.info(f"Input prompt:")
+
+    logging.info(f"Input prompt:")
     message = sys_prompt
     for c in content:
         message += c[0]
         if len(c) == 2:
             message += f"[{c[1][:10]}...]"
-    # logging.info(message)
+    logging.info(message)
 
     retry_bound = 3
     final_response = None
+    final_reason = None
     for _ in range(retry_bound):
-        response = call_openai_api(sys_prompt, content)
+        full_response = call_openai_api(sys_prompt, content)
 
-        if response is None:
+        if full_response is None:
             print("call_openai_api returns None, retrying")
             continue
 
-        response = response.strip()
-        if "\n" in response:
-            response = response.split("\n")
-            response, reason = response[0], response[-1]
+        full_response = full_response.strip()
+        if "\n" in full_response:
+            full_response = full_response.split("\n")
+            response, reason = full_response[0], full_response[-1]
+            response, reason = response.strip(), reason.strip()
         else:
+            response = full_response
             reason = ""
         response = response.lower()
         try:
@@ -338,10 +342,11 @@ def explore_step(step, cfg):
         if response_valid:
             logging.info(f"Response: [{response}], Reason: [{reason}]")
             final_response = response
+            final_reason = reason
             break
 
 
-    return final_response, obj_id_mapping
+    return final_response, obj_id_mapping, final_reason
    
     
     

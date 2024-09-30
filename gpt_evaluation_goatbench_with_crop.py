@@ -132,6 +132,17 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
         spl_by_task = defaultdict(list)
     assert len(success_by_snapshot) == len(spl_by_snapshot) == len(success_by_distance) == len(spl_by_distance), f"{len(success_by_snapshot)} != {len(spl_by_snapshot)} != {len(success_by_distance)} != {len(spl_by_distance)}"
     assert sum([len(task_res) for task_res in success_by_task.values()]) == sum([len(task_res) for task_res in spl_by_task.values()]) == len(success_by_snapshot), f"{sum([len(task_res) for task_res in success_by_task.values()])} != {sum([len(task_res) for task_res in spl_by_task.values()])} != {len(success_by_snapshot)}"
+    if os.path.exists(os.path.join(str(cfg.output_dir), f"n_filtered_snapshots_{start_ratio}_{end_ratio}.json")):
+        with open(os.path.join(str(cfg.output_dir), f"n_filtered_snapshots_{start_ratio}_{end_ratio}.json"), "r") as f:
+            n_filtered_snapshots_list = json.load(f)
+    else:
+        n_filtered_snapshots_list = {}
+    if os.path.exists(os.path.join(str(cfg.output_dir), f"n_total_snapshots_{start_ratio}_{end_ratio}.json")):
+        with open(os.path.join(str(cfg.output_dir), f"n_total_snapshots_{start_ratio}_{end_ratio}.json"), "r") as f:
+            n_total_snapshots_list = json.load(f)
+    else:
+        n_total_snapshots_list = {}
+
 
     question_idx = -1
     for scene_data_file in scene_data_list:
@@ -366,6 +377,8 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     )
                     all_snapshots = {}
 
+                n_filtered_snapshots = 0
+                n_total_snapshots = 0
                 while cnt_step < num_step - 1:
                     cnt_step += 1
                     global_step += 1
@@ -445,6 +458,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                             all_added_obj_ids.append(obj_id)
                     scene.update_snapshots(obj_ids=set(all_added_obj_ids), min_detection=cfg.min_detection)
                     logging.info(f"Step {cnt_step} {len(scene.objects)} objects, {len(scene.snapshots)} snapshots")
+                    n_total_snapshots = len(scene.snapshots)
 
                     # update the mapping of object id to class name, since the objects have been updated
                     object_id_to_name = {obj_id: obj["class_name"] for obj_id, obj in scene.objects.items()}
@@ -565,7 +579,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         step_dict["class"] = subtask_metadata["class"]
                         step_dict["image"] = subtask_metadata["image"]
 
-                        outputs, snapshot_id_mapping, snapshot_crop_mapping = explore_step(step_dict, cfg)
+                        outputs, snapshot_id_mapping, snapshot_crop_mapping, n_filtered_snapshots = explore_step(step_dict, cfg)
                         if outputs is None:
                             # encounter generation error
                             logging.info(f"Subtask id {subtask_id} invalid: model generation error!")
@@ -828,6 +842,11 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 for task_name, spl_list in spl_by_task.items():
                     logging.info(f"SPL for {task_name}: {100 * np.mean(np.asarray(spl_list)):.2f}")
 
+                logging.info(f"Filtered snapshots/Total snapshots: {n_filtered_snapshots}/{n_total_snapshots}")
+                # save the number of snapshots
+                n_filtered_snapshots_list[subtask_id] = n_filtered_snapshots
+                n_total_snapshots_list[subtask_id] = n_total_snapshots
+
                 # print the items in the scene graph
                 snapshot_dict = {}
                 for obj_id, obj in scene.objects.items():
@@ -866,6 +885,10 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 pickle.dump(success_by_task, f)
             with open(os.path.join(str(cfg.output_dir), f"spl_by_task_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
                 pickle.dump(spl_by_task, f)
+            with open(os.path.join(str(cfg.output_dir), f"n_filtered_snapshots_{start_ratio}_{end_ratio}.json"), "w") as f:
+                json.dump(n_filtered_snapshots_list, f, indent=4)
+            with open(os.path.join(str(cfg.output_dir), f"n_total_snapshots_{start_ratio}_{end_ratio}.json"), "w") as f:
+                json.dump(n_total_snapshots_list, f, indent=4)
 
             logging.info(f'Episode {episode_id} finish')
             if not cfg.save_visualization and not cfg.save_frontier_video:
@@ -889,6 +912,10 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
         pickle.dump(success_by_task, f)
     with open(os.path.join(str(cfg.output_dir), f"spl_by_task_{start_ratio}_{end_ratio}.pkl"), "wb") as f:
         pickle.dump(spl_by_task, f)
+    with open(os.path.join(str(cfg.output_dir), f"n_filtered_snapshots_{start_ratio}_{end_ratio}.json"), "w") as f:
+        json.dump(n_filtered_snapshots_list, f, indent=4)
+    with open(os.path.join(str(cfg.output_dir), f"n_total_snapshots_{start_ratio}_{end_ratio}.json"), "w") as f:
+        json.dump(n_total_snapshots_list, f, indent=4)
 
     logging.info(f'All scenes finish')
 
@@ -918,6 +945,26 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             logging.info(f"Total {filename} results for {task_name}: {100 * np.mean(task_res):.2f}, len: {len(task_res)}")
         with open(os.path.join(str(cfg.output_dir), f"{filename}.pkl"), "wb") as f:
             pickle.dump(all_results, f)
+
+    n_filtered_snapshots_list = {}
+    all_n_filtered_snapshots_list_paths = glob.glob(os.path.join(str(cfg.output_dir), "n_filtered_snapshots_*.json"))
+    for n_filtered_snapshots_list_path in all_n_filtered_snapshots_list_paths:
+        with open(n_filtered_snapshots_list_path, "r") as f:
+            n_filtered_snapshots_list.update(json.load(f))
+
+    with open(os.path.join(str(cfg.output_dir), "n_filtered_snapshots.json"), "w") as f:
+        json.dump(n_filtered_snapshots_list, f, indent=4)
+    logging.info(f"Average number of filtered snapshots: {np.mean(list(n_filtered_snapshots_list.values()))}")
+
+    n_total_snapshots_list = {}
+    all_n_total_snapshots_list_paths = glob.glob(os.path.join(str(cfg.output_dir), "n_total_snapshots_*.json"))
+    for n_total_snapshots_list_path in all_n_total_snapshots_list_paths:
+        with open(n_total_snapshots_list_path, "r") as f:
+            n_total_snapshots_list.update(json.load(f))
+
+    with open(os.path.join(str(cfg.output_dir), "n_total_snapshots.json"), "w") as f:
+        json.dump(n_total_snapshots_list, f, indent=4)
+    logging.info(f"Average number of total snapshots: {np.mean(list(n_total_snapshots_list.values()))}")
 
 
 if __name__ == "__main__":

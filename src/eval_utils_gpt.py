@@ -350,7 +350,7 @@ def explore_step(step, cfg):
             break
 
 
-    return final_response, snapshot_id_mapping, final_reason
+    return final_response, snapshot_id_mapping, final_reason, len(snapshot_imgs)
    
     
     

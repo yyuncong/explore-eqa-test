@@ -386,7 +386,7 @@ def explore_step(step, cfg):
             final_response = response
             break
 
-    return final_response, snapshot_id_mapping, snapshot_crop_mapping
+    return final_response, snapshot_id_mapping, snapshot_crop_mapping, len(snapshot_full_imgs)
 
 
 

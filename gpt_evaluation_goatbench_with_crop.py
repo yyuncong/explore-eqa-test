@@ -142,6 +142,11 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             n_total_snapshots_list = json.load(f)
     else:
         n_total_snapshots_list = {}
+    if os.path.exists(os.path.join(str(cfg.output_dir), f"n_total_frames_{start_ratio}_{end_ratio}.json")):
+        with open(os.path.join(str(cfg.output_dir), f"n_total_frames_{start_ratio}_{end_ratio}.json"), "r") as f:
+            n_total_frames_list = json.load(f)
+    else:
+        n_total_frames_list = {}
 
 
     question_idx = -1
@@ -379,6 +384,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
 
                 n_filtered_snapshots = 0
                 n_total_snapshots = 0
+                n_total_frames = 0
                 while cnt_step < num_step - 1:
                     cnt_step += 1
                     global_step += 1
@@ -459,6 +465,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     scene.update_snapshots(obj_ids=set(all_added_obj_ids), min_detection=cfg.min_detection)
                     logging.info(f"Step {cnt_step} {len(scene.objects)} objects, {len(scene.snapshots)} snapshots")
                     n_total_snapshots = len(scene.snapshots)
+                    n_total_frames = len(scene.frames)
 
                     # update the mapping of object id to class name, since the objects have been updated
                     object_id_to_name = {obj_id: obj["class_name"] for obj_id, obj in scene.objects.items()}
@@ -842,10 +849,11 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 for task_name, spl_list in spl_by_task.items():
                     logging.info(f"SPL for {task_name}: {100 * np.mean(np.asarray(spl_list)):.2f}")
 
-                logging.info(f"Filtered snapshots/Total snapshots: {n_filtered_snapshots}/{n_total_snapshots}")
+                logging.info(f"Filtered snapshots/Total snapshots/Total frames: {n_filtered_snapshots}/{n_total_snapshots}/{n_total_frames}")
                 # save the number of snapshots
                 n_filtered_snapshots_list[subtask_id] = n_filtered_snapshots
                 n_total_snapshots_list[subtask_id] = n_total_snapshots
+                n_total_frames_list[subtask_id] = n_total_frames
 
                 # print the items in the scene graph
                 snapshot_dict = {}
@@ -889,6 +897,8 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 json.dump(n_filtered_snapshots_list, f, indent=4)
             with open(os.path.join(str(cfg.output_dir), f"n_total_snapshots_{start_ratio}_{end_ratio}.json"), "w") as f:
                 json.dump(n_total_snapshots_list, f, indent=4)
+            with open(os.path.join(str(cfg.output_dir), f"n_total_frames_{start_ratio}_{end_ratio}.json"), "w") as f:
+                json.dump(n_total_frames_list, f, indent=4)
 
             logging.info(f'Episode {episode_id} finish')
             if not cfg.save_visualization and not cfg.save_frontier_video:
@@ -916,6 +926,8 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
         json.dump(n_filtered_snapshots_list, f, indent=4)
     with open(os.path.join(str(cfg.output_dir), f"n_total_snapshots_{start_ratio}_{end_ratio}.json"), "w") as f:
         json.dump(n_total_snapshots_list, f, indent=4)
+    with open(os.path.join(str(cfg.output_dir), f"n_total_frames_{start_ratio}_{end_ratio}.json"), "w") as f:
+        json.dump(n_total_frames_list, f, indent=4)
 
     logging.info(f'All scenes finish')
 
@@ -965,6 +977,16 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
     with open(os.path.join(str(cfg.output_dir), "n_total_snapshots.json"), "w") as f:
         json.dump(n_total_snapshots_list, f, indent=4)
     logging.info(f"Average number of total snapshots: {np.mean(list(n_total_snapshots_list.values()))}")
+
+    n_total_frames_list = {}
+    all_n_total_frames_list_paths = glob.glob(os.path.join(str(cfg.output_dir), "n_total_frames_*.json"))
+    for n_total_frames_list_path in all_n_total_frames_list_paths:
+        with open(n_total_frames_list_path, "r") as f:
+            n_total_frames_list.update(json.load(f))
+
+    with open(os.path.join(str(cfg.output_dir), "n_total_frames.json"), "w") as f:
+        json.dump(n_total_frames_list, f, indent=4)
+    logging.info(f"Average number of total frames: {np.mean(list(n_total_frames_list.values()))}")
 
 
 if __name__ == "__main__":

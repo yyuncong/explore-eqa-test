@@ -10,6 +10,7 @@ semantic_bbox_data_path: /home/hanyang/code/3d_project/explore-eqa/data/hm3d_obj
 dataset_output_dir: "exploration_data"
 yolo_world_model_name: "yolo_world/s"
 yolo_model_name: 'yolov8l-world.pt'
+class_set: 'scannet200'
 
 # Sampling navigation point
 min_travel_dist: 5.0

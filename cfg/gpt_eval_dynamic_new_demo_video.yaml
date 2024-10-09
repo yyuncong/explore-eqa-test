@@ -1,6 +1,6 @@
 # General
 seed: 77
-exp_name: exp_aeqa_gpt_default
+exp_name: gpt_aeqa_dynamic_default_demo_video
 output_parent_dir: /work/pi_chuangg_umass_edu/yuncong/results
 scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
 scene_data_path: /work/pi_chuangg_umass_edu/yuncong/data/scene_datasets/hm3d/
@@ -9,17 +9,15 @@ questions_list_path: 'data/generated_questions-184.json'
 concept_graph_config_path: "conceptgraph/hydra_configs"
 concept_graph_config_name: "rerun_realtime_mapping"
 
-choose_every_step: true
 egocentric_views: true
-action_memory: false
 prefiltering: true
 top_k_categories: 10
-
-min_detection: 2
 
 # about detection model
 yolo_model_name: yolov8x-world.pt
 class_set: scannet200
+
+min_detection: 1
 
 # Camera, image
 camera_height: 1.5
@@ -27,18 +25,12 @@ camera_tilt_deg: -30
 img_width: 1280
 img_height: 1280
 hfov: 120
-tsdf_grid_size: 0.1
+tsdf_grid_size: 0.025
 margin_w_ratio: 0.25
 margin_h_ratio: 0.6
 
-use_full_obj_list: false
-
-save_visualization: false
-save_frontier_video: false
-
-# for handling fail case
-handle_target_not_found: none   # none, random, with_model
-num_final_images: 15
+save_visualization: true
+save_frontier_video: true
 
 # for prompting gpt-4o
 prompt_h: 360
@@ -50,12 +42,12 @@ max_snapshot_threshold: 999
 
 # Navigation
 init_clearance: 0.3
-max_step_room_size_ratio: 2
+max_step_room_size_ratio: 1.5
 extra_view_phase_1: 2
 extra_view_angle_deg_phase_1: 60
-extra_view_phase_2: 6
+extra_view_phase_2: 2
 extra_view_angle_deg_phase_2: 40
-max_target_observation: 1
+max_target_observation: 4
 
 # Semantic map
 explored_depth: 1.7
@@ -63,11 +55,12 @@ planner:
   unexplored_T: 2.0
   unoccupied_T: 2.0
   eps: 1
-  max_dist_from_cur_phase_1: 1  # when the target object is not found, explore the frontiers with this step length
-  max_dist_from_cur_phase_2: 1  # when the target object is found, go to the target object with this step length
+  n_step_per_decision: 5
+  max_dist_from_cur_phase_1: 0.2  # when the target object is not found, explore the frontiers with this step length
+  max_dist_from_cur_phase_2: 0.2  # when the target object is found, go to the target object with this step length
   max_unexplored_check_frontier: 3
   max_unoccupied_check_frontier: 1
-  final_observe_distance: 1.5  # in phase 2, find a place that is this far from the target object to observe it
+  final_observe_distance: 0.75  # in phase 2, find a place that is this far from the target object to observe it
   surrounding_explored_radius: 0.7
 
   # about frontier selection
@@ -75,7 +68,7 @@ planner:
   frontier_edge_area_max: 6
   frontier_area_min: 8
   frontier_area_max: 9
-  min_frontier_area: 20  # the frontier should have at least this many pixels
+  min_frontier_area: 20 * 16  # the frontier should have at least this many pixels
   max_frontier_angle_range_deg: 150  # the angle spanned by the pixels in a frontier should not be larger than this
   min_frontier_angle_diff_deg: 0  # the angle between two frontiers should be larger than this. otherwise, merge them
   region_equal_threshold: 0.95

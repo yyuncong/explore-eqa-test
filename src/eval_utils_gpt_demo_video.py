@@ -102,6 +102,7 @@ def get_step_info(step):
         
     # 2.3 get snapshots
     snapshot_imgs, snapshot_classes = [],[]
+    snapshot_ids = list(step["snapshot_imgs"].keys())
     obj_map = step['obj_map']
     seen_classes = set()
     for i, rgb_id in enumerate(step["snapshot_imgs"].keys()):
@@ -122,9 +123,10 @@ def get_step_info(step):
             question, snapshot_classes, seen_classes, step["top_k_categories"], image_goal
         )
         snapshot_imgs = [snapshot_imgs[i] for i in keep_index]
+        snapshot_ids = [snapshot_ids[i] for i in keep_index]
         logging.info(f"Prefiltering snapshot: {n_prev_snapshot} -> {len(snapshot_imgs)}")
 
-    return question, image_goal, egocentric_imgs, frontier_imgs, snapshot_imgs, snapshot_classes, keep_index
+    return question, image_goal, egocentric_imgs, frontier_imgs, snapshot_imgs, snapshot_classes, snapshot_ids, keep_index
 
 def format_explore_prompt(
     question,
@@ -291,7 +293,7 @@ def prefiltering(
 def explore_step(step, cfg):
     step["use_prefiltering"] = cfg.prefiltering
     step["top_k_categories"] = cfg.top_k_categories
-    question, image_goal, egocentric_imgs, frontier_imgs, snapshot_imgs, snapshot_classes, snapshot_id_mapping = get_step_info(step)
+    question, image_goal, egocentric_imgs, frontier_imgs, snapshot_imgs, snapshot_classes, snapshot_ids, snapshot_id_mapping = get_step_info(step)
     sys_prompt, content = format_explore_prompt(
         question,
         egocentric_imgs,
@@ -350,7 +352,7 @@ def explore_step(step, cfg):
             break
 
 
-    return final_response, snapshot_id_mapping, final_reason, len(snapshot_imgs)
+    return final_response, snapshot_id_mapping, final_reason, snapshot_ids
    
     
     

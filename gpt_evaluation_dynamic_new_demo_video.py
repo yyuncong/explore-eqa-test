@@ -35,7 +35,7 @@ from src.geom import get_cam_intr, get_scene_bnds
 from src.tsdf_new_cg import TSDFPlanner, Frontier, SnapShot
 from src.scene import Scene
 from src.eval_utils_snapshot_new import rgba2rgb
-from src.eval_utils_gpt import explore_step
+from src.eval_utils_gpt_demo_video import explore_step
 
 
 def resize_image(image, target_h, target_w):
@@ -159,10 +159,12 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
         episode_object_observe_dir = os.path.join(episode_data_dir, 'object_observations')
         episode_frontier_dir = os.path.join(episode_data_dir, "frontier_rgb")
         episode_snapshot_dir = os.path.join(episode_data_dir, 'snapshot')
+        episode_egocentric_dir = os.path.join(episode_data_dir, 'egocentric')
         os.makedirs(episode_data_dir, exist_ok=True)
         os.makedirs(episode_object_observe_dir, exist_ok=True)
         os.makedirs(episode_frontier_dir, exist_ok=True)
         os.makedirs(episode_snapshot_dir, exist_ok=True)
+        os.makedirs(episode_egocentric_dir, exist_ok=True)
 
         pts = np.asarray(init_pts)
         angle, axis = quat_to_angle_axis(init_quat)
@@ -199,7 +201,9 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
         # run steps
         target_found = False
         explore_dist = 0.0
-        cnt_step = -1
+        n_move_step = -1
+        n_decision_step = -1
+        n_step_per_decision = cfg.planner.n_step_per_decision
 
         all_snapshots = {}
         all_target_observations = []
@@ -207,11 +211,11 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
         n_filtered_snapshots = 0
         n_total_snapshots = 0
         n_total_frames = 0
-        while cnt_step < num_step - 1:
-            cnt_step += 1
-            logging.info(f"\n== step: {cnt_step}")
+        while n_decision_step < num_step - 1:
+            n_move_step += 1
+            logging.info(f"\n== Move step {n_move_step}, decision step {n_decision_step} ==")
             step_dict = {}
-            if cnt_step == 0:
+            if n_move_step == 0:
                 angle_increment = cfg.extra_view_angle_deg_phase_2 * np.pi / 180
                 total_views = 1 + cfg.extra_view_phase_2
             else:
@@ -225,6 +229,15 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             # observe and update the TSDF
             rgb_egocentric_views = []
             all_added_obj_ids = []
+
+            if n_move_step % n_step_per_decision == 0:
+                # all update the map, query gpt for the next decision
+                n_decision_step += 1
+                make_decision = True
+            else:
+                # otherwise, just move
+                make_decision = False
+
             for view_idx, ang in enumerate(all_angles):
                 obs, cam_pose = scene.get_observation(pts, ang)
                 rgb = obs["color_sensor"]
@@ -234,96 +247,101 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 cam_pose_normal = pose_habitat_to_normal(cam_pose)
                 cam_pose_tsdf = pose_normal_to_tsdf(cam_pose_normal)
 
-                # collect all view features
-                obs_file_name = f"{cnt_step}-view_{view_idx}.png"
-                with torch.no_grad():
-                    annotated_rgb, added_obj_ids, target_obj_id_det = scene.update_scene_graph(
-                        image_rgb=rgb[..., :3], depth=depth, intrinsics=cam_intr, cam_pos=cam_pose,
-                        detection_model=detection_model, sam_predictor=sam_predictor, clip_model=clip_model,
-                        clip_preprocess=clip_preprocess, clip_tokenizer=clip_tokenizer,
-                        pts=pts, pts_voxel=tsdf_planner.habitat2voxel(pts),
-                        img_path=obs_file_name,
-                        frame_idx=cnt_step * total_views + view_idx,
-                        target_obj_mask=None,
-                    )
-                    resized_rgb = resize_image(rgb, cfg.prompt_h, cfg.prompt_w)
-                    all_snapshots[obs_file_name] = resized_rgb
-                    rgb_egocentric_views.append(resized_rgb)
-                    if cfg.save_visualization or cfg.save_frontier_video:
-                        plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), annotated_rgb)
-                    else:
-                        plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), rgb)
-                    all_added_obj_ids += added_obj_ids
-
-                # clean up or merge redundant objects periodically
-                scene.periodic_cleanup_objects(frame_idx=cnt_step * total_views + view_idx, pts=pts)
-
-                # TSDF fusion
-                tsdf_planner.integrate(
-                    color_im=rgb,
-                    depth_im=depth,
-                    cam_intr=cam_intr,
-                    cam_pose=cam_pose_tsdf,
-                    obs_weight=1.0,
-                    margin_h=int(cfg.margin_h_ratio * img_height),
-                    margin_w=int(cfg.margin_w_ratio * img_width),
-                    explored_depth=cfg.explored_depth,
+                # save the egocentric view for demo video
+                plt.imsave(
+                    os.path.join(episode_egocentric_dir, f"view_{view_idx}_{n_move_step}.png"),
+                    resize_image(rgb, 720, 720)
                 )
 
-            # cluster all the newly added objects
-            all_added_obj_ids = [obj_id for obj_id in all_added_obj_ids if obj_id in scene.objects]
-            # as well as the objects nearby
-            for obj_id, obj in scene.objects.items():
-                if np.linalg.norm(obj['bbox'].center[[0, 2]] - pts[[0, 2]]) < cfg.scene_graph.obj_include_dist + 0.5:
-                    all_added_obj_ids.append(obj_id)
-            scene.update_snapshots(obj_ids=set(all_added_obj_ids), min_detection=cfg.min_detection)
-            logging.info(f"Step {cnt_step} {len(scene.objects)} objects, {len(scene.snapshots)} snapshots")
-            n_total_snapshots = len(scene.snapshots)
-            n_total_frames = len(scene.frames)
-
-            # update the mapping of object id to class name, since the objects have been updated
-            object_id_to_name = {obj_id: obj["class_name"] for obj_id, obj in scene.objects.items()}
-            step_dict["obj_map"] = object_id_to_name
-
-            step_dict["snapshot_objects"] = {}
-            step_dict["snapshot_imgs"] = {}
-            for rgb_id, snapshot in scene.snapshots.items():
-                step_dict["snapshot_objects"][rgb_id] = snapshot.cluster
-                step_dict["snapshot_imgs"][rgb_id] = all_snapshots[rgb_id]
-
-            update_success = tsdf_planner.update_frontier_map(pts=pts_normal, cfg=cfg.planner)
-            if not update_success:
-                logging.info("Warning! Update frontier map failed!")
-                if cnt_step == 0:  # if the first step fails, we should stop
-                    logging.info(f"Question id {question_id} invalid: update_frontier_map failed!")
-                    break
-
-            if target_found:
-                break
-
-            # Turn to face each frontier point and get rgb image
-            for i, frontier in enumerate(tsdf_planner.frontiers):
-                pos_voxel = frontier.position
-                pos_world = pos_voxel * tsdf_planner._voxel_size + tsdf_planner._vol_origin[:2]
-                pos_world = pos_normal_to_habitat(np.append(pos_world, floor_height))
-                assert (frontier.image is None and frontier.feature is None) or (frontier.image is not None and frontier.feature is not None), f"{frontier.image}, {frontier.feature is None}"
-                # Turn to face the frontier point
-                if frontier.image is None:
-                    view_frontier_direction = np.asarray([pos_world[0] - pts[0], 0., pos_world[2] - pts[2]])
-
-                    obs = scene.get_frontier_observation(pts, view_frontier_direction)
-                    frontier_obs = obs["color_sensor"]
-
-                    if cfg.save_frontier_video or cfg.save_visualization:
-                        plt.imsave(
-                            os.path.join(episode_frontier_dir, f"{cnt_step}_{i}.png"),
-                            frontier_obs,
+                if make_decision:  # only update the scene graph when making a decision
+                    # collect all view features
+                    obs_file_name = f"{n_decision_step}-view_{view_idx}.png"
+                    with torch.no_grad():
+                        annotated_rgb, added_obj_ids, target_obj_id_det = scene.update_scene_graph(
+                            image_rgb=rgb[..., :3], depth=depth, intrinsics=cam_intr, cam_pos=cam_pose,
+                            detection_model=detection_model, sam_predictor=sam_predictor, clip_model=clip_model,
+                            clip_preprocess=clip_preprocess, clip_tokenizer=clip_tokenizer,
+                            pts=pts, pts_voxel=tsdf_planner.habitat2voxel(pts),
+                            img_path=obs_file_name,
+                            frame_idx=n_decision_step * total_views + view_idx,
+                            target_obj_mask=None,
                         )
-                    processed_rgb = resize_image(rgba2rgb(frontier_obs), cfg.prompt_h, cfg.prompt_w)
-                    frontier.image = f"{cnt_step}_{i}.png"
-                    frontier.feature = processed_rgb  # yh: in gpt4-based exploration, feature is no used. So I just directly use this attribute to store raw rgb. Otherwise, the additional .img attribute may cause bugs.
+                        resized_rgb = resize_image(rgb, cfg.prompt_h, cfg.prompt_w)
+                        all_snapshots[obs_file_name] = resized_rgb
+                        rgb_egocentric_views.append(resized_rgb)
+                        if cfg.save_visualization or cfg.save_frontier_video:
+                            plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), annotated_rgb)
+                        else:
+                            plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), rgb)
+                        all_added_obj_ids += added_obj_ids
 
-            if cfg.choose_every_step:
+                    # clean up or merge redundant objects periodically
+                    scene.periodic_cleanup_objects(frame_idx=n_decision_step * total_views + view_idx, pts=pts)
+
+                    # TSDF fusion
+                    tsdf_planner.integrate(
+                        color_im=rgb,
+                        depth_im=depth,
+                        cam_intr=cam_intr,
+                        cam_pose=cam_pose_tsdf,
+                        obs_weight=1.0,
+                        margin_h=int(cfg.margin_h_ratio * img_height),
+                        margin_w=int(cfg.margin_w_ratio * img_width),
+                        explored_depth=cfg.explored_depth,
+                    )
+
+            if make_decision:
+                # cluster all the newly added objects
+                all_added_obj_ids = [obj_id for obj_id in all_added_obj_ids if obj_id in scene.objects]
+                # as well as the objects nearby
+                for obj_id, obj in scene.objects.items():
+                    if np.linalg.norm(obj['bbox'].center[[0, 2]] - pts[[0, 2]]) < cfg.scene_graph.obj_include_dist + 0.5:
+                        all_added_obj_ids.append(obj_id)
+                scene.update_snapshots(obj_ids=set(all_added_obj_ids), min_detection=cfg.min_detection)
+                logging.info(f"Move step {n_move_step}, Decision step {n_decision_step} {len(scene.objects)} objects, {len(scene.snapshots)} snapshots")
+                n_total_snapshots = len(scene.snapshots)
+                n_total_frames = len(scene.frames)
+
+                # update the mapping of object id to class name, since the objects have been updated
+                object_id_to_name = {obj_id: obj["class_name"] for obj_id, obj in scene.objects.items()}
+                step_dict["obj_map"] = object_id_to_name
+
+                step_dict["snapshot_objects"] = {}
+                step_dict["snapshot_imgs"] = {}
+                for rgb_id, snapshot in scene.snapshots.items():
+                    step_dict["snapshot_objects"][rgb_id] = snapshot.cluster
+                    step_dict["snapshot_imgs"][rgb_id] = all_snapshots[rgb_id]
+
+                update_success = tsdf_planner.update_frontier_map(pts=pts_normal, cfg=cfg.planner)
+                if not update_success:
+                    logging.info("Warning! Update frontier map failed!")
+                    if n_decision_step == 0:  # if the first step fails, we should stop
+                        logging.info(f"Question id {question_id} invalid: update_frontier_map failed!")
+                        break
+
+                # Turn to face each frontier point and get rgb image
+                for i, frontier in enumerate(tsdf_planner.frontiers):
+                    pos_voxel = frontier.position
+                    pos_world = pos_voxel * tsdf_planner._voxel_size + tsdf_planner._vol_origin[:2]
+                    pos_world = pos_normal_to_habitat(np.append(pos_world, floor_height))
+                    assert (frontier.image is None and frontier.feature is None) or (frontier.image is not None and frontier.feature is not None), f"{frontier.image}, {frontier.feature is None}"
+                    # Turn to face the frontier point
+                    if frontier.image is None:
+                        view_frontier_direction = np.asarray([pos_world[0] - pts[0], 0., pos_world[2] - pts[2]])
+
+                        obs = scene.get_frontier_observation(pts, view_frontier_direction)
+                        frontier_obs = obs["color_sensor"]
+
+                        if cfg.save_frontier_video or cfg.save_visualization:
+                            plt.imsave(
+                                os.path.join(episode_frontier_dir, f"{n_decision_step}_{i}.png"),
+                                frontier_obs,
+                            )
+                        processed_rgb = resize_image(rgba2rgb(frontier_obs), cfg.prompt_h, cfg.prompt_w)
+                        frontier.image = f"{n_decision_step}_{i}.png"
+                        frontier.feature = processed_rgb  # yh: in gpt4-based exploration, feature is no used. So I just directly use this attribute to store raw rgb. Otherwise, the additional .img attribute may cause bugs.
+
+            if make_decision:
                 if tsdf_planner.max_point is not None and type(tsdf_planner.max_point) == Frontier:
                     # reset target point to allow the model to choose again
                     tsdf_planner.max_point = None
@@ -360,7 +378,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 step_dict["question"] = question
                 step_dict["scene"] = scene_id
 
-                outputs, snapshot_id_mapping, reason, n_filtered_snapshots = explore_step(step_dict, cfg)
+                outputs, snapshot_id_mapping, reason, filtered_snapshots_ids = explore_step(step_dict, cfg)
                 if outputs is None:
                     # encounter generation error
                     logging.info(f"Question id {question_id} invalid: model generation error!")
@@ -377,6 +395,8 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     logging.info(f"Invalid prediction type: {target_type}, failed!")
                     print(target_type)
                     break
+
+                n_filtered_snapshots = len(filtered_snapshots_ids)
 
                 if target_type == "snapshot":
                     # TODO: the problem needed to be fixed here
@@ -490,7 +510,9 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
 
             # update the agent's position record
             pts_pixs = np.vstack((pts_pixs, pts_pix))
+
             if cfg.save_visualization:
+                # save visualization
                 # Add path to ax5, with colormap to indicate order
                 visualization_path = os.path.join(episode_data_dir, "visualization")
                 os.makedirs(visualization_path, exist_ok=True)
@@ -498,10 +520,10 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 ax1.plot(pts_pixs[:-1, 1], pts_pixs[:-1, 0], linewidth=1, color="white")
 
                 fig.tight_layout()
-                plt.savefig(os.path.join(visualization_path, "{}_map.png".format(cnt_step)))
+                plt.savefig(os.path.join(visualization_path, "{}_map.png".format(n_move_step)))
                 plt.close()
 
-            if cfg.save_frontier_video:
+            if make_decision and cfg.save_frontier_video:
                 frontier_video_path = os.path.join(episode_data_dir, "frontier_video")
                 os.makedirs(frontier_video_path, exist_ok=True)
                 num_images = len(tsdf_planner.frontiers)
@@ -528,8 +550,14 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 global_caption = f"{question}\n{answer}"
                 fig.suptitle(global_caption, fontsize=16)
                 plt.tight_layout(rect=(0., 0., 1., 0.95))
-                plt.savefig(os.path.join(frontier_video_path, f'{cnt_step}.png'))
+                plt.savefig(os.path.join(frontier_video_path, f'{n_decision_step}.png'))
                 plt.close()
+
+            # if cfg.save_demo_video:
+            #     demo_video_path = os.path.join(episode_data_dir, "demo_video")
+            #     os.makedirs(demo_video_path, exist_ok=True)
+            #     assert cfg.save_visualization
+            #     num_images = len(tsdf_planner.frontiers) + len(filtered_snapshots_ids)
 
             # update position and rotation
             pts_normal = np.append(pts_normal, floor_height)
@@ -573,7 +601,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
             if question_id not in success_list:
                 success_list.append(question_id)
             path_length_list[question_id] = explore_dist
-            logging.info(f"Question id {question_id} finish with {cnt_step} steps, {explore_dist} length")
+            logging.info(f"Question id {question_id} finish with {n_decision_step} steps, {explore_dist} length")
         else:
             fail_list.append(question_id)
             logging.info(f"Question id {question_id} failed, {explore_dist} length")
@@ -592,80 +620,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
         n_filtered_snapshots_list[question_id] = n_filtered_snapshots
         n_total_snapshots_list[question_id] = n_total_snapshots
         n_total_frames_list[question_id] = n_total_frames
-
-        # if target not found, select images from existing snapshots for question answering
-        if not target_found:
-            if cfg.handle_target_not_found == 'none':
-                selected_snapshot_ids = []
-            elif cfg.handle_target_not_found == "random":
-                all_snapshot_ids = list(scene.snapshots.keys())
-                selected_snapshot_ids = random.sample(all_snapshot_ids, len(cfg.num_final_images))
-            elif cfg.handle_target_not_found == "with_model":
-                selected_snapshot_ids = []
-                for _ in range(cfg.num_final_images):
-                    step_dict = {}
-                    # add snapshot features
-                    step_dict["snapshot_objects"] = {}
-                    step_dict["snapshot_imgs"] = {}
-                    snapshot_id_mapping = {}
-                    prompt_ss_idx = 0
-                    for snapshot_idx, (rgb_id, snapshot) in enumerate(scene.snapshots.items()):
-                        if rgb_id in selected_snapshot_ids:
-                            continue
-                        step_dict["snapshot_objects"][rgb_id] = snapshot.cluster
-                        step_dict["snapshot_imgs"] = all_snapshots[rgb_id]
-
-                        snapshot_id_mapping[prompt_ss_idx] = snapshot_idx
-                        prompt_ss_idx += 1
-
-                    if len(snapshot_id_mapping) == 0:
-                        logging.info(f"Question id {question_id} target not found handling: no snapshots available!")
-                        break
-
-                    # add scene graph
-                    step_dict["obj_map"] = object_id_to_name
-
-                    # we don't need to add frontier for model selection
-                    step_dict["frontiers"] = []
-
-                    if cfg.egocentric_views:
-                        step_dict["use_egocentric_views"] = True
-                        step_dict["egocentric_imgs"] = rgb_egocentric_views
-
-                    step_dict["frontier_imgs"] = []
-                    step_dict["question"] = question
-                    step_dict["scene"] = scene_id
-
-                    outputs, snapshot_id_mapping = explore_step(step_dict, cfg)
-                    if outputs is None:
-                        logging.info(f"Question id {question_id} target not found handling: model generation error!")
-                        continue
-                    try:
-                        target_type, target_index = outputs.split(" ")[0], outputs.split(" ")[1]
-                        logging.info(f"Prediction in target not found handling: {target_type}, {target_index}")
-                    except:
-                        logging.info(f"Wrong output format in target not found handling, failed!")
-                        continue
-
-                    if target_type != "snapshot":
-                        logging.info(f"Invalid prediction type in target not found handling: {target_type}, failed!")
-                        continue
-
-                    if int(target_index) < 0 or int(target_index) >= len(snapshot_id_mapping):
-                        logging.info(f"target index can not match real objects in target not found handling: {target_index}, failed!")
-                        continue
-                    target_index = snapshot_id_mapping[int(target_index)]
-                    pred_target_snapshot = list(scene.snapshots.values())[int(target_index)]
-
-                    assert pred_target_snapshot.image not in selected_snapshot_ids, f"{pred_target_snapshot.image} already selected"
-                    selected_snapshot_ids.append(pred_target_snapshot.image)
-                    logging.info(f"Handling target not found: choose snapshot {pred_target_snapshot.image}")
-            else:
-                raise ValueError(f"Invalid target not found handling method: {cfg.handle_target_not_found}")
-
-            # save the selected images
-            for ss_id in selected_snapshot_ids:
-                os.system(f"cp {os.path.join(episode_snapshot_dir, ss_id)} {os.path.join(episode_object_observe_dir, f'snapshot_{ss_id}')}")
 
 
 

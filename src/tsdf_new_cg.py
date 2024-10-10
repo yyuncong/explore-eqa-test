@@ -570,7 +570,10 @@ class TSDFPlanner(TSDFPlannerBase):
         # Plot
         fig = None
         if save_visualization:
-            fig, ax1 = plt.subplots(figsize=(8, 8))
+            h, w = self._tsdf_vol_cpu.shape[:2]
+            h = 8 * h / w
+
+            fig, ax1 = plt.subplots(figsize=(8, h))
 
             ft_map = np.zeros((self._tsdf_vol_cpu.shape[0], self._tsdf_vol_cpu.shape[1], 3), dtype=np.uint8) + np.asarray([[[253, 231, 36]]], dtype=np.uint8)
             ft_map[self.occupied > 0] = [253, 231, 36]

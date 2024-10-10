@@ -34,7 +34,7 @@ from src.habitat import (
 from src.geom import get_cam_intr, get_scene_bnds
 from src.tsdf_new_cg import TSDFPlanner, Frontier, SnapShot
 from src.scene import Scene
-from src.eval_utils_snapshot_new import rgba2rgb
+from src.eval_utils_snapshot_new import rgba2rgb, n_img_to_hw
 from src.eval_utils_gpt_demo_video import explore_step
 
 
@@ -527,37 +527,118 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 frontier_video_path = os.path.join(episode_data_dir, "frontier_video")
                 os.makedirs(frontier_video_path, exist_ok=True)
                 num_images = len(tsdf_planner.frontiers)
-                if type(max_point_choice) == SnapShot:
-                    num_images += 1
-                side_length = int(np.sqrt(num_images)) + 1
-                side_length = max(2, side_length)
-                fig, axs = plt.subplots(side_length, side_length, figsize=(20, 20))
-                for h_idx in range(side_length):
-                    for w_idx in range(side_length):
-                        axs[h_idx, w_idx].axis('off')
-                        i = h_idx * side_length + w_idx
-                        if (i < num_images - 1) or (i < num_images and type(max_point_choice) == Frontier):
+                side_length_h, side_length_w = n_img_to_hw[num_images]
+                fig, axs = plt.subplots(side_length_h, side_length_w, figsize=(30, 10))
+                for h_idx in range(side_length_h):
+                    for w_idx in range(side_length_w):
+                        if side_length_h == 1:
+                            ax_img = axs[w_idx]
+                        else:
+                            ax_img = axs[h_idx, w_idx]
+                        ax_img.axis('off')
+                        i = h_idx * side_length_w + w_idx
+                        if i < num_images:
                             img_path = os.path.join(episode_frontier_dir, tsdf_planner.frontiers[i].image)
                             img = matplotlib.image.imread(img_path)
-                            axs[h_idx, w_idx].imshow(img)
+                            ax_img.imshow(img)
                             if type(max_point_choice) == Frontier and max_point_choice.image == tsdf_planner.frontiers[i].image:
-                                axs[h_idx, w_idx].set_title('Chosen')
-                        elif i == num_images - 1 and type(max_point_choice) == SnapShot:
-                            img_path = os.path.join(episode_snapshot_dir, max_point_choice.image)
-                            img = matplotlib.image.imread(img_path)
-                            axs[h_idx, w_idx].imshow(img)
-                            axs[h_idx, w_idx].set_title('Snapshot Chosen')
-                global_caption = f"{question}\n{answer}"
+                                ax_img.set_title('Chosen')
+
+                global_caption = f"Frontier Snapshots\nReason: {reason}" if type(max_point_choice) == Frontier else "Frontier Snapshots"
                 fig.suptitle(global_caption, fontsize=16)
                 plt.tight_layout(rect=(0., 0., 1., 0.95))
                 plt.savefig(os.path.join(frontier_video_path, f'{n_decision_step}.png'))
                 plt.close()
 
-            # if cfg.save_demo_video:
-            #     demo_video_path = os.path.join(episode_data_dir, "demo_video")
-            #     os.makedirs(demo_video_path, exist_ok=True)
-            #     assert cfg.save_visualization
-            #     num_images = len(tsdf_planner.frontiers) + len(filtered_snapshots_ids)
+                # save filtered snapshots
+                snapshot_video_path = os.path.join(episode_data_dir, "snapshot_video")
+                os.makedirs(snapshot_video_path, exist_ok=True)
+                num_images = len(filtered_snapshots_ids)
+                side_length_h, side_length_w = n_img_to_hw[num_images]
+                fig, axs = plt.subplots(side_length_h, side_length_w, figsize=(30, 10))
+                for h_idx in range(side_length_h):
+                    for w_idx in range(side_length_w):
+                        if side_length_h == 1:
+                            ax_img = axs[w_idx]
+                        else:
+                            ax_img = axs[h_idx, w_idx]
+                        ax_img.axis('off')
+                        i = h_idx * side_length_w + w_idx
+                        if i < num_images:
+                            img_path = os.path.join(episode_snapshot_dir, filtered_snapshots_ids[i])
+                            img = matplotlib.image.imread(img_path)
+                            ax_img.imshow(img)
+                            if type(max_point_choice) == SnapShot and max_point_choice.image == filtered_snapshots_ids[i]:
+                                ax_img.set_title('Chosen')
+
+                global_caption = f"Filtered Snapshots\nReason: {reason}" if type(max_point_choice) == SnapShot else "Filtered Snapshots"
+                fig.suptitle(global_caption, fontsize=16)
+                plt.tight_layout(rect=(0., 0., 1., 0.95))
+                plt.savefig(os.path.join(snapshot_video_path, f'{n_decision_step}.png'))
+                plt.close()
+
+            if cfg.save_visualization and cfg.save_frontier_video:
+                demo_video_path = os.path.join(episode_data_dir, "demo_video")
+                os.makedirs(demo_video_path, exist_ok=True)
+                assert cfg.save_visualization
+
+                # plot the left half of the image that contains the map and the front egocentric view
+                fig, axs = plt.subplots(2, 1, figsize=(10, 15), gridspec_kw={'height_ratios': [1, 3]})
+                # load the egocentric view
+                ego_front_path = os.path.join(episode_egocentric_dir, f"view_{total_views - 1}_{n_move_step}.png")
+                ego_front = matplotlib.image.imread(ego_front_path)
+
+                axs[0].imshow(ego_front)
+                axs[0].axis('off')
+                axs[0].set_title('Egocentric View')
+
+                # load the map
+                map_path = os.path.join(visualization_path, f"{n_move_step}_map.png")
+                map_img = matplotlib.image.imread(map_path)
+                axs[1].imshow(map_img)
+                axs[1].axis('off')
+                axs[1].set_title('Topdown Map')
+
+                plt.tight_layout()
+                plt.savefig(os.path.join(demo_video_path, f'tempt_left.png'))
+                plt.close()
+
+
+                # plot the right half of the image that contains the frontier and the filtered snapshots
+                fig, axs = plt.subplots(2, 1, figsize=(27, 18))
+                # load the frontier video
+                frontier_video_path = os.path.join(episode_data_dir, "frontier_video", f"{n_decision_step}.png")
+                frontier_video = matplotlib.image.imread(frontier_video_path)
+                axs[0].imshow(frontier_video)
+                axs[0].axis('off')
+
+                # load the snapshot video
+                snapshot_video_path = os.path.join(episode_data_dir, "snapshot_video", f"{n_decision_step}.png")
+                snapshot_video = matplotlib.image.imread(snapshot_video_path)
+                axs[1].imshow(snapshot_video)
+                axs[1].axis('off')
+
+                plt.tight_layout()
+                plt.savefig(os.path.join(demo_video_path, f'tempt_right.png'))
+                plt.close()
+
+                # combine the two images
+                fig, axs = plt.subplots(1, 2, figsize=(32, 18), gridspec_kw={'width_ratios': [1, 2]})
+                left_img = matplotlib.image.imread(os.path.join(demo_video_path, f'tempt_left.png'))
+                right_img = matplotlib.image.imread(os.path.join(demo_video_path, f'tempt_right.png'))
+                axs[0].imshow(left_img)
+                axs[0].axis('off')
+                axs[1].imshow(right_img)
+                axs[1].axis('off')
+
+                fig.suptitle(f"Question: {question}", fontsize=16)
+                plt.tight_layout(rect=(0., 0., 1., 0.95))
+
+                plt.savefig(os.path.join(demo_video_path, f'{n_move_step:04d}.png'))
+                plt.close()
+
+                os.system(f"rm {os.path.join(demo_video_path, 'tempt_left.png')} {os.path.join(demo_video_path, 'tempt_right.png')}")
+
 
             # update position and rotation
             pts_normal = np.append(pts_normal, floor_height)

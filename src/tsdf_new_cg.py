@@ -572,6 +572,7 @@ class TSDFPlanner(TSDFPlannerBase):
         if save_visualization:
             h, w = self._tsdf_vol_cpu.shape[:2]
             h = 8 * h / w
+            unit_arr = 0.1 / self._voxel_size  # when for default voxel size=0.1m, the unit length is 1
 
             fig, ax1 = plt.subplots(figsize=(8, h))
 
@@ -585,7 +586,7 @@ class TSDFPlanner(TSDFPlannerBase):
             agent_orientation = self.rad2vector(angle)
 
             ax1.scatter(cur_point[1], cur_point[0], c="white", s=40, label="current")
-            ax1.arrow(cur_point[1], cur_point[0], agent_orientation[1] * 5, agent_orientation[0] * 5, width=0.15, head_width=1.0, head_length=1.0, color='white')
+            ax1.arrow(cur_point[1], cur_point[0], agent_orientation[1] * 5 * unit_arr, agent_orientation[0] * 5 * unit_arr, width=0.15, head_width=1.0, head_length=1.0, color='white')
 
             for snapshot in snapshots.values():
                 for obj_id in snapshot.cluster:
@@ -600,7 +601,7 @@ class TSDFPlanner(TSDFPlannerBase):
             for frontier in self.frontiers:
                 ax1.scatter(frontier.position[1], frontier.position[0], color="m", s=10, alpha=1)
                 normal = frontier.orientation
-                dx, dy = normal * 4
+                dx, dy = normal * 4 * unit_arr
                 ax1.arrow(frontier.position[1], frontier.position[0], dy, dx, width=0.15, head_width=1.2, head_length=1.2, color='m')
 
             ax1.scatter(self.target_point[1], self.target_point[0], c="r", s=80, label="target", marker='*')

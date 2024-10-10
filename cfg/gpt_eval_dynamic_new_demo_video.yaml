@@ -25,8 +25,7 @@ camera_tilt_deg: -30
 img_width: 1280
 img_height: 1280
 hfov: 120
-#tsdf_grid_size: 0.025
-tsdf_grid_size: 0.1
+tsdf_grid_size: 0.025
 margin_w_ratio: 0.25
 margin_h_ratio: 0.6
 
@@ -56,9 +55,9 @@ planner:
   unexplored_T: 2.0
   unoccupied_T: 2.0
   eps: 1
-  n_step_per_decision: 5
-  max_dist_from_cur_phase_1: 0.2  # when the target object is not found, explore the frontiers with this step length
-  max_dist_from_cur_phase_2: 0.2  # when the target object is found, go to the target object with this step length
+  n_step_per_decision: 10
+  max_dist_from_cur_phase_1: 0.1  # when the target object is not found, explore the frontiers with this step length
+  max_dist_from_cur_phase_2: 0.1  # when the target object is found, go to the target object with this step length
   max_unexplored_check_frontier: 3
   max_unoccupied_check_frontier: 1
   final_observe_distance: 0.75  # in phase 2, find a place that is this far from the target object to observe it
@@ -69,8 +68,7 @@ planner:
   frontier_edge_area_max: 6
   frontier_area_min: 8
   frontier_area_max: 9
-#  min_frontier_area: 20 * 16  # the frontier should have at least this many pixels
-  min_frontier_area: 20  # the frontier should have at least this many pixels
+  min_frontier_area: 320  # the frontier should have at least this many pixels
   max_frontier_angle_range_deg: 150  # the angle spanned by the pixels in a frontier should not be larger than this
   min_frontier_angle_diff_deg: 0  # the angle between two frontiers should be larger than this. otherwise, merge them
   region_equal_threshold: 0.95

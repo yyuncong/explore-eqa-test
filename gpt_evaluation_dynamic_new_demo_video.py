@@ -625,64 +625,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         plt.close()
 
 
-                        # # plot the left half of the image that contains the map and the front egocentric view
-                        # fig, axs = plt.subplots(2, 1, figsize=(10, 15), gridspec_kw={'height_ratios': [1, 3]})
-                        # # load the egocentric view
-                        # ego_front_path = os.path.join(episode_egocentric_dir, f"view_{total_views - 1}_{n_move_step}.png")
-                        # ego_front = matplotlib.image.imread(ego_front_path)
-                        #
-                        # axs[0].imshow(ego_front)
-                        # axs[0].axis('off')
-                        # axs[0].set_title('Egocentric View')
-                        #
-                        # # load the map
-                        # map_path = os.path.join(visualization_path, f"{n_move_step}_map.png")
-                        # map_img = matplotlib.image.imread(map_path)
-                        # axs[1].imshow(map_img)
-                        # axs[1].axis('off')
-                        # axs[1].set_title('Topdown Map')
-                        #
-                        # plt.tight_layout()
-                        # plt.savefig(os.path.join(demo_video_path, f'tempt_left.png'))
-                        # plt.close()
-                        #
-                        #
-                        # # plot the right half of the image that contains the frontier and the filtered snapshots
-                        # fig, axs = plt.subplots(2, 1, figsize=(27, 18))
-                        # # load the frontier video
-                        # frontier_video_path = os.path.join(episode_data_dir, "frontier_video", f"{n_decision_step}.png")
-                        # frontier_video = matplotlib.image.imread(frontier_video_path)
-                        # axs[0].imshow(frontier_video)
-                        # axs[0].axis('off')
-                        #
-                        # # load the snapshot video
-                        # snapshot_video_path = os.path.join(episode_data_dir, "snapshot_video", f"{n_decision_step}.png")
-                        # snapshot_video = matplotlib.image.imread(snapshot_video_path)
-                        # axs[1].imshow(snapshot_video)
-                        # axs[1].axis('off')
-                        #
-                        # plt.tight_layout()
-                        # plt.savefig(os.path.join(demo_video_path, f'tempt_right.png'))
-                        # plt.close()
-                        #
-                        # # combine the two images
-                        # fig, axs = plt.subplots(1, 2, figsize=(32, 18), gridspec_kw={'width_ratios': [1, 2]})
-                        # left_img = matplotlib.image.imread(os.path.join(demo_video_path, f'tempt_left.png'))
-                        # right_img = matplotlib.image.imread(os.path.join(demo_video_path, f'tempt_right.png'))
-                        # axs[0].imshow(left_img)
-                        # axs[0].axis('off')
-                        # axs[1].imshow(right_img)
-                        # axs[1].axis('off')
-                        #
-                        # fig.suptitle(f"Question: {question}", fontsize=16)
-                        # plt.tight_layout(rect=(0., 0., 1., 0.95))
-                        #
-                        # plt.savefig(os.path.join(demo_video_path, f'{n_move_step:04d}.png'))
-                        # plt.close()
-                        #
-                        # os.system(f"rm {os.path.join(demo_video_path, 'tempt_left.png')} {os.path.join(demo_video_path, 'tempt_right.png')}")
-
-
                     # update position and rotation
                     pts_normal = np.append(pts_normal, floor_height)
                     pts = pos_normal_to_habitat(pts_normal)
@@ -690,6 +632,17 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     explore_dist += np.linalg.norm(pts_pixs[-1] - pts_pixs[-2]) * tsdf_planner._voxel_size
 
                     logging.info(f"Current position: {pts}, {explore_dist:.3f}")
+
+                    # remove unused images to save space
+                    os.system(f"rm {episode_egocentric_dir}/*.png")
+                    os.system(f"rm {episode_data_dir}/visualization/*.png")
+                    os.system(f"rm {episode_data_dir}/frontier_video/*.png")
+                    os.system(f"rm {episode_data_dir}/snapshot_video/*.png")
+
+                    dist_to_target = np.linalg.norm(pts_pix[:2] - tsdf_planner.target_point[:2]) * cfg.grid_size
+                    logging.info(f"Distance to navigation target: {dist_to_target:.3f}")
+                    if dist_to_target < cfg.target_dist_threshold:
+                        target_found = True
 
                     if type(max_point_choice) == SnapShot:
                         if target_arrived:

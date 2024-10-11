@@ -221,6 +221,10 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 curr_decision_step = -1
                 n_step_per_decision = cfg.planner.n_step_per_decision
 
+                # record the history position and rotation for moving average
+                history_pts = [pts]
+                history_angle = [(np.cos(angle), np.sin(angle))]
+
                 # reset tsdf planner
                 tsdf_planner.max_point = None
                 tsdf_planner.target_point = None
@@ -628,10 +632,21 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     # update position and rotation
                     pts_normal = np.append(pts_normal, floor_height)
                     pts = pos_normal_to_habitat(pts_normal)
+
+                    history_pts.append(pts)
+                    history_angle.append((np.cos(angle), np.sin(angle)))
+
+                    if True:  # use moving average
+                        n_ma = 5
+                        pts = np.mean(np.array(history_pts[-n_ma:]), axis=0)
+                        angle_vec = np.mean(np.array(history_angle[-n_ma:]), axis=0)
+                        angle = np.arctan2(angle_vec[1], angle_vec[0])
+                        angle = np.mod(angle, 2 * np.pi)
+
                     rotation = get_quaternion(angle, 0)
                     explore_dist += np.linalg.norm(pts_pixs[-1] - pts_pixs[-2]) * tsdf_planner._voxel_size
 
-                    logging.info(f"Current position: {pts}, {explore_dist:.3f}")
+                    logging.info(f"Current position: {pts}, {explore_dist:.3f}, {history_pts[-1]}, {angle}")
 
                     # remove unused images to save space
                     os.system(f"rm {episode_egocentric_dir}/*.png")

@@ -577,67 +577,107 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 plt.savefig(os.path.join(snapshot_video_path, f'{n_decision_step}.png'))
                 plt.close()
 
+                # merge the two images
+                fix, axs = plt.subplots(2, 1, figsize=(32, 18))
+                frontier_img = matplotlib.image.imread(os.path.join(frontier_video_path, f'{n_decision_step}.png'))
+                snapshot_img = matplotlib.image.imread(os.path.join(snapshot_video_path, f'{n_decision_step}.png'))
+                axs[0].imshow(frontier_img)
+                axs[0].axis('off')
+                axs[1].imshow(snapshot_img)
+                axs[1].axis('off')
+                plt.tight_layout()
+                decision_video_save_dir = os.path.join(episode_data_dir, "demo_video_decision")
+                os.makedirs(decision_video_save_dir, exist_ok=True)
+                plt.savefig(os.path.join(decision_video_save_dir, f'{n_move_step:04d}_{n_decision_step:04d}.png'))
+                plt.close()
+
+
+
+
             if cfg.save_visualization and cfg.save_frontier_video:
-                demo_video_path = os.path.join(episode_data_dir, "demo_video")
+                demo_video_path = os.path.join(episode_data_dir, "demo_video_egocentric")
                 os.makedirs(demo_video_path, exist_ok=True)
                 assert cfg.save_visualization
 
-                # plot the left half of the image that contains the map and the front egocentric view
-                fig, axs = plt.subplots(2, 1, figsize=(10, 15), gridspec_kw={'height_ratios': [1, 3]})
+                fig, axs = plt.subplots(1, 2, figsize=(32, 18), gridspec_kw={'width_ratios': [1, 2]})
+                # load the map
+                map_path = os.path.join(visualization_path, f"{n_move_step}_map.png")
+                map_img = matplotlib.image.imread(map_path)
+
+                axs[0].imshow(map_img)
+                axs[0].axis('off')
+                axs[0].set_title('Topdown Map')
+
                 # load the egocentric view
                 ego_front_path = os.path.join(episode_egocentric_dir, f"view_{total_views - 1}_{n_move_step}.png")
                 ego_front = matplotlib.image.imread(ego_front_path)
 
-                axs[0].imshow(ego_front)
-                axs[0].axis('off')
-                axs[0].set_title('Egocentric View')
-
-                # load the map
-                map_path = os.path.join(visualization_path, f"{n_move_step}_map.png")
-                map_img = matplotlib.image.imread(map_path)
-                axs[1].imshow(map_img)
+                axs[1].imshow(ego_front)
                 axs[1].axis('off')
-                axs[1].set_title('Topdown Map')
+                axs[1].set_title('Egocentric View')
 
-                plt.tight_layout()
-                plt.savefig(os.path.join(demo_video_path, f'tempt_left.png'))
-                plt.close()
-
-
-                # plot the right half of the image that contains the frontier and the filtered snapshots
-                fig, axs = plt.subplots(2, 1, figsize=(27, 18))
-                # load the frontier video
-                frontier_video_path = os.path.join(episode_data_dir, "frontier_video", f"{n_decision_step}.png")
-                frontier_video = matplotlib.image.imread(frontier_video_path)
-                axs[0].imshow(frontier_video)
-                axs[0].axis('off')
-
-                # load the snapshot video
-                snapshot_video_path = os.path.join(episode_data_dir, "snapshot_video", f"{n_decision_step}.png")
-                snapshot_video = matplotlib.image.imread(snapshot_video_path)
-                axs[1].imshow(snapshot_video)
-                axs[1].axis('off')
-
-                plt.tight_layout()
-                plt.savefig(os.path.join(demo_video_path, f'tempt_right.png'))
-                plt.close()
-
-                # combine the two images
-                fig, axs = plt.subplots(1, 2, figsize=(32, 18), gridspec_kw={'width_ratios': [1, 2]})
-                left_img = matplotlib.image.imread(os.path.join(demo_video_path, f'tempt_left.png'))
-                right_img = matplotlib.image.imread(os.path.join(demo_video_path, f'tempt_right.png'))
-                axs[0].imshow(left_img)
-                axs[0].axis('off')
-                axs[1].imshow(right_img)
-                axs[1].axis('off')
-
-                fig.suptitle(f"Question: {question}", fontsize=16)
+                fig.suptitle(f"Question: {question}\nStep {n_move_step}", fontsize=16)
                 plt.tight_layout(rect=(0., 0., 1., 0.95))
-
                 plt.savefig(os.path.join(demo_video_path, f'{n_move_step:04d}.png'))
                 plt.close()
 
-                os.system(f"rm {os.path.join(demo_video_path, 'tempt_left.png')} {os.path.join(demo_video_path, 'tempt_right.png')}")
+
+                # # plot the left half of the image that contains the map and the front egocentric view
+                # fig, axs = plt.subplots(2, 1, figsize=(10, 15), gridspec_kw={'height_ratios': [1, 3]})
+                # # load the egocentric view
+                # ego_front_path = os.path.join(episode_egocentric_dir, f"view_{total_views - 1}_{n_move_step}.png")
+                # ego_front = matplotlib.image.imread(ego_front_path)
+                #
+                # axs[0].imshow(ego_front)
+                # axs[0].axis('off')
+                # axs[0].set_title('Egocentric View')
+                #
+                # # load the map
+                # map_path = os.path.join(visualization_path, f"{n_move_step}_map.png")
+                # map_img = matplotlib.image.imread(map_path)
+                # axs[1].imshow(map_img)
+                # axs[1].axis('off')
+                # axs[1].set_title('Topdown Map')
+                #
+                # plt.tight_layout()
+                # plt.savefig(os.path.join(demo_video_path, f'tempt_left.png'))
+                # plt.close()
+                #
+                #
+                # # plot the right half of the image that contains the frontier and the filtered snapshots
+                # fig, axs = plt.subplots(2, 1, figsize=(27, 18))
+                # # load the frontier video
+                # frontier_video_path = os.path.join(episode_data_dir, "frontier_video", f"{n_decision_step}.png")
+                # frontier_video = matplotlib.image.imread(frontier_video_path)
+                # axs[0].imshow(frontier_video)
+                # axs[0].axis('off')
+                #
+                # # load the snapshot video
+                # snapshot_video_path = os.path.join(episode_data_dir, "snapshot_video", f"{n_decision_step}.png")
+                # snapshot_video = matplotlib.image.imread(snapshot_video_path)
+                # axs[1].imshow(snapshot_video)
+                # axs[1].axis('off')
+                #
+                # plt.tight_layout()
+                # plt.savefig(os.path.join(demo_video_path, f'tempt_right.png'))
+                # plt.close()
+                #
+                # # combine the two images
+                # fig, axs = plt.subplots(1, 2, figsize=(32, 18), gridspec_kw={'width_ratios': [1, 2]})
+                # left_img = matplotlib.image.imread(os.path.join(demo_video_path, f'tempt_left.png'))
+                # right_img = matplotlib.image.imread(os.path.join(demo_video_path, f'tempt_right.png'))
+                # axs[0].imshow(left_img)
+                # axs[0].axis('off')
+                # axs[1].imshow(right_img)
+                # axs[1].axis('off')
+                #
+                # fig.suptitle(f"Question: {question}", fontsize=16)
+                # plt.tight_layout(rect=(0., 0., 1., 0.95))
+                #
+                # plt.savefig(os.path.join(demo_video_path, f'{n_move_step:04d}.png'))
+                # plt.close()
+                #
+                # os.system(f"rm {os.path.join(demo_video_path, 'tempt_left.png')} {os.path.join(demo_video_path, 'tempt_right.png')}")
 
 
             # update position and rotation

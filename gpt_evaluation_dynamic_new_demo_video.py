@@ -642,7 +642,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     dist_to_target = np.linalg.norm(pts_pix[:2] - tsdf_planner.target_point[:2]) * cfg.tsdf_grid_size
                     logging.info(f"Distance to navigation target: {dist_to_target:.3f}")
                     if dist_to_target < cfg.target_dist_threshold:
-                        target_found = True
+                        target_arrived = True
 
                     if type(max_point_choice) == SnapShot:
                         if target_arrived:

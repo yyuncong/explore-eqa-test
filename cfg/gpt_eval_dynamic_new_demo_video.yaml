@@ -4,7 +4,7 @@ exp_name: gpt_aeqa_dynamic_default_demo_video
 output_parent_dir: /work/pi_chuangg_umass_edu/yuncong/results
 scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
 scene_data_path: /work/pi_chuangg_umass_edu/yuncong/data/scene_datasets/hm3d/
-questions_list_path: 'data/generated_questions-184.json'
+questions_list_path: 'data/generated_questions-eval.json'
 
 concept_graph_config_path: "conceptgraph/hydra_configs"
 concept_graph_config_name: "rerun_realtime_mapping"
@@ -37,7 +37,7 @@ prompt_h: 360
 prompt_w: 360
 
 # for continuous exploration
-clear_up_scene_interval: 3
+clear_up_scene_interval: 5
 max_snapshot_threshold: 999
 
 # Navigation
@@ -48,6 +48,7 @@ extra_view_angle_deg_phase_1: 60
 extra_view_phase_2: 2
 extra_view_angle_deg_phase_2: 40
 max_target_observation: 4
+target_dist_threshold: 0.5
 
 # Semantic map
 explored_depth: 1.7
@@ -55,9 +56,9 @@ planner:
   unexplored_T: 2.0
   unoccupied_T: 2.0
   eps: 1
-  n_step_per_decision: 10
-  max_dist_from_cur_phase_1: 0.1  # when the target object is not found, explore the frontiers with this step length
-  max_dist_from_cur_phase_2: 0.1  # when the target object is found, go to the target object with this step length
+  n_step_per_decision: 5
+  max_dist_from_cur_phase_1: 0.2  # when the target object is not found, explore the frontiers with this step length
+  max_dist_from_cur_phase_2: 0.2  # when the target object is found, go to the target object with this step length
   max_unexplored_check_frontier: 3
   max_unoccupied_check_frontier: 1
   final_observe_distance: 0.75  # in phase 2, find a place that is this far from the target object to observe it

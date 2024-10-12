@@ -573,6 +573,7 @@ class TSDFPlanner(TSDFPlannerBase):
             h, w = self._tsdf_vol_cpu.shape[:2]
             h = 8 * h / w
             arr_scale = 0.1 / self._voxel_size  # when for default voxel size=0.1m, the unit length is 1
+            paddings = int(0.5 / self._voxel_size)  # default padding distance is 1m
 
             fig, ax1 = plt.subplots(figsize=(8, h))
 
@@ -588,10 +589,16 @@ class TSDFPlanner(TSDFPlannerBase):
             ax1.scatter(cur_point[1], cur_point[0], c="white", s=40, label="current")
             ax1.arrow(cur_point[1], cur_point[0], agent_orientation[1] * 5 * arr_scale, agent_orientation[0] * 5 * arr_scale, width=0.15 * arr_scale, head_width=1.0 * arr_scale, head_length=1.0 * arr_scale, color='white')
 
+            x_min_obj, y_min_obj, x_max_obj, y_max_obj = ft_map.shape[1], ft_map.shape[0], 0, 0
             for snapshot in snapshots.values():
                 for obj_id in snapshot.cluster:
                     obj_vox = self.habitat2voxel(objects[obj_id]['bbox'].center)
                     ax1.scatter(obj_vox[1], obj_vox[0], color=snapshot.color, s=30)
+
+                    x_min_obj = min(x_min_obj, obj_vox[1])
+                    y_min_obj = min(y_min_obj, obj_vox[0])
+                    x_max_obj = max(x_max_obj, obj_vox[1])
+                    y_max_obj = max(y_max_obj, obj_vox[0])
 
             if type(self.max_point) == SnapShot:
                 for obj_id in self.max_point.cluster:
@@ -599,12 +606,25 @@ class TSDFPlanner(TSDFPlannerBase):
                     ax1.scatter(obj_vox[1], obj_vox[0], color="r", s=30)
 
             for frontier in self.frontiers:
-                ax1.scatter(frontier.position[1], frontier.position[0], color="m", s=10, alpha=1)
+                ax1.scatter(frontier.position[1], frontier.position[0], color="m", s=30, alpha=1)
                 normal = frontier.orientation
-                dx, dy = normal * 4 * arr_scale
-                ax1.arrow(frontier.position[1], frontier.position[0], dy, dx, width=0.15 * arr_scale, head_width=1.2 * arr_scale, head_length=1.2 * arr_scale, color='m')
+                dx, dy = normal * 5 * arr_scale
+                ax1.arrow(frontier.position[1], frontier.position[0], dy, dx, width=0.15 * arr_scale, head_width=1.5 * arr_scale, head_length=1.5 * arr_scale, color='m')
 
-            ax1.scatter(self.target_point[1], self.target_point[0], c="r", s=80, label="target", marker='*')
+            ax1.scatter(self.target_point[1], self.target_point[0], c="r", s=100, label="target", marker='*')
+
+            # crop the image to retain only objects and frontier regions
+            ft_region_coords = np.argwhere(self.frontier_map > 0)
+            y_min_ft, x_min_ft = np.min(ft_region_coords, axis=0)
+            y_max_ft, x_max_ft = np.max(ft_region_coords, axis=0)
+
+            x_min = max(0, min(x_min_obj, x_min_ft) - paddings)
+            y_min = max(0, min(y_min_obj, y_min_ft) - paddings)
+            x_max = min(max(x_max_obj, x_max_ft) + paddings, ft_map.shape[1])
+            y_max = min(max(y_max_obj, y_max_ft) + paddings, ft_map.shape[0])
+
+            ax1.set_xlim(x_min, x_max)
+            ax1.set_ylim(y_max, y_min)
 
         # Convert back to world coordinates
         next_point_normal = next_point * self._voxel_size + self._vol_origin[:2]

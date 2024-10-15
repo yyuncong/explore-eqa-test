@@ -178,6 +178,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                 floor_height_offset=0,
                 pts_init=pts_normal,
                 init_clearance=cfg.init_clearance * 2,
+                save_visualization=True
             )
 
             logging.info(f'\n\nScene {scene_id} initialization successful!')

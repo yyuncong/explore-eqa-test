@@ -47,6 +47,7 @@ class TSDFPlannerBase:
         floor_height_offset=0,
         pts_init=None,
         init_clearance=0,
+        save_visualization=False,
     ):
         """Constructor.
         Args:
@@ -76,6 +77,13 @@ class TSDFPlannerBase:
         self._tsdf_vol_cpu = -np.ones(self._vol_dim).astype(np.float32)
         # for computing the cumulative moving average of observations per voxel
         self._weight_vol_cpu = np.zeros(self._vol_dim).astype(np.float32)
+
+        self.save_visualization = save_visualization
+        if save_visualization:
+            # Initialize obstacle volume
+            self._obstacle_vol_cpu = np.zeros(self._vol_dim).astype(bool)
+        else:
+            self._obstacle_vol_cpu = None
 
         # Explored or not
         self._explore_vol_cpu = np.zeros(self._vol_dim).astype(np.float32)
@@ -207,10 +215,9 @@ class TSDFPlannerBase:
         depth_val[valid_pix] = depth_im[pix_y[valid_pix], pix_x[valid_pix]]
 
         # narrow view
-        valid_pix_narrow = (pix_x >= margin_w) & (pix_x < (im_w - margin_w)) & (pix_y >= margin_h) & (pix_y < im_h) & (pix_z > 0) & (pix_z < 5)
         depth_val_narrow = np.zeros(pix_x.shape)
-        depth_val_narrow[valid_pix_narrow] = depth_im[
-            pix_y[valid_pix_narrow], pix_x[valid_pix_narrow]
+        depth_val_narrow[valid_pix] = depth_im[
+            pix_y[valid_pix], pix_x[valid_pix]
         ]
         # depth_val_narrow[depth_val_narrow >= explored_depth] = 0.0
         depth_val_narrow[np.linalg.norm(self.cam_pts_pre[:, :2] - cur_pose_xy, axis=1) >= explored_depth] = 0.0
@@ -224,6 +231,14 @@ class TSDFPlannerBase:
         valid_vox_y = self.vox_coords[valid_pts, 1]
         valid_vox_z = self.vox_coords[valid_pts, 2]
         w_old = self._weight_vol_cpu[valid_vox_x, valid_vox_y, valid_vox_z]
+
+        if self.save_visualization:
+            # Mark obstacle
+            obstacle_pts = (depth_diff < 0) & (depth_diff >= -0.2) & (pix_x >= 0) & (pix_x < im_w) & (pix_y >= 0) & (pix_y < im_h) & (pix_z > 0) & (pix_z < 5)
+            obstacle_vox_x = self.vox_coords[obstacle_pts, 0]
+            obstacle_vox_y = self.vox_coords[obstacle_pts, 1]
+            obstacle_vox_z = self.vox_coords[obstacle_pts, 2]
+            self._obstacle_vol_cpu[obstacle_vox_x, obstacle_vox_y, obstacle_vox_z] = True
 
         depth_diff_narrow = depth_val_narrow - pix_z
         valid_pts_narrow = np.logical_and(
@@ -383,3 +398,8 @@ class TSDFPlannerBase:
         pts_normal = pos_habitat_to_normal(pts)
         pts_voxel = self.world2vox(pts_normal)
         return pts_voxel
+
+    def get_obstacle_map(self, height):
+        assert self._obstacle_vol_cpu is not None
+        height_voxel = int(height / self._voxel_size) + self.min_height_voxel
+        return self._obstacle_vol_cpu[:, :, height_voxel]

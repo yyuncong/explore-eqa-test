@@ -583,12 +583,13 @@ class TSDFPlanner(TSDFPlannerBase):
             _, unoccupied_high = self.get_island_around_pts(pts, height=1.8)
             obstacle_map = self.get_obstacle_map(height=1.8)
             # convolution to get the obstacles together with surroundings
-            kernel = np.array([[1, 1, 1], [1, 1, 1], [1, 1, 1]])
+            kernel_size = int(0.3 / self._voxel_size)
+            kernel = np.ones((kernel_size, kernel_size))
             obstacle_map_convolved = ndimage.convolve(obstacle_map.astype(float), kernel, mode="constant", cval=0.0)
 
             ft_map[unoccupied_high > 0] = [200, 200, 200]
-            ft_map[(obstacle_map_convolved > 0) & (obstacle_map_convolved < 5)] = [100, 100, 100]
-            ft_map[(obstacle_map_convolved >= 5)] = [0, 0, 0]
+            ft_map[(obstacle_map_convolved > 0) & (obstacle_map_convolved < kernel_size ** 2 / 2)] = [100, 100, 100]
+            ft_map[(obstacle_map_convolved >= kernel_size ** 2 / 2)] = [0, 0, 0]
             ft_map[self.unexplored == 0] = [194, 246, 198]
 
             ax1.imshow(ft_map)

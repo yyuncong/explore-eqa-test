@@ -61,7 +61,6 @@ class TSDFPlannerBase:
         # Define voxel volume parameters
         self._vol_bnds = vol_bnds
         self._voxel_size = float(voxel_size)
-        self._color_const = 256 * 256
 
         # Adjust volume bounds and ensure C-order contiguous
         self._vol_dim = (
@@ -77,11 +76,6 @@ class TSDFPlannerBase:
         self._tsdf_vol_cpu = -np.ones(self._vol_dim).astype(np.float32)
         # for computing the cumulative moving average of observations per voxel
         self._weight_vol_cpu = np.zeros(self._vol_dim).astype(np.float32)
-        self._color_vol_cpu = np.zeros(self._vol_dim).astype(np.float32)
-
-        # Semantic value
-        self._val_vol_cpu = np.zeros(self._vol_dim).astype(np.float32)
-        self._weight_val_vol_cpu = np.zeros(self._vol_dim[:2]).astype(np.float32)
 
         # Explored or not
         self._explore_vol_cpu = np.zeros(self._vol_dim).astype(np.float32)
@@ -199,19 +193,13 @@ class TSDFPlannerBase:
         """
         im_h, im_w = depth_im.shape
 
-        # Fold RGB color image into a single channel image
-        color_im = color_im.astype(np.float32)
-        color_im = np.floor(
-            color_im[..., 2] * self._color_const
-            + color_im[..., 1] * 256
-            + color_im[..., 0]
-        )
-
         # Convert voxel grid coordinates to pixel coordinates
         cam_pts = rigid_transform(self.cam_pts_pre, np.linalg.inv(cam_pose))
         pix_z = cam_pts[:, 2]
         pix = TSDFPlannerBase.cam2pix(cam_pts, cam_intr)
         pix_x, pix_y = pix[:, 0], pix[:, 1]
+
+        cur_pose_xy = cam_pose[:2, 3]
 
         # Eliminate pixels outside view frustum
         valid_pix = (pix_x >= 0) & (pix_x < im_w) & (pix_y >= 0) & (pix_y < im_h) & (pix_z > 0) & (pix_z < 5)
@@ -224,7 +212,8 @@ class TSDFPlannerBase:
         depth_val_narrow[valid_pix_narrow] = depth_im[
             pix_y[valid_pix_narrow], pix_x[valid_pix_narrow]
         ]
-        depth_val_narrow[depth_val_narrow >= explored_depth] = 0.0
+        # depth_val_narrow[depth_val_narrow >= explored_depth] = 0.0
+        depth_val_narrow[np.linalg.norm(self.cam_pts_pre[:, :2] - cur_pose_xy, axis=1) >= explored_depth] = 0.0
 
         # Integrate TSDF
         depth_diff = depth_val - pix_z
@@ -257,34 +246,6 @@ class TSDFPlannerBase:
                 valid_vox_x_narrow, valid_vox_y_narrow, valid_vox_z_narrow
             ] = 1
 
-            # Integrate color
-            old_color = self._color_vol_cpu[valid_vox_x, valid_vox_y, valid_vox_z]
-            old_b = np.floor(old_color / self._color_const)
-            old_g = np.floor((old_color - old_b * self._color_const) / 256)
-            old_r = old_color - old_b * self._color_const - old_g * 256
-            new_color = color_im[pix_y[valid_pts], pix_x[valid_pts]]
-            new_b = np.floor(new_color / self._color_const)
-            new_g = np.floor((new_color - new_b * self._color_const) / 256)
-            new_r = new_color - new_b * self._color_const - new_g * 256
-            new_b = np.minimum(
-                255.0, np.round((w_old * old_b + obs_weight * new_b) / w_new)
-            )
-            new_g = np.minimum(
-                255.0, np.round((w_old * old_g + obs_weight * new_g) / w_new)
-            )
-            new_r = np.minimum(
-                255.0, np.round((w_old * old_r + obs_weight * new_r) / w_new)
-            )
-            self._color_vol_cpu[valid_vox_x, valid_vox_y, valid_vox_z] = (
-                new_b * self._color_const + new_g * 256 + new_r
-            )
-
-        # Integrate semantics if specified
-        if sem_im is not None:
-            old_sem = self._val_vol_cpu[valid_vox_x, valid_vox_y, valid_vox_z]
-            new_sem = sem_im[pix_y[valid_pts], pix_x[valid_pts]]
-            new_sem = (w_old * old_sem + obs_weight * new_sem) / w_new
-            self._val_vol_cpu[valid_vox_x, valid_vox_y, valid_vox_z] = new_sem
         return w_new
 
     def get_volume(self):

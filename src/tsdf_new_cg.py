@@ -588,9 +588,9 @@ class TSDFPlanner(TSDFPlannerBase):
             obstacle_map_convolved = ndimage.convolve(obstacle_map.astype(float), kernel, mode="constant", cval=0.0)
 
             ft_map[unoccupied_high > 0] = [200, 200, 200]
+            ft_map[self.unexplored == 0] = [194, 246, 198]
             ft_map[(obstacle_map_convolved > 0) & (obstacle_map_convolved < kernel_size ** 2 / 2)] = [100, 100, 100]
             ft_map[(obstacle_map_convolved >= kernel_size ** 2 / 2)] = [0, 0, 0]
-            ft_map[self.unexplored == 0] = [194, 246, 198]
 
             ax1.imshow(ft_map)
             ax1.axis('off')

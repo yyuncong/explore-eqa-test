@@ -602,7 +602,10 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
 
                         # pick the max_point_choice and draw the image on plt with red surrounding
                         fig, ax = plt.subplots(1, 1, figsize=(32, 18))
-                        img_path = os.path.join(episode_frontier_dir, max_point_choice.image)
+                        if type(max_point_choice) == Frontier:
+                            img_path = os.path.join(episode_frontier_dir, max_point_choice.image)
+                        else:
+                            img_path = os.path.join(episode_snapshot_dir, max_point_choice.image)
                         img = matplotlib.image.imread(img_path)
                         # add a red rectangle to the chosen image
                         rect = patches.Rectangle(

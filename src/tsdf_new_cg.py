@@ -197,6 +197,7 @@ class TSDFPlanner(TSDFPlannerBase):
         # remove frontiers that have been changed
         filtered_frontiers = []
         kept_frontier_area = np.zeros_like(self.frontier_map, dtype=bool)
+        scale_factor = (0.1 / self._voxel_size) ** 2  # when counting the number of pixels in the frontier region, we use a default voxel length of 0.1m. Then other voxel lengths should be scaled by this factor
         for frontier in self.frontiers:
             if frontier in filtered_frontiers:
                 continue
@@ -204,8 +205,9 @@ class TSDFPlanner(TSDFPlannerBase):
             pix_diff_values = np.asarray([pix_diff(frontier.region, new_ft['region']) for new_ft in valid_ft_angles])
             frontier_appended = False
             if np.any(
-                    ((IoU_values > cfg.region_equal_threshold) & (pix_diff_values < 75)) |  # ensure that a normal step on a very large region can cause the large region to be considered as changed
-                    (pix_diff_values <= 3)
+                    ((IoU_values > cfg.region_equal_threshold) & (pix_diff_values < 75 * scale_factor)) |  # ensure that a normal step on a very large region can cause the large region to be considered as changed
+                    (pix_diff_values <= 3 * scale_factor)  |  # ensure that a very small region can be considered as unchanged
+                    np.linalg.norm(frontier.position - cur_point[:2]) > cfg.max_frontier_update_dist / self._voxel_size  # do not update frontier that is too far from the agent
             ):
                 # the frontier is not changed (almost)
                 filtered_frontiers.append(frontier)

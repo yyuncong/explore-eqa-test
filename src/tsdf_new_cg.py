@@ -8,6 +8,7 @@ import habitat_sim
 from typing import List, Tuple, Optional, Dict, Union
 from dataclasses import dataclass, field
 import supervision as sv
+from matplotlib.patches import Wedge
 
 from .geom import *
 from .habitat import pos_normal_to_habitat, pos_habitat_to_normal
@@ -602,12 +603,21 @@ class TSDFPlanner(TSDFPlannerBase):
 
             x_min_obj, y_min_obj, x_max_obj, y_max_obj = ft_map.shape[1], ft_map.shape[0], 0, 0
             for snapshot in snapshots.values():
-                # cluster_center = np.zeros(2)
-                # for obj_id in snapshot.cluster:
-                #     obj_vox = self.habitat2voxel(objects[obj_id]['bbox'].center)
-                #     cluster_center += obj_vox[:2]
-                # cluster_center /= len(snapshot.cluster)
-                
+                obs_point = snapshot.obs_point[:2]
+                obj_points = [self.habitat2voxel(objects[obj_id]['bbox'].center)[:2] for obj_id in snapshot.cluster]
+                obj_center = np.mean(obj_points, axis=0)
+                view_direction = obj_center - obs_point
+                center_angle = np.arctan2(view_direction[0], view_direction[1]) * 180 / np.pi
+                obj_angles = [np.arctan2(obj_point[0] - obs_point[0], obj_point[1] - obs_point[1]) * 180 / np.pi for obj_point in obj_points]
+                # adjust the angles into proper range
+                obj_angles = [angle if angle > 0 else angle + 360 for angle in obj_angles]  # range from 0 to 360
+                if max(obj_angles) - min(obj_angles) > 180:
+                    obj_angles = [angle - 360 if angle > 180 else angle for angle in obj_angles]  # range from -180 to 180
+
+                radius = np.linalg.norm(obj_points - obs_point, axis=1).max()
+                wedge = Wedge(center=(obs_point[1], obs_point[0]), r=radius, theta1=min(obj_angles) - 5, theta2=max(obj_angles) + 5, color=snapshot.color, alpha=0.2)
+
+
                 for obj_id in snapshot.cluster:
                     obj_vox = self.habitat2voxel(objects[obj_id]['bbox'].center)
                     ax1.scatter(obj_vox[1], obj_vox[0], color=snapshot.color, s=30)
@@ -618,6 +628,8 @@ class TSDFPlanner(TSDFPlannerBase):
                     y_min_obj = min(y_min_obj, obj_vox[0])
                     x_max_obj = max(x_max_obj, obj_vox[1])
                     y_max_obj = max(y_max_obj, obj_vox[0])
+
+                ax1.add_patch(wedge)
 
             if type(self.max_point) == SnapShot:
                 for obj_id in self.max_point.cluster:

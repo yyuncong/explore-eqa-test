@@ -599,9 +599,9 @@ class TSDFPlanner(TSDFPlannerBase):
 
             agent_orientation = self.rad2vector(angle)
 
-            ax1.scatter(cur_point[1], cur_point[0], c=(23/255,188/255,243/255), s=280, label="current")
+            ax1.scatter(cur_point[1], cur_point[0], c=(23/255,188/255,243/255), s=280 * arr_scale, label="current")
             end_x, end_y = cur_point[1] + agent_orientation[1] * 5 * arr_scale, cur_point[0] + agent_orientation[0] * 5 * arr_scale
-            ax1.plot([cur_point[1], end_x], [cur_point[0], end_y], color='black', linewidth=4)
+            ax1.plot([cur_point[1], end_x], [cur_point[0], end_y], color='black', linewidth=4 * arr_scale)
 
             x_min_obj, y_min_obj, x_max_obj, y_max_obj = ft_map.shape[1], ft_map.shape[0], 0, 0
             for snapshot in snapshots.values():

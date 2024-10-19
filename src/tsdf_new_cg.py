@@ -197,7 +197,7 @@ class TSDFPlanner(TSDFPlannerBase):
         # remove frontiers that have been changed
         filtered_frontiers = []
         kept_frontier_area = np.zeros_like(self.frontier_map, dtype=bool)
-        scale_factor = (0.1 / self._voxel_size) ** 2  # when counting the number of pixels in the frontier region, we use a default voxel length of 0.1m. Then other voxel lengths should be scaled by this factor
+        scale_factor = int((0.1 / self._voxel_size) ** 2)  # when counting the number of pixels in the frontier region, we use a default voxel length of 0.1m. Then other voxel lengths should be scaled by this factor
         for frontier in self.frontiers:
             if frontier in filtered_frontiers:
                 continue

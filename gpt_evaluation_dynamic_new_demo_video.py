@@ -37,6 +37,7 @@ from src.scene import Scene
 from src.eval_utils_snapshot_new import rgba2rgb, n_img_to_hw
 from src.eval_utils_gpt_demo_video import explore_step
 
+import matplotlib.patches as patches
 
 def resize_image(image, target_h, target_w):
     # image: np.array, h, w, c
@@ -599,6 +600,24 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         plt.savefig(os.path.join(decision_video_save_dir, f'{n_move_step:04d}_{n_decision_step:04d}.png'))
                         plt.close()
 
+                        # pick the max_point_choice and draw the image on plt with red surrounding
+                        fig, ax = plt.subplots(1, 1, figsize=(32, 18))
+                        img_path = os.path.join(episode_frontier_dir, max_point_choice.image)
+                        img = matplotlib.image.imread(img_path)
+                        # add a red rectangle to the chosen image
+                        rect = patches.Rectangle(
+                            (0, 0), img.shape[1], img.shape[0], linewidth=10, edgecolor='red', facecolor='none'
+                        )
+                        ax.add_patch(rect)
+                        ax.imshow(img)
+                        ax.axis('off')
+                        ax.set_title('Chosen')
+                        plt.tight_layout()
+                        decision_video_save_dir = os.path.join(episode_data_dir, "demo_video_decision")
+                        os.makedirs(decision_video_save_dir, exist_ok=True)
+                        plt.savefig(os.path.join(decision_video_save_dir, f'{n_move_step:04d}_{n_decision_step:04d}_chosen.png'))
+                        plt.close()
+
 
 
 
@@ -607,14 +626,14 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         os.makedirs(demo_video_path, exist_ok=True)
                         assert cfg.save_visualization
 
-                        fig, axs = plt.subplots(1, 2, figsize=(32, 18), gridspec_kw={'width_ratios': [1, 2]})
+                        fig, axs = plt.subplots(1, 2, figsize=(32, 18), gridspec_kw={'width_ratios': [2, 2]})
                         # load the map
                         map_path = os.path.join(visualization_path, f"{n_move_step}_map.png")
                         map_img = matplotlib.image.imread(map_path)
 
                         axs[0].imshow(map_img)
                         axs[0].axis('off')
-                        axs[0].set_title('Topdown Map')
+                        # axs[0].set_title('Topdown Map')
 
                         # load the egocentric view
                         ego_front_path = os.path.join(episode_egocentric_dir, f"view_{total_views - 1}_{n_move_step}.png")
@@ -622,9 +641,11 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
 
                         axs[1].imshow(ego_front)
                         axs[1].axis('off')
-                        axs[1].set_title('Egocentric View')
+                        # axs[1].set_title('Egocentric View')
 
-                        fig.suptitle(f"Question: {question}\nStep {n_move_step}", fontsize=16)
+                        # fig.suptitle(f"Question: {question}\nStep {n_move_step}", fontsize=16)
+                        fig.suptitle(f"Question: {question}", fontsize=64)
+
                         plt.tight_layout(rect=(0., 0., 1., 0.95))
                         plt.savefig(os.path.join(demo_video_path, f'{n_move_step:04d}.png'))
                         plt.close()

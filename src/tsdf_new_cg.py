@@ -574,7 +574,7 @@ class TSDFPlanner(TSDFPlannerBase):
             h, w = self._tsdf_vol_cpu.shape[:2]
             h = 8 * h / w
             arr_scale = 0.1 / self._voxel_size  # when for default voxel size=0.1m, the unit length is 1
-            paddings = int(0.5 / self._voxel_size)  # default padding distance is 1m
+            paddings = int(1 / self._voxel_size)  # default padding distance is 1m
 
             fig, ax1 = plt.subplots(figsize=(8, h))
 
@@ -602,9 +602,17 @@ class TSDFPlanner(TSDFPlannerBase):
 
             x_min_obj, y_min_obj, x_max_obj, y_max_obj = ft_map.shape[1], ft_map.shape[0], 0, 0
             for snapshot in snapshots.values():
+                # cluster_center = np.zeros(2)
+                # for obj_id in snapshot.cluster:
+                #     obj_vox = self.habitat2voxel(objects[obj_id]['bbox'].center)
+                #     cluster_center += obj_vox[:2]
+                # cluster_center /= len(snapshot.cluster)
+                
                 for obj_id in snapshot.cluster:
                     obj_vox = self.habitat2voxel(objects[obj_id]['bbox'].center)
                     ax1.scatter(obj_vox[1], obj_vox[0], color=snapshot.color, s=30)
+                    # draw dash line from the object to the cluster center
+                    # ax1.plot([obj_vox[1], cluster_center[1]], [obj_vox[0], cluster_center[0]], color=snapshot.color, linestyle='dashed', linewidth=1.5)
 
                     x_min_obj = min(x_min_obj, obj_vox[1])
                     y_min_obj = min(y_min_obj, obj_vox[0])
@@ -625,9 +633,13 @@ class TSDFPlanner(TSDFPlannerBase):
             ax1.scatter(self.target_point[1], self.target_point[0], c="r", s=100, label="target", marker='*')
 
             # crop the image to retain only objects and frontier regions
-            ft_region_coords = np.argwhere(self.frontier_map > 0)
-            y_min_ft, x_min_ft = np.min(ft_region_coords, axis=0)
-            y_max_ft, x_max_ft = np.max(ft_region_coords, axis=0)
+            y_min_ft, x_min_ft, y_max_ft, x_max_ft = ft_map.shape[0], ft_map.shape[1], 0, 0
+            for frontier in self.frontiers:
+                y_min_ft = min(y_min_ft, frontier.position[0])
+                x_min_ft = min(x_min_ft, frontier.position[1])
+                y_max_ft = max(y_max_ft, frontier.position[0])
+                x_max_ft = max(x_max_ft, frontier.position[1])
+
 
             x_min = max(0, min(x_min_obj, x_min_ft) - paddings)
             y_min = max(0, min(y_min_obj, y_min_ft) - paddings)

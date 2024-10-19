@@ -207,7 +207,7 @@ class TSDFPlanner(TSDFPlannerBase):
             if np.any(
                     ((IoU_values > cfg.region_equal_threshold) & (pix_diff_values < 75 * scale_factor)) |  # ensure that a normal step on a very large region can cause the large region to be considered as changed
                     (pix_diff_values <= 3 * scale_factor)   # ensure that a very small region can be considered as unchanged
-            ) or np.linalg.norm(frontier.position - cur_point[:2]) > cfg.max_frontier_update_dist / self._voxel_size:  # do not update frontier that is too far from the agent:
+            ):  # do not update frontier that is too far from the agent:
                 # the frontier is not changed (almost)
                 filtered_frontiers.append(frontier)
                 kept_frontier_area = kept_frontier_area | frontier.region

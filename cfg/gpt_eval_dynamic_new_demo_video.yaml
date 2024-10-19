@@ -64,8 +64,6 @@ planner:
   final_observe_distance: 0.75  # in phase 2, find a place that is this far from the target object to observe it
   surrounding_explored_radius: 0.7
 
-  max_frontier_update_dist: 5  # frontier farther than this distance will not be updated
-
   # about frontier selection
   frontier_edge_area_min: 4
   frontier_edge_area_max: 6

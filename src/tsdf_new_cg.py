@@ -621,6 +621,7 @@ class TSDFPlanner(TSDFPlannerBase):
                 radius = np.linalg.norm(obj_points - obs_point, axis=1).max()
                 wedge = Wedge(center=(obs_point[1], obs_point[0]), r=radius, theta1=min(obj_angles) - 5, theta2=max(obj_angles) + 5, color=snapshot.color, alpha=0.3)
                 
+                # Add edge to the wedge
                 edge_width = 7
                 wedge_edge = Wedge(
                     center=(obs_point[1], obs_point[0]),
@@ -656,14 +657,6 @@ class TSDFPlanner(TSDFPlannerBase):
                 ax1.scatter(frontier.position[1], frontier.position[0], color="m", s=30, alpha=1)
                 normal = frontier.orientation
                 dx, dy = normal * 5 * arr_scale
-                # arrow = FancyArrowPatch(
-                #     (frontier.position[1], frontier.position[0]),
-                #     (frontier.position[1] + dy, frontier.position[0] + dx),
-                #     mutation_scale=10 * arr_scale,
-                #     color='m',
-                #     edgecolor='red',   # Custom edge color
-                #     linewidth=3,
-                # )
                 arrow = FancyArrowPatch(
                     posA=(frontier.position[1], frontier.position[0]),
                     posB=(frontier.position[1] + dy, frontier.position[0] + dx),
@@ -671,6 +664,7 @@ class TSDFPlanner(TSDFPlannerBase):
                     color='m',
                     mutation_scale=arr_scale,
                 )
+                # Add edge to the arrow
                 arrow.set_path_effects([
                     pe.Stroke(linewidth=5, foreground='red'),  # Edge with linewidth 3 and red color
                     pe.Normal(),                               # Render the original arrow

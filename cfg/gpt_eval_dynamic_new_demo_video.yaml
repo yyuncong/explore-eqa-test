@@ -17,7 +17,7 @@ top_k_categories: 10
 yolo_model_name: yolov8x-world.pt
 class_set: scannet200
 
-min_detection: 1
+min_detection: 2
 
 # Camera, image
 camera_height: 1.5

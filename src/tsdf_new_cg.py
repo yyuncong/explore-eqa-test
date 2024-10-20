@@ -9,6 +9,8 @@ from typing import List, Tuple, Optional, Dict, Union
 from dataclasses import dataclass, field
 import supervision as sv
 from matplotlib.patches import Wedge
+from matplotlib.patches import FancyArrowPatch
+import matplotlib.patheffects as pe
 
 from .geom import *
 from .habitat import pos_normal_to_habitat, pos_habitat_to_normal
@@ -617,7 +619,19 @@ class TSDFPlanner(TSDFPlannerBase):
                     obj_angles = [angle - 360 if angle > 180 else angle for angle in obj_angles]  # range from -180 to 180
 
                 radius = np.linalg.norm(obj_points - obs_point, axis=1).max()
-                wedge = Wedge(center=(obs_point[1], obs_point[0]), r=radius, theta1=min(obj_angles) - 5, theta2=max(obj_angles) + 5, color=snapshot.color, alpha=0.2)
+                wedge = Wedge(center=(obs_point[1], obs_point[0]), r=radius, theta1=min(obj_angles) - 5, theta2=max(obj_angles) + 5, color=snapshot.color, alpha=0.3)
+                
+                edge_width = 7
+                wedge_edge = Wedge(
+                    center=(obs_point[1], obs_point[0]),
+                    r=radius,
+                    theta1=min(obj_angles) - 5,
+                    theta2=max(obj_angles) + 5,
+                    facecolor='none',  # No face color for the edge wedge
+                    edgecolor='red',
+                    linewidth=edge_width,
+                )
+                ax1.add_patch(wedge_edge)
 
 
                 for obj_id in snapshot.cluster:
@@ -642,7 +656,36 @@ class TSDFPlanner(TSDFPlannerBase):
                 ax1.scatter(frontier.position[1], frontier.position[0], color="m", s=30, alpha=1)
                 normal = frontier.orientation
                 dx, dy = normal * 5 * arr_scale
-                ax1.arrow(frontier.position[1], frontier.position[0], dy, dx, width=0.15 * arr_scale, head_width=1.5 * arr_scale, head_length=1.5 * arr_scale, color='m')
+                # arrow = FancyArrowPatch(
+                #     (frontier.position[1], frontier.position[0]),
+                #     (frontier.position[1] + dy, frontier.position[0] + dx),
+                #     mutation_scale=10 * arr_scale,
+                #     color='m',
+                #     edgecolor='red',   # Custom edge color
+                #     linewidth=3,
+                # )
+                arrow = FancyArrowPatch(
+                    posA=(frontier.position[1], frontier.position[0]),
+                    posB=(frontier.position[1] + dy, frontier.position[0] + dx),
+                    arrowstyle=f'Simple, tail_width=0.15, head_width=1.5, head_length=1.5',
+                    color='m',
+                    mutation_scale=arr_scale,
+                )
+                arrow.set_path_effects([
+                    pe.Stroke(linewidth=5, foreground='red'),  # Edge with linewidth 3 and red color
+                    pe.Normal(),                               # Render the original arrow
+                ])
+                ax1.add_patch(arrow)
+                # ax1.arrow(
+                #     frontier.position[1], 
+                #     frontier.position[0], 
+                #     dy, 
+                #     dx, 
+                #     width=0.15 * arr_scale, 
+                #     head_width=1.5 * arr_scale, 
+                #     head_length=1.5 * arr_scale, 
+                #     color='m',
+                # )
 
             ax1.scatter(self.target_point[1], self.target_point[0], c="r", s=100, label="target", marker='*')
 

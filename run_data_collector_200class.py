@@ -520,9 +520,9 @@ def main(cfg):
                         # Add path to ax5, with colormap to indicate order
                         visualization_path = os.path.join(episode_data_dir, "visualization")
                         os.makedirs(visualization_path, exist_ok=True)
-                        ax5 = fig.axes[4]
-                        ax5.plot(pts_pixs[:, 1], pts_pixs[:, 0], linewidth=5, color="black")
-                        ax5.scatter(pts_pixs[0, 1], pts_pixs[0, 0], c="white", s=50)
+                        ax1 = fig.axes[0]
+                        ax1.plot(pts_pixs[:-1, 1], pts_pixs[:-1, 0], linewidth=1, color="white")
+
                         fig.tight_layout()
                         plt.savefig(os.path.join(visualization_path, "{}_map.png".format(cnt_step)))
                         plt.close()

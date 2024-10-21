@@ -14,6 +14,7 @@ import torch
 import math
 import time
 from PIL import Image
+import textwrap
 
 np.set_printoptions(precision=3)
 import pickle
@@ -549,12 +550,20 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                                 if i < num_images:
                                     img_path = os.path.join(episode_frontier_dir, tsdf_planner.frontiers[i].image)
                                     img = matplotlib.image.imread(img_path)
-                                    ax_img.imshow(img)
-                                    if type(max_point_choice) == Frontier and max_point_choice.image == tsdf_planner.frontiers[i].image:
-                                        ax_img.set_title('Chosen')
 
-                        global_caption = f"Frontier Snapshots\nReason: {reason}" if type(max_point_choice) == Frontier else "Frontier Snapshots"
-                        fig.suptitle(global_caption, fontsize=16)
+                                    # add a red rectangle to the chosen image
+                                    if type(max_point_choice) == Frontier and max_point_choice.image == tsdf_planner.frontiers[i].image:
+                                        rect = patches.Rectangle(
+                                            (0, 0), img.shape[1], img.shape[0], linewidth=10, edgecolor='red', facecolor='none'
+                                        )
+                                        ax_img.add_patch(rect)
+
+
+                                    ax_img.imshow(img)
+
+
+                        global_caption = "Frontier Snapshots"
+                        fig.suptitle(global_caption, fontsize=32)
                         plt.tight_layout(rect=(0., 0., 1., 0.95))
                         plt.savefig(os.path.join(frontier_video_path, f'{n_decision_step}.png'))
                         plt.close()
@@ -576,12 +585,19 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                                 if i < num_images:
                                     img_path = os.path.join(episode_snapshot_dir, filtered_snapshots_ids[i])
                                     img = matplotlib.image.imread(img_path)
-                                    ax_img.imshow(img)
-                                    if type(max_point_choice) == SnapShot and max_point_choice.image == filtered_snapshots_ids[i]:
-                                        ax_img.set_title('Chosen')
 
-                        global_caption = f"Filtered Snapshots\nReason: {reason}" if type(max_point_choice) == SnapShot else "Filtered Snapshots"
-                        fig.suptitle(global_caption, fontsize=16)
+                                    # add a red rectangle to the chosen image
+                                    if type(max_point_choice) == SnapShot and max_point_choice.image == filtered_snapshots_ids[i]:
+                                        rect = patches.Rectangle(
+                                            (0, 0), img.shape[1], img.shape[0], linewidth=10, edgecolor='red', facecolor='none'
+                                        )
+                                        ax_img.add_patch(rect)
+
+                                    ax_img.imshow(img)
+
+
+                        global_caption = "Filtered Memory Snapshots"
+                        fig.suptitle(global_caption, fontsize=32)
                         plt.tight_layout(rect=(0., 0., 1., 0.95))
                         plt.savefig(os.path.join(snapshot_video_path, f'{n_decision_step}.png'))
                         plt.close()
@@ -600,43 +616,19 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         plt.savefig(os.path.join(decision_video_save_dir, f'{n_move_step:04d}_{n_decision_step:04d}.png'))
                         plt.close()
 
-                        # pick the max_point_choice and draw the image on plt with red surrounding
-                        fig, ax = plt.subplots(1, 1, figsize=(32, 18))
-                        if type(max_point_choice) == Frontier:
-                            img_path = os.path.join(episode_frontier_dir, max_point_choice.image)
-                        else:
-                            img_path = os.path.join(episode_snapshot_dir, max_point_choice.image)
-                        img = matplotlib.image.imread(img_path)
-                        # add a red rectangle to the chosen image
-                        rect = patches.Rectangle(
-                            (0, 0), img.shape[1], img.shape[0], linewidth=10, edgecolor='red', facecolor='none'
-                        )
-                        ax.add_patch(rect)
-                        ax.imshow(img)
-                        ax.axis('off')
-                        ax.set_title('Chosen')
-                        plt.tight_layout()
-                        decision_video_save_dir = os.path.join(episode_data_dir, "demo_video_decision")
-                        os.makedirs(decision_video_save_dir, exist_ok=True)
-                        plt.savefig(os.path.join(decision_video_save_dir, f'{n_move_step:04d}_{n_decision_step:04d}_chosen.png'))
-                        plt.close()
-
-
-
-
                     if cfg.save_visualization and cfg.save_frontier_video:
-                        demo_video_path = os.path.join(episode_data_dir, "demo_video_egocentric")
-                        os.makedirs(demo_video_path, exist_ok=True)
+                        demo_full_path = os.path.join(episode_data_dir, "demo_video_full")
+                        os.makedirs(demo_full_path, exist_ok=True)
                         assert cfg.save_visualization
 
-                        fig, axs = plt.subplots(1, 2, figsize=(32, 18), gridspec_kw={'width_ratios': [2, 2]})
+                        fig, axs = plt.subplots(1, 4, figsize=(32, 10), gridspec_kw={'width_ratios': [1, 0.5, 0.5, 2]})
+
                         # load the map
                         map_path = os.path.join(visualization_path, f"{n_move_step}_map.png")
                         map_img = matplotlib.image.imread(map_path)
 
                         axs[0].imshow(map_img)
                         axs[0].axis('off')
-                        # axs[0].set_title('Topdown Map')
 
                         # load the egocentric view
                         ego_front_path = os.path.join(episode_egocentric_dir, f"view_{total_views - 1}_{n_move_step}.png")
@@ -644,13 +636,39 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
 
                         axs[1].imshow(ego_front)
                         axs[1].axis('off')
-                        # axs[1].set_title('Egocentric View')
 
-                        # fig.suptitle(f"Question: {question}\nStep {n_move_step}", fontsize=16)
-                        fig.suptitle(f"Question: {question}", fontsize=64)
+                        # Wrap text for egocentric view caption
+                        egocentric_caption = "Egocentric View"
+                        wrapped_caption_ego = "\n".join(textwrap.wrap(egocentric_caption, width=20))
+                        axs[1].set_title(wrapped_caption_ego, fontsize=18, pad=10)  # pad to adjust title position
+
+                        # load decision
+                        if type(max_point_choice) == Frontier:
+                            decision_path = os.path.join(episode_frontier_dir, max_point_choice.image)
+                        else:
+                            decision_path = os.path.join(episode_snapshot_dir, max_point_choice.image)
+                        decision_img = matplotlib.image.imread(decision_path)
+
+                        axs[2].imshow(decision_img)
+                        axs[2].axis('off')
+                        if type(max_point_choice) == Frontier:
+                            decision_caption = "Chosen Frontier Snapshot\n" + "\n".join(textwrap.wrap(f"Reason: {reason}", width=30))
+                        else:
+                            decision_caption = "Chosen Memory Snapshot\n" + "\n".join(textwrap.wrap(f"Reason: {reason}", width=30))
+                        axs[2].set_title(decision_caption, fontsize=18, pad=10)  # Adjust the pad as needed
+
+                        # load all frontiers and snapshots
+                        full_choices_path = os.path.join(decision_video_save_dir, f'{n_move_step:04d}_{n_decision_step:04d}.png')
+                        full_choices_img = matplotlib.image.imread(full_choices_path)
+
+                        axs[3].imshow(full_choices_img)
+                        axs[3].axis('off')
+
+                        fig.suptitle(f"Question: {question}", fontsize=48)
 
                         plt.tight_layout(rect=(0., 0., 1., 0.95))
-                        plt.savefig(os.path.join(demo_video_path, f'{n_move_step:04d}.png'))
+
+                        plt.savefig(os.path.join(demo_full_path, f'{n_move_step:04d}.png'))
                         plt.close()
 
 

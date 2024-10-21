@@ -249,14 +249,22 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     rgb_egocentric_views = []
                     all_added_obj_ids = []
 
-                    if curr_move_step % n_step_per_decision == 0:
-                        # all update the map, query gpt for the next decision
-                        n_decision_step += 1
-                        curr_decision_step += 1
-                        make_decision = True
-                    else:
-                        # otherwise, just move
-                        make_decision = False
+                    if cfg.decision_mode == 'step_wise':
+                        if curr_move_step % n_step_per_decision == 0:
+                            # all update the map, query gpt for the next decision
+                            n_decision_step += 1
+                            curr_decision_step += 1
+                            make_decision = True
+                        else:
+                            # otherwise, just move
+                            make_decision = False
+                    elif cfg.decision_mode == 'after_arrival':
+                        if curr_decision_step == -1 or target_arrived:
+                            n_decision_step += 1
+                            curr_decision_step += 1
+                            make_decision = True
+                        else:
+                            make_decision = False
 
                     for view_idx, ang in enumerate(all_angles):
                         obs, cam_pose = scene.get_observation(pts, ang)

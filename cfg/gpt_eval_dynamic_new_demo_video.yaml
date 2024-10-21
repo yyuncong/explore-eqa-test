@@ -32,6 +32,7 @@ margin_h_ratio: 0.6
 save_visualization: true
 
 directly_stop_after_answering: true  # if true, the agent won't move if it can directly answer the question from an existing snapshot
+decision_mode: 'step_wise'  # 'step_wise' or 'after_arrival'
 
 # for prompting gpt-4o
 prompt_h: 360

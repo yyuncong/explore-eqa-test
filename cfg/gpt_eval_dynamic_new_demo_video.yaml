@@ -30,7 +30,8 @@ margin_w_ratio: 0.25
 margin_h_ratio: 0.6
 
 save_visualization: true
-save_frontier_video: true
+
+directly_stop_after_answering: true  # if true, the agent won't move if it can directly answer the question from an existing snapshot
 
 # for prompting gpt-4o
 prompt_h: 360
@@ -56,9 +57,9 @@ planner:
   unexplored_T: 2.0
   unoccupied_T: 2.0
   eps: 1
-  n_step_per_decision: 10
-  max_dist_from_cur_phase_1: 0.1  # when the target object is not found, explore the frontiers with this step length
-  max_dist_from_cur_phase_2: 0.1  # when the target object is found, go to the target object with this step length
+  n_step_per_decision: 5
+  max_dist_from_cur_phase_1: 0.2  # when the target object is not found, explore the frontiers with this step length
+  max_dist_from_cur_phase_2: 0.2  # when the target object is found, go to the target object with this step length
   max_unexplored_check_frontier: 3
   max_unoccupied_check_frontier: 1
   final_observe_distance: 0.75  # in phase 2, find a place that is this far from the target object to observe it

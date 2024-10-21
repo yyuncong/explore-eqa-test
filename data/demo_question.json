@@ -1,0 +1,82 @@
+[
+  {
+    "question": "Where is the two blue sofa chairs?",
+    "answer": "...",
+    "category": "object localization",
+    "question_id": "00824-1",
+    "episode_history": "00824-Dd4bFSTQ8gi",
+    "position": [
+        6.892691135406494,
+        0.06882420182228088,
+        1.4872137308120728
+    ],
+    "rotation": [
+        0.37141478061676025,
+        0.0,
+        0.9284670948982239,
+        0.0
+    ],
+    "object_id": null,
+    "class": null
+  },
+  {
+    "question": "What is hanging from the oven handle?",
+    "answer": "A towel",
+    "category": "spatial understanding",
+    "question_id": "00824-2",
+    "episode_history": "00824-Dd4bFSTQ8gi",
+    "position": [
+        6.892691135406494,
+        0.06882420182228088,
+        1.4872137308120728
+    ],
+    "rotation": [
+        0.37141478061676025,
+        0.0,
+        0.9284670948982239,
+        0.0
+    ],
+    "object_id": null,
+    "class": null
+  },
+  {
+    "question": "Is the light above the sink turned on?",
+    "answer": "Yes",
+    "category": "object state recognition",
+    "question_id": "00824-3",
+    "episode_history": "00824-Dd4bFSTQ8gi",
+    "position": [
+        6.892691135406494,
+        0.06882420182228088,
+        1.4872137308120728
+    ],
+    "rotation": [
+        0.37141478061676025,
+        0.0,
+        0.9284670948982239,
+        0.0
+    ],
+    "object_id": null,
+    "class": null
+  },
+  {
+    "question": "Where can I warm up?",
+    "answer": "Next to the fireplace",
+    "category": "functional reasoning",
+    "question_id": "00824-4",
+    "episode_history": "00824-Dd4bFSTQ8gi",
+    "position": [
+        6.892691135406494,
+        0.06882420182228088,
+        1.4872137308120728
+    ],
+    "rotation": [
+        0.37141478061676025,
+        0.0,
+        0.9284670948982239,
+        0.0
+    ],
+    "object_id": null,
+    "class": null
+  }
+]

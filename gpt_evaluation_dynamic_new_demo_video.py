@@ -289,10 +289,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                                 resized_rgb = resize_image(rgb, cfg.prompt_h, cfg.prompt_w)
                                 all_snapshots[obs_file_name] = resized_rgb
                                 rgb_egocentric_views.append(resized_rgb)
-                                if cfg.save_visualization or cfg.save_frontier_video:
-                                    plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), annotated_rgb)
-                                else:
-                                    plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), rgb)
+                                plt.imsave(os.path.join(episode_snapshot_dir, obs_file_name), rgb)
                                 all_added_obj_ids += added_obj_ids
 
                             # clean up or merge redundant objects periodically
@@ -350,7 +347,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                                 obs = scene.get_frontier_observation(pts, view_frontier_direction)
                                 frontier_obs = obs["color_sensor"]
 
-                                if cfg.save_frontier_video or cfg.save_visualization:
+                                if cfg.save_visualization:
                                     plt.imsave(
                                         os.path.join(episode_frontier_dir, f"{n_decision_step}_{i}.png"),
                                         frontier_obs,
@@ -415,7 +412,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                             break
 
                         if target_type == "snapshot":
-                            # TODO: the problem needed to be fixed here
                             if snapshot_id_mapping is not None:
                                 if int(target_index) < 0 or int(target_index) >= len(snapshot_id_mapping):
                                     logging.info(f"target index can not match real objects: {target_index}, failed!")
@@ -533,90 +529,89 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         plt.savefig(os.path.join(visualization_path, "{}_map.png".format(n_move_step)))
                         plt.close()
 
-                    if make_decision and cfg.save_frontier_video:
-                        frontier_video_path = os.path.join(episode_data_dir, "frontier_video")
-                        os.makedirs(frontier_video_path, exist_ok=True)
-                        num_images = len(tsdf_planner.frontiers)
-                        side_length_h, side_length_w = n_img_to_hw[num_images]
-                        fig, axs = plt.subplots(side_length_h, side_length_w, figsize=(30, 10))
-                        for h_idx in range(side_length_h):
-                            for w_idx in range(side_length_w):
-                                if side_length_h == 1:
-                                    ax_img = axs[w_idx]
-                                else:
-                                    ax_img = axs[h_idx, w_idx]
-                                ax_img.axis('off')
-                                i = h_idx * side_length_w + w_idx
-                                if i < num_images:
-                                    img_path = os.path.join(episode_frontier_dir, tsdf_planner.frontiers[i].image)
-                                    img = matplotlib.image.imread(img_path)
+                        # save additional visualization if the current step is a decision step
+                        if make_decision:
+                            frontier_video_path = os.path.join(episode_data_dir, "frontier_video")
+                            os.makedirs(frontier_video_path, exist_ok=True)
+                            num_images = len(tsdf_planner.frontiers)
+                            side_length_h, side_length_w = n_img_to_hw[num_images]
+                            fig, axs = plt.subplots(side_length_h, side_length_w, figsize=(30, 10))
+                            for h_idx in range(side_length_h):
+                                for w_idx in range(side_length_w):
+                                    if side_length_h == 1:
+                                        ax_img = axs[w_idx]
+                                    else:
+                                        ax_img = axs[h_idx, w_idx]
+                                    ax_img.axis('off')
+                                    i = h_idx * side_length_w + w_idx
+                                    if i < num_images:
+                                        img_path = os.path.join(episode_frontier_dir, tsdf_planner.frontiers[i].image)
+                                        img = matplotlib.image.imread(img_path)
 
-                                    # add a red rectangle to the chosen image
-                                    if type(max_point_choice) == Frontier and max_point_choice.image == tsdf_planner.frontiers[i].image:
-                                        rect = patches.Rectangle(
-                                            (0, 0), img.shape[1], img.shape[0], linewidth=10, edgecolor='red', facecolor='none'
-                                        )
-                                        ax_img.add_patch(rect)
-
-
-                                    ax_img.imshow(img)
+                                        # add a red rectangle to the chosen image
+                                        if type(max_point_choice) == Frontier and max_point_choice.image == tsdf_planner.frontiers[i].image:
+                                            rect = patches.Rectangle(
+                                                (0, 0), img.shape[1], img.shape[0], linewidth=10, edgecolor='red', facecolor='none'
+                                            )
+                                            ax_img.add_patch(rect)
 
 
-                        global_caption = "Frontier Snapshots"
-                        fig.suptitle(global_caption, fontsize=32)
-                        plt.tight_layout(rect=(0., 0., 1., 0.95))
-                        plt.savefig(os.path.join(frontier_video_path, f'{n_decision_step}.png'))
-                        plt.close()
+                                        ax_img.imshow(img)
 
-                        # save filtered snapshots
-                        snapshot_video_path = os.path.join(episode_data_dir, "snapshot_video")
-                        os.makedirs(snapshot_video_path, exist_ok=True)
-                        num_images = len(filtered_snapshots_ids)
-                        side_length_h, side_length_w = n_img_to_hw[num_images]
-                        fig, axs = plt.subplots(side_length_h, side_length_w, figsize=(30, 10))
-                        for h_idx in range(side_length_h):
-                            for w_idx in range(side_length_w):
-                                if side_length_h == 1:
-                                    ax_img = axs[w_idx]
-                                else:
-                                    ax_img = axs[h_idx, w_idx]
-                                ax_img.axis('off')
-                                i = h_idx * side_length_w + w_idx
-                                if i < num_images:
-                                    img_path = os.path.join(episode_snapshot_dir, filtered_snapshots_ids[i])
-                                    img = matplotlib.image.imread(img_path)
+                            global_caption = "Frontier Snapshots"
+                            fig.suptitle(global_caption, fontsize=32)
+                            plt.tight_layout(rect=(0., 0., 1., 0.95))
+                            plt.savefig(os.path.join(frontier_video_path, f'{n_decision_step}.png'))
+                            plt.close()
 
-                                    # add a red rectangle to the chosen image
-                                    if type(max_point_choice) == SnapShot and max_point_choice.image == filtered_snapshots_ids[i]:
-                                        rect = patches.Rectangle(
-                                            (0, 0), img.shape[1], img.shape[0], linewidth=10, edgecolor='red', facecolor='none'
-                                        )
-                                        ax_img.add_patch(rect)
+                            # save filtered snapshots
+                            snapshot_video_path = os.path.join(episode_data_dir, "snapshot_video")
+                            os.makedirs(snapshot_video_path, exist_ok=True)
+                            num_images = len(filtered_snapshots_ids)
+                            side_length_h, side_length_w = n_img_to_hw[num_images]
+                            fig, axs = plt.subplots(side_length_h, side_length_w, figsize=(30, 10))
+                            for h_idx in range(side_length_h):
+                                for w_idx in range(side_length_w):
+                                    if side_length_h == 1:
+                                        ax_img = axs[w_idx]
+                                    else:
+                                        ax_img = axs[h_idx, w_idx]
+                                    ax_img.axis('off')
+                                    i = h_idx * side_length_w + w_idx
+                                    if i < num_images:
+                                        img_path = os.path.join(episode_snapshot_dir, filtered_snapshots_ids[i])
+                                        img = matplotlib.image.imread(img_path)
 
-                                    ax_img.imshow(img)
+                                        # add a red rectangle to the chosen image
+                                        if type(max_point_choice) == SnapShot and max_point_choice.image == filtered_snapshots_ids[i]:
+                                            rect = patches.Rectangle(
+                                                (0, 0), img.shape[1], img.shape[0], linewidth=10, edgecolor='red', facecolor='none'
+                                            )
+                                            ax_img.add_patch(rect)
 
+                                        ax_img.imshow(img)
 
-                        global_caption = "Filtered Memory Snapshots"
-                        fig.suptitle(global_caption, fontsize=32)
-                        plt.tight_layout(rect=(0., 0., 1., 0.95))
-                        plt.savefig(os.path.join(snapshot_video_path, f'{n_decision_step}.png'))
-                        plt.close()
+                            global_caption = "Filtered Memory Snapshots"
+                            fig.suptitle(global_caption, fontsize=32)
+                            plt.tight_layout(rect=(0., 0., 1., 0.95))
+                            plt.savefig(os.path.join(snapshot_video_path, f'{n_decision_step}.png'))
+                            plt.close()
 
-                        # merge the two images
-                        fix, axs = plt.subplots(2, 1, figsize=(32, 18))
-                        frontier_img = matplotlib.image.imread(os.path.join(frontier_video_path, f'{n_decision_step}.png'))
-                        snapshot_img = matplotlib.image.imread(os.path.join(snapshot_video_path, f'{n_decision_step}.png'))
-                        axs[0].imshow(frontier_img)
-                        axs[0].axis('off')
-                        axs[1].imshow(snapshot_img)
-                        axs[1].axis('off')
-                        plt.tight_layout()
-                        decision_video_save_dir = os.path.join(episode_data_dir, "demo_video_decision")
-                        os.makedirs(decision_video_save_dir, exist_ok=True)
-                        plt.savefig(os.path.join(decision_video_save_dir, f'{n_decision_step:04d}.png'))
-                        plt.close()
+                            # merge the two images
+                            fix, axs = plt.subplots(2, 1, figsize=(32, 18))
+                            frontier_img = matplotlib.image.imread(os.path.join(frontier_video_path, f'{n_decision_step}.png'))
+                            snapshot_img = matplotlib.image.imread(os.path.join(snapshot_video_path, f'{n_decision_step}.png'))
+                            axs[0].imshow(frontier_img)
+                            axs[0].axis('off')
+                            axs[1].imshow(snapshot_img)
+                            axs[1].axis('off')
+                            plt.tight_layout()
+                            decision_video_save_dir = os.path.join(episode_data_dir, "demo_video_decision")
+                            os.makedirs(decision_video_save_dir, exist_ok=True)
+                            plt.savefig(os.path.join(decision_video_save_dir, f'{n_decision_step:04d}.png'))
+                            plt.close()
 
-                    if cfg.save_visualization and cfg.save_frontier_video:
+                        # save the full demo video that stitches all the images together
                         demo_full_path = os.path.join(episode_data_dir, "demo_video_full")
                         os.makedirs(demo_full_path, exist_ok=True)
                         assert cfg.save_visualization
@@ -696,6 +691,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     os.system(f"rm {episode_data_dir}/visualization/*.png")
                     os.system(f"rm {episode_data_dir}/frontier_video/*.png")
                     os.system(f"rm {episode_data_dir}/snapshot_video/*.png")
+                    os.system(f"rm {episode_data_dir}/demo_video_decision/*.png")
 
                     dist_to_target = np.linalg.norm(pts_pix[:2] - tsdf_planner.target_point[:2]) * cfg.tsdf_grid_size
                     logging.info(f"Distance to navigation target: {dist_to_target:.3f}")
@@ -706,6 +702,11 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         if target_arrived:
                             target_found = True
                             logging.info(f"Question id {question_id} finished after arriving at target!")
+                            break
+                        if cfg.directly_stop_after_answering:
+                            # directly stop after answering the question, and do not go nearer to the target snapshot
+                            target_found = True
+                            logging.info(f"Question id {question_id} finished after answering the question!")
                             break
 
                 if target_found:

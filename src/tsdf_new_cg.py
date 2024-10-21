@@ -662,6 +662,10 @@ class TSDFPlanner(TSDFPlannerBase):
 
                 ax1.add_patch(wedge)
 
+                for obj_id in snapshot.cluster:
+                    obj_vox = self.habitat2voxel(objects[obj_id]['bbox'].center)
+                    ax1.scatter(obj_vox[1], obj_vox[0], color=snapshot.color, s=2 * size_scale)
+
             if type(self.max_point) == SnapShot:
                 for obj_id in self.max_point.cluster:
                     obj_vox = self.habitat2voxel(objects[obj_id]['bbox'].center)

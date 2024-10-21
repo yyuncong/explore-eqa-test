@@ -4,7 +4,7 @@ exp_name: gpt_aeqa_dynamic_default_demo_video_test_vis
 output_parent_dir: /work/pi_chuangg_umass_edu/yuncong/results
 scene_dataset_config_path: "data/hm3d_annotated_basis.scene_dataset_config.json"
 scene_data_path: /work/pi_chuangg_umass_edu/yuncong/data/scene_datasets/hm3d/
-questions_list_path: 'data/generated_questions-eval.json'
+questions_list_path: 'data/demo_question.json'
 
 concept_graph_config_path: "conceptgraph/hydra_configs"
 concept_graph_config_name: "rerun_realtime_mapping"

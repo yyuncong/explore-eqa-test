@@ -601,8 +601,8 @@ class TSDFPlanner(TSDFPlannerBase):
 
             agent_orientation = self.rad2vector(angle)
 
-            ax1.scatter(cur_point[1], cur_point[0], c=(23/255,188/255,243/255), s=280 * arr_scale, label="current")
-            end_x, end_y = cur_point[1] + agent_orientation[1] * 3 * arr_scale, cur_point[0] + agent_orientation[0] * 3 * arr_scale
+            ax1.scatter(cur_point[1], cur_point[0], c=(23/255,188/255,243/255), s=320 * arr_scale, label="current")
+            end_x, end_y = cur_point[1] + agent_orientation[1] * 2 * arr_scale, cur_point[0] + agent_orientation[0] * 2 * arr_scale
             ax1.plot([cur_point[1], end_x], [cur_point[0], end_y], color='black', linewidth=2 * arr_scale)
 
             x_min_obj, y_min_obj, x_max_obj, y_max_obj = ft_map.shape[1], ft_map.shape[0], 0, 0
@@ -653,13 +653,14 @@ class TSDFPlanner(TSDFPlannerBase):
                     ax1.scatter(obj_vox[1], obj_vox[0], color="r", s=30)
 
             for frontier in self.frontiers:
-                ax1.scatter(frontier.position[1], frontier.position[0], color="m", s=30, alpha=1)
+                ax1.scatter(frontier.position[1], frontier.position[0], color="m", s=30 * arr_scale, alpha=1)
                 normal = frontier.orientation
-                dx, dy = normal * 5 * arr_scale
+                dx, dy = normal * 6 * arr_scale
                 arrow = FancyArrowPatch(
                     posA=(frontier.position[1], frontier.position[0]),
                     posB=(frontier.position[1] + dy, frontier.position[0] + dx),
-                    arrowstyle=f'Simple, width={0.15 * arr_scale}, head_width={1.5 * arr_scale}, head_length={1.5 * arr_scale}',
+                    arrowstyle=f'Simple, tail_width={0.5 * arr_scale}, head_width={1.5 * arr_scale}, head_length={1.5 * arr_scale}',
+                    linewidth=0.15 * arr_scale,
                     color='m',
                     mutation_scale=arr_scale,
                 )

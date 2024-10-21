@@ -664,7 +664,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         axs[3].imshow(full_choices_img)
                         axs[3].axis('off')
 
-                        fig.suptitle(f"Question: {question}", fontsize=48)
+                        fig.suptitle(f"Question: {question}", fontsize=40)
 
                         plt.tight_layout(rect=(0., 0., 1., 0.95))
 

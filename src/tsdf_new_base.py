@@ -200,6 +200,7 @@ class TSDFPlannerBase:
           margin_w (int): The margin from the sides of the image to exclude when integrating explored
         """
         im_h, im_w = depth_im.shape
+        max_dist = 3.0
 
         # Convert voxel grid coordinates to pixel coordinates
         cam_pts = rigid_transform(self.cam_pts_pre, np.linalg.inv(cam_pose))
@@ -210,7 +211,7 @@ class TSDFPlannerBase:
         cur_pose_xy = cam_pose[:2, 3]
 
         # Eliminate pixels outside view frustum
-        valid_pix = (pix_x >= 0) & (pix_x < im_w) & (pix_y >= 0) & (pix_y < im_h) & (pix_z > 0) & (pix_z < 5)
+        valid_pix = (pix_x >= 0) & (pix_x < im_w) & (pix_y >= 0) & (pix_y < im_h) & (pix_z > 0) & (pix_z < max_dist)
         depth_val = np.zeros(pix_x.shape)
         depth_val[valid_pix] = depth_im[pix_y[valid_pix], pix_x[valid_pix]]
 
@@ -234,7 +235,7 @@ class TSDFPlannerBase:
 
         if self.save_visualization:
             # Mark obstacle
-            obstacle_pts = (depth_diff < 0) & (depth_diff >= -0.2) & (pix_x >= 0) & (pix_x < im_w) & (pix_y >= 0) & (pix_y < im_h) & (pix_z > 0) & (pix_z < 5)
+            obstacle_pts = (depth_diff < 0) & (depth_diff >= -0.2) & (pix_x >= 0) & (pix_x < im_w) & (pix_y >= 0) & (pix_y < im_h) & (pix_z > 0) & (pix_z < max_dist)
             obstacle_vox_x = self.vox_coords[obstacle_pts, 0]
             obstacle_vox_y = self.vox_coords[obstacle_pts, 1]
             obstacle_vox_z = self.vox_coords[obstacle_pts, 2]

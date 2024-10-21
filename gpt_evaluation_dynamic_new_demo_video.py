@@ -613,7 +613,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         plt.tight_layout()
                         decision_video_save_dir = os.path.join(episode_data_dir, "demo_video_decision")
                         os.makedirs(decision_video_save_dir, exist_ok=True)
-                        plt.savefig(os.path.join(decision_video_save_dir, f'{n_move_step:04d}_{n_decision_step:04d}.png'))
+                        plt.savefig(os.path.join(decision_video_save_dir, f'{n_decision_step:04d}.png'))
                         plt.close()
 
                     if cfg.save_visualization and cfg.save_frontier_video:
@@ -658,7 +658,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                         axs[2].set_title(decision_caption, fontsize=18, pad=10)  # Adjust the pad as needed
 
                         # load all frontiers and snapshots
-                        full_choices_path = os.path.join(decision_video_save_dir, f'{n_move_step:04d}_{n_decision_step:04d}.png')
+                        full_choices_path = os.path.join(decision_video_save_dir, f"{n_decision_step:04d}.png")
                         full_choices_img = matplotlib.image.imread(full_choices_path)
 
                         axs[3].imshow(full_choices_img)

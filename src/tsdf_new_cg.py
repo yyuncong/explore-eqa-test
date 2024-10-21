@@ -659,7 +659,7 @@ class TSDFPlanner(TSDFPlannerBase):
                 arrow = FancyArrowPatch(
                     posA=(frontier.position[1], frontier.position[0]),
                     posB=(frontier.position[1] + dy, frontier.position[0] + dx),
-                    arrowstyle=f'Simple, tail_width=0.15, head_width=1.5, head_length=1.5',
+                    arrowstyle=f'Simple, tail_width={0.15 * arr_scale}, head_width={1.5 * arr_scale}, head_length={1.5 * arr_scale}',
                     color='m',
                     mutation_scale=arr_scale,
                 )
@@ -683,7 +683,7 @@ class TSDFPlanner(TSDFPlannerBase):
                 #     color='m',
                 # )
 
-            ax1.scatter(self.target_point[1], self.target_point[0], c="r", s=100, label="target", marker='*')
+            ax1.scatter(self.target_point[1], self.target_point[0], c="r", s=80 * arr_scale, label="target", marker='*')
 
             # crop the image to retain only objects and frontier regions
             y_min_ft, x_min_ft, y_max_ft, x_max_ft = ft_map.shape[0], ft_map.shape[1], 0, 0

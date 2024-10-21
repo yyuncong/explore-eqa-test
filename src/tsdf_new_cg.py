@@ -354,7 +354,7 @@ class TSDFPlanner(TSDFPlannerBase):
                 # Get weight - unexplored, unoccupied, and value
                 weight = np.exp(unexplored_rate / cfg.unexplored_T)  # [0-1] before T
                 weight *= np.exp(unoccupied_rate / cfg.unoccupied_T)  # [0-1] before T
-                
+
                 # add weight for path points
                 weight *= np.exp(- closest_dist) * 3
                 weight *= np.exp(cosine_dist)
@@ -577,7 +577,7 @@ class TSDFPlanner(TSDFPlannerBase):
         if save_visualization:
             h, w = self._tsdf_vol_cpu.shape[:2]
             h = 8 * h / w
-            arr_scale = 0.1 / self._voxel_size  # when for default voxel size=0.1m, the unit length is 1
+            vox_scale = 0.1 / self._voxel_size  # when for default voxel size=0.1m, the unit length is 1
             paddings = int(1 / self._voxel_size)  # default padding distance is 1m
 
             fig, ax1 = plt.subplots(figsize=(8, h))
@@ -599,13 +599,38 @@ class TSDFPlanner(TSDFPlannerBase):
             ax1.imshow(ft_map)
             ax1.axis('off')
 
+            # first, get the crop size, so that we can determine the scale factor for the cropping
+            x_min_obj, y_min_obj, x_max_obj, y_max_obj = ft_map.shape[1], ft_map.shape[0], 0, 0
+            for snapshot in snapshots.values():
+                obj_points = [self.habitat2voxel(objects[obj_id]['bbox'].center)[:2] for obj_id in snapshot.cluster]
+                for obj_point in obj_points:
+                    x_min_obj = min(x_min_obj, obj_point[1])
+                    y_min_obj = min(y_min_obj, obj_point[0])
+                    x_max_obj = max(x_max_obj, obj_point[1])
+                    y_max_obj = max(y_max_obj, obj_point[0])
+            y_min_ft, x_min_ft, y_max_ft, x_max_ft = ft_map.shape[0], ft_map.shape[1], 0, 0
+            for frontier in self.frontiers:
+                y_min_ft = min(y_min_ft, frontier.position[0])
+                x_min_ft = min(x_min_ft, frontier.position[1])
+                y_max_ft = max(y_max_ft, frontier.position[0])
+                x_max_ft = max(x_max_ft, frontier.position[1])
+            x_min = max(0, min(x_min_obj, x_min_ft) - paddings)
+            y_min = max(0, min(y_min_obj, y_min_ft) - paddings)
+            x_max = min(max(x_max_obj, x_max_ft) + paddings, ft_map.shape[1])
+            y_max = min(max(y_max_obj, y_max_ft) + paddings, ft_map.shape[0])
+
+            x_scale_ratio = (x_max - x_min) / ft_map.shape[1]
+            y_scale_ratio = (y_max - y_min) / ft_map.shape[0]
+            len_scale = vox_scale / ((x_scale_ratio + y_scale_ratio) / 2)
+            size_scale = len_scale ** 2
+
+
             agent_orientation = self.rad2vector(angle)
 
-            ax1.scatter(cur_point[1], cur_point[0], c=(23/255,188/255,243/255), s=320 * arr_scale, label="current")
-            end_x, end_y = cur_point[1] + agent_orientation[1] * 2 * arr_scale, cur_point[0] + agent_orientation[0] * 2 * arr_scale
-            ax1.plot([cur_point[1], end_x], [cur_point[0], end_y], color='black', linewidth=2 * arr_scale)
+            ax1.scatter(cur_point[1], cur_point[0], c=(23/255,188/255,243/255), s=20 * size_scale, label="current")
+            end_x, end_y = cur_point[1] + agent_orientation[1] * 3 * vox_scale, cur_point[0] + agent_orientation[0] * 3 * vox_scale
+            ax1.plot([cur_point[1], end_x], [cur_point[0], end_y], color='black', linewidth=1.5 * len_scale)
 
-            x_min_obj, y_min_obj, x_max_obj, y_max_obj = ft_map.shape[1], ft_map.shape[0], 0, 0
             for key, snapshot in snapshots.items():
                 obs_point = snapshot.obs_point[:2]
                 obj_points = [self.habitat2voxel(objects[obj_id]['bbox'].center)[:2] for obj_id in snapshot.cluster]
@@ -620,7 +645,7 @@ class TSDFPlanner(TSDFPlannerBase):
 
                 radius = np.linalg.norm(obj_points - obs_point, axis=1).max()
                 wedge = Wedge(center=(obs_point[1], obs_point[0]), r=radius, theta1=min(obj_angles) - 5, theta2=max(obj_angles) + 5, color=snapshot.color, alpha=0.3)
-                
+
                 # Add edge to the wedge
                 if type(self.max_point) == SnapShot and snapshot.image == self.max_point.image:
                     edge_width = 7
@@ -635,34 +660,24 @@ class TSDFPlanner(TSDFPlannerBase):
                     )
                     ax1.add_patch(wedge_edge)
 
-
-                for obj_id in snapshot.cluster:
-                    obj_vox = self.habitat2voxel(objects[obj_id]['bbox'].center)
-                    ax1.scatter(obj_vox[1], obj_vox[0], color=snapshot.color, s=30)
-
-                    x_min_obj = min(x_min_obj, obj_vox[1])
-                    y_min_obj = min(y_min_obj, obj_vox[0])
-                    x_max_obj = max(x_max_obj, obj_vox[1])
-                    y_max_obj = max(y_max_obj, obj_vox[0])
-
                 ax1.add_patch(wedge)
 
             if type(self.max_point) == SnapShot:
                 for obj_id in self.max_point.cluster:
                     obj_vox = self.habitat2voxel(objects[obj_id]['bbox'].center)
-                    ax1.scatter(obj_vox[1], obj_vox[0], color="r", s=30)
+                    ax1.scatter(obj_vox[1], obj_vox[0], color="r", s=2 * size_scale)
 
             for frontier in self.frontiers:
-                ax1.scatter(frontier.position[1], frontier.position[0], color="m", s=30 * arr_scale, alpha=1)
+                ax1.scatter(frontier.position[1], frontier.position[0], color="m", s=2 * size_scale, alpha=1)
                 normal = frontier.orientation
-                dx, dy = normal * 6 * arr_scale
+                dx, dy = normal * 8 * vox_scale
                 arrow = FancyArrowPatch(
                     posA=(frontier.position[1], frontier.position[0]),
                     posB=(frontier.position[1] + dy, frontier.position[0] + dx),
-                    arrowstyle=f'Simple, tail_width={0.5 * arr_scale}, head_width={1.5 * arr_scale}, head_length={1.5 * arr_scale}',
-                    linewidth=0.15 * arr_scale,
+                    arrowstyle=f'Simple, tail_width={0.02 * len_scale}, head_width={0.1 * len_scale}, head_length={0.1 * len_scale}',
+                    linewidth=0.15 * len_scale,
                     color='m',
-                    mutation_scale=arr_scale,
+                    mutation_scale=len_scale,
                 )
 
                 if type(self.max_point) == Frontier and frontier == self.max_point:
@@ -684,21 +699,7 @@ class TSDFPlanner(TSDFPlannerBase):
                 #     color='m',
                 # )
 
-            ax1.scatter(self.target_point[1], self.target_point[0], c="r", s=80 * arr_scale, label="target", marker='*')
-
-            # crop the image to retain only objects and frontier regions
-            y_min_ft, x_min_ft, y_max_ft, x_max_ft = ft_map.shape[0], ft_map.shape[1], 0, 0
-            for frontier in self.frontiers:
-                y_min_ft = min(y_min_ft, frontier.position[0])
-                x_min_ft = min(x_min_ft, frontier.position[1])
-                y_max_ft = max(y_max_ft, frontier.position[0])
-                x_max_ft = max(x_max_ft, frontier.position[1])
-
-
-            x_min = max(0, min(x_min_obj, x_min_ft) - paddings)
-            y_min = max(0, min(y_min_obj, y_min_ft) - paddings)
-            x_max = min(max(x_max_obj, x_max_ft) + paddings, ft_map.shape[1])
-            y_max = min(max(y_max_obj, y_max_ft) + paddings, ft_map.shape[0])
+            ax1.scatter(self.target_point[1], self.target_point[0], c="r", s=4 * size_scale, label="target", marker='*')
 
             ax1.set_xlim(x_min, x_max)
             ax1.set_ylim(y_max, y_min)

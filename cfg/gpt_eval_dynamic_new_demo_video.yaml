@@ -53,7 +53,7 @@ max_target_observation: 4
 target_dist_threshold: 0.5
 
 # Semantic map
-explored_depth: 1.7
+explored_depth: 2.0
 planner:
   unexplored_T: 2.0
   unoccupied_T: 2.0

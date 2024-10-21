@@ -692,7 +692,7 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     os.system(f"rm {episode_data_dir}/frontier_video/*.png")
                     os.system(f"rm {episode_data_dir}/snapshot_video/*.png")
 
-                    dist_to_target = np.linalg.norm(pts_pix[:2] - tsdf_planner.target_point[:2]) * cfg.tsdf_grid_size
+                    dist_to_target = np.linalg.norm(pts_pix[:2] - tsdf_planner.target_point[:2]) * cfg.tsdf_grid_size if tsdf_planner.target_point is not None else 0.0
                     logging.info(f"Distance to navigation target: {dist_to_target:.3f}")
                     if dist_to_target < cfg.target_dist_threshold:
                         target_arrived = True

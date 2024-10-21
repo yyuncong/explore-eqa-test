@@ -659,7 +659,7 @@ class TSDFPlanner(TSDFPlannerBase):
                 arrow = FancyArrowPatch(
                     posA=(frontier.position[1], frontier.position[0]),
                     posB=(frontier.position[1] + dy, frontier.position[0] + dx),
-                    arrowstyle=f'Simple, tail_width={0.15 * arr_scale}, head_width={1.5 * arr_scale}, head_length={1.5 * arr_scale}',
+                    arrowstyle=f'Simple, width={0.15 * arr_scale}, head_width={1.5 * arr_scale}, head_length={1.5 * arr_scale}',
                     color='m',
                     mutation_scale=arr_scale,
                 )

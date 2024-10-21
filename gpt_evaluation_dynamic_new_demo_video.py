@@ -691,7 +691,6 @@ def main(cfg, start_ratio=0.0, end_ratio=1.0):
                     os.system(f"rm {episode_data_dir}/visualization/*.png")
                     os.system(f"rm {episode_data_dir}/frontier_video/*.png")
                     os.system(f"rm {episode_data_dir}/snapshot_video/*.png")
-                    os.system(f"rm {episode_data_dir}/demo_video_decision/*.png")
 
                     dist_to_target = np.linalg.norm(pts_pix[:2] - tsdf_planner.target_point[:2]) * cfg.tsdf_grid_size
                     logging.info(f"Distance to navigation target: {dist_to_target:.3f}")

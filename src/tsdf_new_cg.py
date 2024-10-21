@@ -606,7 +606,7 @@ class TSDFPlanner(TSDFPlannerBase):
             ax1.plot([cur_point[1], end_x], [cur_point[0], end_y], color='black', linewidth=2 * arr_scale)
 
             x_min_obj, y_min_obj, x_max_obj, y_max_obj = ft_map.shape[1], ft_map.shape[0], 0, 0
-            for snapshot in snapshots.values():
+            for key, snapshot in snapshots.items():
                 obs_point = snapshot.obs_point[:2]
                 obj_points = [self.habitat2voxel(objects[obj_id]['bbox'].center)[:2] for obj_id in snapshot.cluster]
                 obj_center = np.mean(obj_points, axis=0)
@@ -622,24 +622,23 @@ class TSDFPlanner(TSDFPlannerBase):
                 wedge = Wedge(center=(obs_point[1], obs_point[0]), r=radius, theta1=min(obj_angles) - 5, theta2=max(obj_angles) + 5, color=snapshot.color, alpha=0.3)
                 
                 # Add edge to the wedge
-                edge_width = 7
-                wedge_edge = Wedge(
-                    center=(obs_point[1], obs_point[0]),
-                    r=radius,
-                    theta1=min(obj_angles) - 5,
-                    theta2=max(obj_angles) + 5,
-                    facecolor='none',  # No face color for the edge wedge
-                    edgecolor='red',
-                    linewidth=edge_width,
-                )
-                ax1.add_patch(wedge_edge)
+                if type(self.max_point) == SnapShot and snapshot.image == self.max_point.image:
+                    edge_width = 7
+                    wedge_edge = Wedge(
+                        center=(obs_point[1], obs_point[0]),
+                        r=radius,
+                        theta1=min(obj_angles) - 5,
+                        theta2=max(obj_angles) + 5,
+                        facecolor='none',  # No face color for the edge wedge
+                        edgecolor='red',
+                        linewidth=edge_width,
+                    )
+                    ax1.add_patch(wedge_edge)
 
 
                 for obj_id in snapshot.cluster:
                     obj_vox = self.habitat2voxel(objects[obj_id]['bbox'].center)
                     ax1.scatter(obj_vox[1], obj_vox[0], color=snapshot.color, s=30)
-                    # draw dash line from the object to the cluster center
-                    # ax1.plot([obj_vox[1], cluster_center[1]], [obj_vox[0], cluster_center[0]], color=snapshot.color, linestyle='dashed', linewidth=1.5)
 
                     x_min_obj = min(x_min_obj, obj_vox[1])
                     y_min_obj = min(y_min_obj, obj_vox[0])
@@ -664,11 +663,14 @@ class TSDFPlanner(TSDFPlannerBase):
                     color='m',
                     mutation_scale=arr_scale,
                 )
-                # Add edge to the arrow
-                arrow.set_path_effects([
-                    pe.Stroke(linewidth=5, foreground='red'),  # Edge with linewidth 3 and red color
-                    pe.Normal(),                               # Render the original arrow
-                ])
+
+                if type(self.max_point) == Frontier and frontier == self.max_point:
+                    # Add edge to the arrow
+                    arrow.set_path_effects([
+                        pe.Stroke(linewidth=5, foreground='red'),  # Edge with linewidth 3 and red color
+                        pe.Normal(),                               # Render the original arrow
+                    ])
+
                 ax1.add_patch(arrow)
                 # ax1.arrow(
                 #     frontier.position[1], 
